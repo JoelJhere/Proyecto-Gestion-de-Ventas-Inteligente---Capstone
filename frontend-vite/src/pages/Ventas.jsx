@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaReceipt, FaUser, FaFileInvoice, FaIdCard } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaReceipt, FaUser, FaFileInvoice, FaIdCard, FaTimes } from 'react-icons/fa';
 import axios from 'axios';
-import { Html5Qrcode } from 'html5-qrcode'; // Importación cambiada al motor puro
+import { Html5Qrcode } from 'html5-qrcode';
 import { io } from 'socket.io-client';
 import { useBusiness } from '../context/BusinessContext';
 
@@ -10,32 +10,24 @@ const socket = io(`http://${window.location.hostname}:4000`);
 
 export default function Ventas() {
   const { businessConfig } = useBusiness();
-
   const [productos, setProductos] = useState([]);
-
   const [busqueda, setBusqueda] = useState('');
   
-  // Estados persistentes (Sirve para cambiar de pestaña y no perder la boleta)
   const [carrito, setCarrito] = useState(() => JSON.parse(localStorage.getItem('pos_carrito')) || []);
   const [tipoComprobante, setTipoComprobante] = useState(() => localStorage.getItem('pos_tipo_comprobante') || 'TICKET');
   const [cliente, setCliente] = useState(() => JSON.parse(localStorage.getItem('pos_cliente')) || { documento: '', nombre: '', correo: '', telefono: '' });
 
-  // Guardamos los estados persistentes en localStorage cada vez que cambian
   useEffect(() => localStorage.setItem('pos_carrito', JSON.stringify(carrito)), [carrito]);
   useEffect(() => localStorage.setItem('pos_tipo_comprobante', tipoComprobante), [tipoComprobante]);
   useEffect(() => localStorage.setItem('pos_cliente', JSON.stringify(cliente)), [cliente]);
 
-  // Cálculos dinámicos
   const totalPagado = carrito.reduce((sum, item) => sum + (item.precioVenta * item.cantidad), 0);
   const igvPorcentaje = businessConfig.impuestoPorcentaje || 18;
   const factorIgv = 1 + (igvPorcentaje / 100); 
   const subtotalBase = tipoComprobante !== 'TICKET' ? (totalPagado / factorIgv) : totalPagado;
   const montoIgv = tipoComprobante !== 'TICKET' ? (totalPagado - subtotalBase) : 0;
 
-  // Estado para controlar si el escáner está activo
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-
-  // Obtenemos el usuario desde localStorage para identificar la sala de WebSocket
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const API_URL = `http://${window.location.hostname}:4000/api/productos`;
 
@@ -53,57 +45,51 @@ export default function Ventas() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- LÓGICA DE WEBSOCKETS (Sincronización Total por Usuario) ---
   useEffect(() => {
     if (!usuario.id) return;
-
     socket.emit('unirse_caja', usuario.id);
     socket.on('carrito_actualizado', (carritoRemoto) => {
       setCarrito(carritoRemoto);
     });
-
     return () => {
       socket.off('carrito_actualizado');
     };
   }, [usuario.id]);
 
-  // --- LÓGICA DEL ESCÁNER DE CÁMARA PARA VENTAS (MOTOR PURO) ---
+  // --- LÓGICA DEL ESCÁNER CORREGIDA ---
   useEffect(() => {
     let html5QrCode;
 
     if (isScannerOpen) {
-      html5QrCode = new Html5Qrcode("reader-ventas");
+      // Le damos 200ms a React para que dibuje el <div id="reader-ventas"> en la pantalla antes de encender la cámara
+      setTimeout(() => {
+        html5QrCode = new Html5Qrcode("reader-ventas");
+        
+        html5QrCode.start(
+          { facingMode: "environment" }, 
+          { fps: 10, qrbox: { width: 250, height: 100 } },
+          async (decodedText) => {
+            if (html5QrCode.isScanning) {
+              await html5QrCode.stop();
+              html5QrCode.clear();
+            }
+            setIsScannerOpen(false);
 
-      const iniciarCamara = async () => {
-        try {
-          await html5QrCode.start(
-            { facingMode: "environment" }, // Fuerza estrictamente la cámara trasera
-            { fps: 10, qrbox: { width: 250, height: 100 } },
-            async (decodedText) => {
-              if (html5QrCode.isScanning) {
-                await html5QrCode.stop();
-                html5QrCode.clear();
-              }
-              setIsScannerOpen(false);
-
-              // Buscar y agregar al carrito automáticamente
-              const productoEncontrado = productos.find(p => p.codigo === decodedText);
-              if (productoEncontrado) {
-                // eslint-disable-next-line react-hooks/immutability
-                agregarAlCarrito(productoEncontrado);
-              } else {
-                alert(`El código ${decodedText} no existe en tu inventario.`);
-              }
-            },
-            () => { /* Ignoramos errores de enfoque de cámara */ }
-          );
-        } catch (error) {
-          console.error("Error al iniciar cámara:", error);
-          alert("No se pudo iniciar la cámara.");
-        }
-      };
-
-      iniciarCamara();
+            const productoEncontrado = productos.find(p => p.codigo === decodedText);
+            if (productoEncontrado) {
+              // eslint-disable-next-line react-hooks/immutability
+              agregarAlCarrito(productoEncontrado);
+            } else {
+              alert(`El código ${decodedText} no existe en tu inventario.`);
+            }
+          },
+          () => { /* Ignoramos advertencias de enfoque */ }
+        ).catch(err => {
+          console.error("Error al iniciar cámara:", err);
+          alert("Error al acceder a la cámara. Verifica los permisos de tu navegador.");
+          setIsScannerOpen(false);
+        });
+      }, 200);
     }
 
     return () => {
@@ -114,7 +100,6 @@ export default function Ventas() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScannerOpen, productos]);
 
-  // --- FUNCIONES DEL CARRITO ---
   const agregarAlCarrito = (producto) => {
     setCarrito(prev => {
       const itemExistente = prev.find(item => item.id === producto.id);
@@ -154,18 +139,14 @@ export default function Ventas() {
     });
   };
 
-  // Filtro para el buscador inteligente autocompletable
   const productosBuscados = busqueda.trim() === '' ? [] : productos.filter(prod => 
     prod.nombre.toLowerCase().includes(busqueda.toLowerCase()) || 
     prod.codigo.toLowerCase().includes(busqueda.toLowerCase())
   );
 
   return (
-    // CAMBIO 1: Eliminamos la altura fija estricta en móviles y la dejamos solo para 'lg:'
-    <div className="flex flex-col lg:flex-row gap-6 text-slate-900 pb-20 lg:pb-0 font-sans lg:h-[calc(100vh-6rem)]">
+    <div className="flex flex-col lg:flex-row gap-6 text-slate-900 pb-20 lg:pb-0 font-sans lg:h-[calc(100vh-6rem)] relative">
       
-      {/* PANEL IZQUIERDO: BUSCADOR Y LISTA DE BOLETA (Mesa de Trabajo) */}
-      {/* CAMBIO 2: Añadimos min-h-[500px] para garantizar un área de trabajo amplia en móviles */}
       <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm relative min-h-[500px] lg:min-h-0">
         <div className="p-4 sm:p-5 bg-neutral-950 border-t-4 border-verde-pastel shrink-0">
           <h2 className="text-xl font-extrabold text-white mb-4 tracking-tight flex items-center gap-2">
@@ -173,7 +154,6 @@ export default function Ventas() {
           </h2>
           
           <div className="flex gap-3">
-            {/* BUSCADOR INTELIGENTE */}
             <div className="relative w-full">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <FaSearch className="text-slate-400" />
@@ -186,7 +166,6 @@ export default function Ventas() {
                 className="w-full pl-11 pr-4 py-3 bg-white border border-slate-300 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all shadow-sm font-medium" 
               />
 
-              {/* RESULTADOS DEL BUSCADOR FLOTANTES */}
               <AnimatePresence>
                 {busqueda && (
                   <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} 
@@ -212,7 +191,6 @@ export default function Ventas() {
               </AnimatePresence>
             </div>
 
-            {/* BOTÓN DE ESCÁNER DE VENTAS */}
             <button 
               onClick={() => setIsScannerOpen(true)}
               className="bg-neutral-950 hover:bg-neutral-900 text-white font-bold px-5 py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
@@ -222,7 +200,6 @@ export default function Ventas() {
           </div>
         </div>
         
-        {/* LISTA DE COMPRAS (El carrito visible y grande) */}
         <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
           <AnimatePresence>
             {carrito.length === 0 ? (
@@ -235,41 +212,46 @@ export default function Ventas() {
                 <motion.div 
                   key={item.id}
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-                  className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-white p-4 rounded-xl mb-3 border border-slate-200 hover:border-dorado/50 shadow-sm transition-all gap-4"
+                  className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-white p-4 rounded-xl mb-3 border border-slate-200 hover:border-dorado/50 shadow-sm transition-all gap-3 sm:gap-4"
                 >
-                  {/* Bloque 1: Detalles del Producto, Código, Precio Unitario y Stock */}
+                  {/* Bloque 1: Detalles del Producto */}
                   <div className="flex-1">
-                    <h4 className="text-slate-900 text-sm font-bold mb-1.5">{item.nombre}</h4>
+                    <h4 className="text-slate-900 text-sm font-bold mb-2">{item.nombre}</h4>
                     <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide">
-                      <span className="text-slate-500 font-mono bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                      <span className="text-slate-500 font-mono bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
                         CÓD: {item.codigo}
                       </span>
-                      <span className="text-slate-500 font-semibold bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                      <span className="text-slate-500 font-semibold bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
                         Unit: <strong className="text-slate-700">S/ {item.precioVenta.toFixed(2)}</strong>
                       </span>
-                      <span className={`font-bold px-2 py-0.5 rounded-md border ${item.stock < 5 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
+                      <span className={`font-bold px-2 py-1 rounded-md border ${item.stock < 5 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
                         Stock Total: {item.stock}
                       </span>
                     </div>
                   </div>
                   
-                  {/* Bloque 2: Controles de Cantidad */}
-                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 shrink-0">
-                    <button onClick={() => actualizarCantidad(item.id, -1)} 
-                      className={`p-1.5 rounded transition-colors ${item.cantidad === 1 ? 'text-red-500 hover:bg-red-100' : 'text-slate-600 hover:bg-slate-200'}`}>
-                      {item.cantidad === 1 ? <FaTrash size={12} /> : <FaMinus size={12} />}
-                    </button>
-                    <span className="w-10 text-center text-sm font-black text-slate-800">{item.cantidad}</span>
-                    <button onClick={() => actualizarCantidad(item.id, 1)} 
-                      className="p-1.5 text-slate-600 hover:bg-slate-200 rounded transition-colors">
-                      <FaPlus size={12} />
-                    </button>
-                  </div>
+                  {/* CONTENEDOR PARA MÓVIL: Agrupa cantidad y subtotal en la misma fila inferior */}
+                  <div className="flex flex-row justify-between items-center w-full sm:w-auto border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 mt-1 sm:mt-0 gap-4">
+                    
+                    {/* Bloque 2: Controles de Cantidad (Botones más grandes para fácil toque en celular) */}
+                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 shrink-0">
+                      <button onClick={() => actualizarCantidad(item.id, -1)} 
+                        className={`p-2 rounded transition-colors ${item.cantidad === 1 ? 'text-red-500 hover:bg-red-100' : 'text-slate-600 hover:bg-slate-200'}`}>
+                        {item.cantidad === 1 ? <FaTrash size={12} /> : <FaMinus size={12} />}
+                      </button>
+                      <span className="w-10 text-center text-sm font-black text-slate-800">{item.cantidad}</span>
+                      <button onClick={() => actualizarCantidad(item.id, 1)} 
+                        className="p-2 text-slate-600 hover:bg-slate-200 rounded transition-colors">
+                        <FaPlus size={12} />
+                      </button>
+                    </div>
 
-                  {/* Bloque 3: Subtotal de la línea */}
-                  <div className="text-right min-w-[90px] shrink-0 border-l border-slate-100 pl-4">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">Subtotal</p>
-                    <p className="text-emerald-600 font-black text-base">S/ {(item.precioVenta * item.cantidad).toFixed(2)}</p>
+                    {/* Bloque 3: Subtotal de la línea */}
+                    <div className="text-right min-w-[90px] shrink-0 sm:border-l border-slate-100 sm:pl-4">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">Subtotal</p>
+                      <p className="text-emerald-600 font-black text-lg">S/ {(item.precioVenta * item.cantidad).toFixed(2)}</p>
+                    </div>
+
                   </div>
                 </motion.div>
               ))
@@ -278,10 +260,7 @@ export default function Ventas() {
         </div>
       </div>
 
-      {/* LADO DERECHO: DETALLES DE FACTURACIÓN */}
-      <div className="w-1/3 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-fit">
-        
-        {/* Cabecera Negra */}
+      <div className="w-full lg:w-1/3 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-fit">
         <div className="bg-neutral-950 px-6 py-4 border-t-4 border-dorado shrink-0">
           <h2 className="text-white font-extrabold text-lg flex items-center gap-2">
             <FaFileInvoice className="text-dorado" /> Detalles de Facturación
@@ -289,8 +268,6 @@ export default function Ventas() {
         </div>
 
         <div className="p-6 flex-1 space-y-6 bg-slate-50">
-          
-          {/* SELECTOR DE TIPO DE COMPROBANTE */}
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Tipo de Venta</label>
             <div className="flex bg-slate-200 p-1 rounded-lg">
@@ -309,7 +286,6 @@ export default function Ventas() {
             </div>
           </div>
 
-          {/* FORMULARIO DINÁMICO (Solo aparece si NO es Ticket Simple) */}
           {tipoComprobante !== 'TICKET' && (
             <div className="space-y-4 animate-fade-in">
               <div>
@@ -347,7 +323,6 @@ export default function Ventas() {
           )}
         </div>
 
-        {/* ÁREA DE TOTALES */}
         <div className="p-6 border-t border-slate-200 bg-white rounded-b-2xl">
           {tipoComprobante !== 'TICKET' && (
             <>
@@ -372,8 +347,39 @@ export default function Ventas() {
             <FaShoppingCart size={16} /> Procesar Venta
           </button>
         </div>
-
       </div>
+
+      {/* --- EL NUEVO MODAL DEL ESCÁNER CÁMARA --- */}
+      <AnimatePresence>
+        {isScannerOpen && (
+          <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm flex flex-col items-center"
+            >
+              <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-widest text-center">
+                Apunta al Código de Barras
+              </h3>
+              
+              {/* ESTE ES EL DIV CRÍTICO QUE FALTABA */}
+              <div 
+                id="reader-ventas" 
+                className="w-full bg-black rounded-2xl overflow-hidden border-2 border-verde-pastel shadow-[0_0_20px_rgba(167,243,208,0.3)]"
+              ></div>
+              
+              <button 
+                onClick={() => setIsScannerOpen(false)}
+                className="mt-8 bg-red-500/10 border border-red-500/50 text-red-400 hover:bg-red-500 hover:text-white font-bold py-3 px-8 rounded-xl transition-all flex items-center gap-2"
+              >
+                <FaTimes /> Cancelar Escáner
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
