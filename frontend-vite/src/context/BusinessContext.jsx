@@ -1,38 +1,48 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 
-// 1. Creamos el contexto
 const BusinessContext = createContext();
 
-// 2. Creamos el proveedor que envolverá nuestra aplicación
 export const BusinessProvider = ({ children }) => {
-  const [businessConfig, setBusinessConfig] = useState({
-    nombre: 'Bodega NOVA',
-    ruc: '',
+  // 1. Buscamos en la memoria local antes de poner el valor por defecto
+  const [businessConfig, setBusinessConfig] = useState(() => {
+    const configGuardada = localStorage.getItem('pos_config');
+    return configGuardada ? JSON.parse(configGuardada) : { nombre: '', ruc: '' };
   });
 
   useEffect(() => {
-    // Al declarar la función DENTRO del useEffect, ESLint deja de quejarse
     const cargarConfiguracion = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const url = `http://${window.location.hostname}:4000/api/configuracion`;
-        
-        const config = {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        };
+      const token = localStorage.getItem('token');
+      if (!token) return; 
 
-        const res = await axios.get(url, config);
+      try {
+        const url = `http://${window.location.hostname}:4000/api/configuracion`;
+        const res = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
         if (res.data) {
           setBusinessConfig(res.data);
+          // 2. Guardamos la configuración real en la memoria del navegador
+          localStorage.setItem('pos_config', JSON.stringify(res.data));
         }
       } catch (error) {
         console.error("Error al cargar configuración global:", error);
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('pos_config'); // Limpiamos la config al expirar sesión
+          
+          if (!window.location.pathname.includes('/login')) {
+            alert("Tu sesión ha expirado por seguridad. Por favor, vuelve a iniciar sesión.");
+            window.location.href = '/login';
+          }
+        }
       }
     };
 
     cargarConfiguracion();
-  }, []); // El array vacío asegura que se ejecute solo una vez al cargar la app
+  }, []); 
 
   return (
     <BusinessContext.Provider value={{ businessConfig, setBusinessConfig }}>
@@ -41,6 +51,5 @@ export const BusinessProvider = ({ children }) => {
   );
 };
 
-// 3. Hook personalizado
 // eslint-disable-next-line react-refresh/only-export-components
 export const useBusiness = () => useContext(BusinessContext);

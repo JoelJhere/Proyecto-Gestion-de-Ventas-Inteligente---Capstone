@@ -3,12 +3,16 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FaUserShield, FaLock } from 'react-icons/fa';
 import axios from 'axios';
+import { useBusiness } from '../context/BusinessContext';
+
 
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const { businessConfig } = useBusiness();
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,7 +47,8 @@ export default function Login() {
           {/* LOGO: Actualizado a Bodega NOVA */}
           <h1 className="text-4xl font-extrabold text-white mb-3 tracking-tight flex items-center justify-center gap-3">
             <div className="w-4 h-4 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.5)]"></div>
-            Bodega NOVA
+            {businessConfig.nombre}
+            
           </h1>
           <p className="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Sistema Inteligente POS</p>
         </div>
