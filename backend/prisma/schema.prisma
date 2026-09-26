@@ -1,0 +1,163 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- MODELOS DE LA BASE DE DATOS ---
+
+// 1. Usuarios (Dueño y Ayudantes)
+model User {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  email     String   @unique
+  password  String
+  rol       Role     @default(AYUDANTE) // Enum definido abajo
+  estado    Boolean  @default(true) // Para desactivar cuentas sin borrarlas
+  ventas    Venta[]
+  createdAt DateTime @default(now())
+}
+
+// 2. Configuración del Negocio (Solo debería tener 1 registro)
+model BusinessConfig {
+  id                 Int      @id @default(autoincrement())
+  nombre             String   @default("Bodega NOVA")
+  ruc                String   @default("00000000000")
+  direccion          String?
+  telefono           String?
+  email              String?
+  mensajeTicket      String?  @default("¡Gracias por su preferencia!")
+  impuestoPorcentaje Float    @default(18.0) // IGV por defecto
+  updatedAt          DateTime @updatedAt
+}
+
+// 3. Proveedores
+model Proveedor {
+  id        Int        @id @default(autoincrement())
+  nombre    String
+  ruc       String?    @unique
+  telefono  String?
+  productos Producto[]
+  createdAt DateTime   @default(now())
+  planesCompra PlanCompra[]
+}
+
+// 4. Productos
+model Producto {
+  id           Int      @id @default(autoincrement())
+  codigo       String  @unique // Para escáner de barras o código interno
+  nombre       String
+  categoria    String?  // Ej: Bebidas, Limpieza, Abarrotes
+  precioCompra Float?   // Costo para calcular ganancias (Vital para la IA)
+  precioVenta  Float    // Precio al público
+  stock        Int      @default(0)
+
+  estado       Boolean  @default(true) // Permite deshabilitar productos descontinuados
+  stockMinimo  Int      @default(3)    // Le dice a la IA exactamente cuándo debe lanzar una alerta
+  unidadMedida String   @default("Unidades") // Ej: "Kilos", "Litros", "Cajas". Vital para que la IA entienda qué está contando.
+
+  proveedorId  Int?
+  proveedor    Proveedor? @relation(fields: [proveedorId], references: [id])
+  movimientos  MovimientoInventario[]
+  detalles     DetalleVenta[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  detallesCompra DetallePlanCompra[]
+}
+
+// 5. Movimientos de Inventario (CLAVE PARA LA IA)
+// Aquí registramos por qué cambió el stock (Abastecimiento vs Devolución)
+model MovimientoInventario {
+  id          Int      @id @default(autoincrement())
+  productoId  Int
+  producto    Producto @relation(fields: [productoId], references: [id])
+  tipo        TipoMovimiento // Enum: ABASTECIMIENTO, DEVOLUCION, VENTA, MERMA
+  cantidad    Int      // Cuánto se sumó o restó
+  motivo      String?  // Ej: "Cliente devolvió por talla equivocada"
+  createdAt   DateTime @default(now())
+}
+
+// 6. Ventas (Cabecera)
+model Venta {
+  id               Int            @id @default(autoincrement())
+  vendedorId       Int
+  vendedor         User           @relation(fields: [vendedorId], references: [id])
+  tipoComprobante  TipoDocumento  // Enum: BOLETA, FACTURA, TICKET_SIMPLE
+  numeroComprobante String?       // Ej: B001-000045
+  subtotal         Float
+  igv              Float
+  total            Float
+  detalles         DetalleVenta[]
+  createdAt        DateTime       @default(now())
+}
+
+// 7. Detalle de Ventas (Productos dentro de una venta)
+model DetalleVenta {
+  id          Int      @id @default(autoincrement())
+  ventaId     Int
+  venta       Venta    @relation(fields: [ventaId], references: [id])
+  productoId  Int
+  producto    Producto @relation(fields: [productoId], references: [id])
+  cantidad    Int
+  precioVenta Float    // Se guarda el precio al momento de la venta por si luego el producto sube de precio
+  subtotal    Float
+}
+
+// --- MÓDULO DE COMPRAS (PEDIDOS A PROVEEDORES) ---
+
+model PlanCompra {
+  id              Int       @id @default(autoincrement())
+  fechaCreacion   DateTime  @default(now())
+  fechaEsperada   DateTime? // El día que se supone que llega el camión
+  fechaRecibido   DateTime? // El día exacto en que el ayudante recibió la mercadería
+  
+  estado          String    @default("PENDIENTE") // PENDIENTE, PARCIAL, RECIBIDO, CANCELADO
+  
+  totalEsperado   Float     @default(0) // Lo que costaba el pedido original
+  totalReal       Float     @default(0) // Lo que realmente se pagó por lo que llegó
+  
+  proveedorId     Int
+  proveedor       Proveedor @relation(fields: [proveedorId], references: [id])
+  
+  detalles        DetallePlanCompra[]
+}
+
+model DetallePlanCompra {
+  id                Int        @id @default(autoincrement())
+  
+  cantidadEsperada  Int        // Ejemplo: Se pidieron 24
+  cantidadRecibida  Int        @default(0) // Ejemplo: Solo llegaron 12
+  precioCompra      Float      // El costo unitario al que nos están vendiendo
+  
+  planCompraId      Int
+  planCompra        PlanCompra @relation(fields: [planCompraId], references: [id], onDelete: Cascade)
+  
+  productoId        Int
+  producto          Producto   @relation(fields: [productoId], references: [id])
+}
+
+// --- ENUMS ---
+enum Role {
+  ADMIN
+  AYUDANTE
+}
+
+enum TipoMovimiento {
+  ABASTECIMIENTO
+  DEVOLUCION
+  VENTA
+  AJUSTE_NEGATIVO
+}
+
+enum TipoDocumento {
+  BOLETA
+  FACTURA
+  SIN_COMPROBANTE
+}
