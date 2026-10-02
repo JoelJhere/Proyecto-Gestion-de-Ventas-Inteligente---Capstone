@@ -1,23 +1,28 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaUserShield, FaLock, FaSpinner } from 'react-icons/fa';
 import axios from 'axios';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { useBusiness } from '../context/BusinessContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Validar si el usuario fue redirigido por caducidad de token
+  const queryParams = new URLSearchParams(location.search);
+  const sesionExpirada = queryParams.get('motivo') === 'expirado';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { businessConfig } = useBusiness();
 
-  // Estados de control de seguridad
   const [isLoading, setIsLoading] = useState(false);
   const [intentosFallidos, setIntentosFallidos] = useState(0);
   const [tiempoBloqueo, setTiempoBloqueo] = useState(0);
 
-  // Temporizador para el bloqueo temporal
+  // Sistema de cuenta regresiva para bloqueos de seguridad
   useEffect(() => {
     let timer;
     if (tiempoBloqueo > 0) {
@@ -28,7 +33,7 @@ export default function Login() {
     return () => clearInterval(timer);
   }, [tiempoBloqueo]);
 
-  // Configuración visual de las alertas Toast para que hagan juego con el diseño oscuro
+  // Estilos base para notificaciones del módulo de autenticación
   const toastStyle = {
     borderRadius: '12px',
     background: '#0a0a0a',
@@ -39,24 +44,20 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Doble validación de seguridad
+    // Bloquear múltiples peticiones simultáneas o si el usuario está penalizado
     if (isLoading || tiempoBloqueo > 0) return;
 
     setIsLoading(true);
 
     try {
-      const res = await axios.post(`https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/auth/login`, {
-        email,
-        password
-      });
+      const res = await axios.post('/auth/login', { email, password });
       
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       
-      setIntentosFallidos(0); // Reiniciar intentos en caso de éxito
+      setIntentosFallidos(0);
       toast.success('¡Sesión iniciada correctamente!', { style: toastStyle, iconTheme: { primary: '#a7f3d0', secondary: '#000' } });
       
-      // Pequeño retraso para que el usuario vea el mensaje de éxito antes de cambiar de pantalla
       setTimeout(() => navigate('/ventas'), 1000);
       
     } catch (err) {
@@ -65,12 +66,11 @@ export default function Login() {
       setIntentosFallidos(nuevosIntentos);
 
       if (nuevosIntentos >= 3) {
-        // Penalización progresiva: 3 intentos = 15s, 4 = 20s, 5 = 25s, etc.
+        // Incremento de penalización: 15s (3er intento), 20s (4to), etc.
         const penalizacion = nuevosIntentos * 5; 
         setTiempoBloqueo(penalizacion);
         toast.error(`Demasiados intentos. Bloqueo temporal de ${penalizacion} segundos.`, { style: toastStyle });
       } else {
-        // Mensaje genérico de seguridad (nunca especificar si falló el correo o la clave)
         toast.error('Correo o contraseña incorrectos.', { style: toastStyle });
       }
     } finally {
@@ -80,10 +80,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-[#092b1a] via-neutral-950 to-black relative overflow-hidden font-sans">
-      
-      {/* Componente necesario para renderizar las alertas flotantes */}
-      <Toaster position="top-center" reverseOrder={false} />
-
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -97,6 +93,17 @@ export default function Login() {
           </h1>
           <p className="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Sistema Inteligente POS</p>
         </div>
+
+        {/* Banner fijo indicando que la sesión caducó por inactividad */}
+        {sesionExpirada && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-500/10 border border-amber-500/30 text-amber-200 px-4 py-4 rounded-xl mb-6 text-sm text-center shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+          >
+            <p className="font-bold mb-1">Tu sesión ha finalizado</p>
+            <p className="text-amber-200/70 text-xs">Por tu seguridad, cerramos el sistema tras un periodo de inactividad. Ingresa tus datos para continuar.</p>
+          </motion.div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
