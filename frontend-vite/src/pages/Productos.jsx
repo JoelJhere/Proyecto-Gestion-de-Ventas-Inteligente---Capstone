@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaPlus, FaEdit, FaBox, FaBarcode, FaTimes, FaSearch, FaCheck, FaCamera, FaPrint, FaBoxOpen } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaBox, FaBarcode, FaTimes, FaSearch, FaCheck, FaCamera, FaPrint, FaBoxOpen, FaExclamationTriangle } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Barcode from 'react-barcode';
@@ -11,11 +11,16 @@ export default function Productos() {
   const [proveedores, setProveedores] = useState([]); 
   const [busqueda, setBusqueda] = useState('');
   
+  // Estados de carga (Skeleton)
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Estados de Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null); 
   const [stockProduct, setStockProduct] = useState(null);     
   const [barcodeView, setBarcodeView] = useState(null);
   const [scannerTarget, setScannerTarget] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null); // Nuevo estado para el modal de confirmación
 
   const [formData, setFormData] = useState({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
   const [stockData, setStockData] = useState({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
@@ -23,10 +28,9 @@ export default function Productos() {
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = usuario.rol === 'ADMIN';
 
-  // Cargar lista de productos y proveedores al inicio
   const cargarDatos = async () => {
+    setIsLoading(true); // Activamos la animación de carga
     try {
-      // Usamos las rutas relativas gracias a la configuración global de Axios en App.jsx
       const [resProductos, resProveedores] = await Promise.all([
         axios.get('/productos'),
         axios.get('/proveedores')
@@ -36,13 +40,14 @@ export default function Productos() {
     } catch (error) {
       console.error("Error al cargar datos:", error);
       toast.error('Ocurrió un problema al cargar los datos');
+    } finally {
+      setIsLoading(false); // Apagamos la animación de carga
     }
   };
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargarDatos(); }, []);
 
-  // Lógica del escáner de código de barras por cámara
   useEffect(() => {
     let html5QrCode;
 
@@ -66,7 +71,6 @@ export default function Productos() {
                 setFormData(prev => ({ ...prev, codigo: decodedText }));
                 toast.success('Código escaneado. Buscando información...');
 
-                // Usamos fetch en lugar de axios para APIs públicas y no filtrar nuestro Token JWT
                 try {
                   const resFood = await fetch(`https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`).then(r => r.json());
                   if (resFood.status === 1 && resFood.product.product_name) {
@@ -105,7 +109,7 @@ export default function Productos() {
                 toast.success('Buscando producto...');
               }
             },
-            () => { /* Ignorar advertencias de enfoque continuas de la librería */ }
+            () => { /* Ignorar advertencias */ }
           );
         } catch (error) {
           console.error("Error al iniciar la cámara:", error);
@@ -116,7 +120,6 @@ export default function Productos() {
       iniciarCamara();
     }
 
-    // Apagar cámara si el componente se desmonta o el usuario cierra el modal
     return () => {
       if (html5QrCode && html5QrCode.isScanning) {
         html5QrCode.stop().then(() => html5QrCode.clear()).catch(console.error);
@@ -124,7 +127,6 @@ export default function Productos() {
     };
   }, [scannerTarget]);
 
-  // Generación de ventana de impresión de etiqueta
   const handleImprimirEtiqueta = () => {
     const contenido = document.getElementById("area-impresion-barcode").innerHTML;
     const ventana = window.open('', 'PRINT', 'height=600,width=800');
@@ -148,7 +150,6 @@ export default function Productos() {
     ventana.document.close();
   };
 
-  // Creación de nuevo registro
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
@@ -164,7 +165,6 @@ export default function Productos() {
     }
   };
 
-  // Actualización de registro existente
   const handleUpdate = async (e) => {
     e.preventDefault();
     try {
@@ -179,7 +179,6 @@ export default function Productos() {
     }
   };
 
-  // Modificación del inventario (Ingreso/Salida manual)
   const handleManageStock = async (e) => {
     e.preventDefault();
     try {
@@ -193,15 +192,19 @@ export default function Productos() {
     }
   };
 
-  // Alta y Baja lógica (Descontinuar)
-  const toggleEstado = async (id, estadoActual) => {
-    const accion = estadoActual ? 'descontinuar' : 'reactivar';
-    const confirmado = window.confirm(`¿Estás seguro de que deseas ${accion} este producto?`);
-    if (!confirmado) return;
+  // Abre el modal en lugar de mostrar alert()
+  const prepararToggleEstado = (prod) => {
+    setConfirmDialog(prod);
+  };
 
+  // Ejecuta la acción después de confirmar
+  const ejecutarToggleEstado = async () => {
+    if (!confirmDialog) return;
+    const accion = confirmDialog.estado ? 'descontinuar' : 'reactivar';
     try {
-      await axios.put(`/productos/${id}/estado`, {});
+      await axios.put(`/productos/${confirmDialog.id}/estado`, {});
       toast.success(`Producto ${accion}do exitosamente`);
+      setConfirmDialog(null);
       cargarDatos();
     } catch (error) { 
       toast.error(error.response?.data?.message || 'Error al cambiar estado del producto'); 
@@ -270,7 +273,24 @@ export default function Productos() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {productosFiltrados.length === 0 ? (
+              {isLoading ? (
+                // SKELETON LOADER (Animación de carga)
+                [...Array(5)].map((_, index) => (
+                  <tr key={index} className="animate-pulse">
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-16"></div></td>
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-48"></div></td>
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-16"></div></td>
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-16"></div></td>
+                    <td className="p-4"><div className="h-6 bg-slate-200 rounded-full w-12 mx-auto"></div></td>
+                    <td className="p-4 flex justify-center gap-2">
+                      <div className="h-8 w-8 bg-slate-200 rounded"></div>
+                      <div className="h-8 w-8 bg-slate-200 rounded"></div>
+                      <div className="h-8 w-8 bg-slate-200 rounded"></div>
+                    </td>
+                  </tr>
+                ))
+              ) : productosFiltrados.length === 0 ? (
                 <tr><td colSpan="7" className="p-12 text-center text-slate-500 font-medium">{busqueda ? 'No se encontraron productos.' : 'No hay productos registrados.'}</td></tr>
               ) : (
                 productosFiltrados.map((prod) => (
@@ -301,7 +321,7 @@ export default function Productos() {
 
                     {isAdmin && (
                         <button 
-                        onClick={() => toggleEstado(prod.id, prod.estado)}
+                        onClick={() => prepararToggleEstado(prod)}
                         className={`p-2 rounded-lg transition-colors ${prod.estado ? 'text-red-500 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
                         title={prod.estado ? 'Descontinuar' : 'Activar'}
                         >
@@ -317,6 +337,38 @@ export default function Productos() {
           </table>
         </div>
       </div>
+
+      {/* MODAL 0: CONFIRMAR ESTADO */}
+      <AnimatePresence>
+        {confirmDialog && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+              <div className="p-6 text-center">
+                <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${confirmDialog.estado ? 'bg-red-100 text-red-500' : 'bg-emerald-100 text-emerald-500'}`}>
+                  {confirmDialog.estado ? <FaExclamationTriangle size={30} /> : <FaCheck size={30} />}
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">
+                  {confirmDialog.estado ? '¿Descontinuar producto?' : '¿Reactivar producto?'}
+                </h3>
+                <p className="text-sm text-slate-500">
+                  {confirmDialog.estado 
+                    ? `El producto "${confirmDialog.nombre}" dejará de aparecer en la ventana de ventas.` 
+                    : `El producto "${confirmDialog.nombre}" volverá a estar disponible para la venta.`}
+                </p>
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button onClick={() => setConfirmDialog(null)} className="flex-1 py-3 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold hover:bg-slate-100 transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={ejecutarToggleEstado} className={`flex-1 py-3 text-white rounded-xl font-bold transition-colors ${confirmDialog.estado ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Escáner de Cámara Global para Productos */}
       <AnimatePresence>
