@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaPlus, FaCheck, FaTimes, FaClipboardList, FaTruck, FaCalendarAlt, FaTrash, FaSearch, FaInfoCircle } from 'react-icons/fa';
+import { FaPlus, FaCheck, FaTimes, FaClipboardList, FaTruck, FaCalendarAlt, FaTrash, FaSearch, FaInfoCircle, FaExclamationTriangle } from 'react-icons/fa';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 export default function PlanCompras() {
   const [planes, setPlanes] = useState([]);
   const [proveedores, setProveedores] = useState([]);
   const [productos, setProductos] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Control de Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [receivingPlan, setReceivingPlan] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(false);
 
   // Estados para los Buscadores Inteligentes
   const [busquedaProv, setBusquedaProv] = useState('');
@@ -23,7 +26,7 @@ export default function PlanCompras() {
   const [formData, setFormData] = useState({
     proveedorId: '',
     fechaEsperada: '',
-    detalles: [] // [{ productoId, cantidadEsperada, precioCompra }]
+    detalles: []
   });
 
   const [itemTemp, setItemTemp] = useState({ productoId: '', cantidadEsperada: '', precioCompra: '' });
@@ -34,19 +37,13 @@ export default function PlanCompras() {
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = usuario.rol === 'ADMIN';
 
-  const API_URL_PLANES = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/planes-compra`;
-  const API_URL_PROV = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/proveedores`;
-  const API_URL_PROD = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/productos`;
-
   const cargarDatos = async () => {
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = { headers: { Authorization: `Bearer ${token}` } };
-
       const [resPlanes, resProv, resProd] = await Promise.all([
-        axios.get(API_URL_PLANES, headers),
-        axios.get(API_URL_PROV, headers),
-        axios.get(API_URL_PROD, headers)
+        axios.get('/planes-compra'),
+        axios.get('/proveedores'),
+        axios.get('/productos')
       ]);
 
       setPlanes(resPlanes.data);
@@ -54,20 +51,62 @@ export default function PlanCompras() {
       setProductos(resProd.data);
     } catch (error) {
       console.error("Error al cargar datos de compras:", error);
+      toast.error('Ocurrió un error al cargar los planes de compra.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargarDatos(); }, []);
 
-  // Filtros dinámicos para los dropdowns
-  const proveedoresFiltrados = proveedores.filter(p => p.nombre.toLowerCase().includes(busquedaProv.toLowerCase()) || (p.ruc && p.ruc.includes(busquedaProv)));
-  const productosFiltrados = productos.filter(p => p.nombre.toLowerCase().includes(busquedaProd.toLowerCase()) || p.codigo.includes(busquedaProd));
+  // --- LÓGICA DE FILTROS INTELIGENTES (Reglas del Profesor) ---
+  const proveedoresFiltrados = proveedores.filter(p => 
+    p.nombre.toLowerCase().includes(busquedaProv.toLowerCase()) || 
+    (p.ruc && p.ruc.includes(busquedaProv))
+  );
+
+  // 1. Si hay un proveedor seleccionado, mostramos SOLO sus productos. Si no, mostramos todos.
+  const productosDelProveedor = formData.proveedorId 
+    ? productos.filter(p => p.proveedorId === parseInt(formData.proveedorId))
+    : productos;
+
+  // 2. Aplicamos la búsqueda de texto sobre la lista resultante
+  const productosFiltrados = productosDelProveedor.filter(p => 
+    p.nombre.toLowerCase().includes(busquedaProd.toLowerCase()) || 
+    p.codigo.includes(busquedaProd)
+  );
+
+  const handleSelectProvider = (prov) => {
+    setFormData({ ...formData, proveedorId: prov.id });
+    setBusquedaProv(prov.nombre);
+    setShowProvDropdown(false);
+    
+    // Opcional: Si cambiamos de proveedor, podríamos limpiar el producto temporal si no le pertenece,
+    // pero para no ser tan restrictivos, solo limpiamos la búsqueda de producto.
+    setBusquedaProd('');
+  };
+
+  const handleSelectProduct = (prod) => {
+    setItemTemp({ ...itemTemp, productoId: prod.id, precioCompra: prod.precioCompra || '' });
+    setBusquedaProd(prod.nombre);
+    setShowProdDropdown(false);
+
+    // AUTO-COMPLETADO INTELIGENTE: Si no hay proveedor seleccionado, seleccionamos el del producto
+    if (!formData.proveedorId && prod.proveedorId) {
+      setFormData(prev => ({ ...prev, proveedorId: prod.proveedorId }));
+      const provAsociado = proveedores.find(p => p.id === prod.proveedorId);
+      if (provAsociado) {
+        setBusquedaProv(provAsociado.nombre);
+        toast.success(`Proveedor auto-completado: ${provAsociado.nombre}`, { icon: '🤖' });
+      }
+    }
+  };
 
   // --- LÓGICA DE CREACIÓN ---
   const agregarItemAlPlan = () => {
     if (!itemTemp.productoId || !itemTemp.cantidadEsperada || !itemTemp.precioCompra) {
-      return alert("Completa la cantidad y el costo unitario antes de agregar el producto.");
+      return toast.error("Completa la cantidad y el costo antes de agregar.");
     }
     const prodSeleccionado = productos.find(p => p.id === parseInt(itemTemp.productoId));
     
@@ -84,7 +123,6 @@ export default function PlanCompras() {
       ]
     });
     
-    // Limpiamos los campos temporales
     setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '' });
     setBusquedaProd('');
   };
@@ -96,19 +134,18 @@ export default function PlanCompras() {
 
   const handleCrearPlan = async (e) => {
     e.preventDefault();
-    if (!formData.proveedorId) return alert("Por favor, selecciona un proveedor de la lista.");
-    if (formData.detalles.length === 0) return alert("Agrega al menos un producto a la orden.");
+    if (!formData.proveedorId) return toast.error("Por favor, selecciona un proveedor.");
+    if (formData.detalles.length === 0) return toast.error("Agrega al menos un producto a la orden.");
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(API_URL_PLANES, formData, { headers: { Authorization: `Bearer ${token}` } });
-      
+      await axios.post('/planes-compra', formData);
+      toast.success('Plan de compra creado exitosamente.');
       setIsCreateModalOpen(false);
       setFormData({ proveedorId: '', fechaEsperada: '', detalles: [] });
       setBusquedaProv('');
       cargarDatos();
     } catch (error) {
-      alert(error.response?.data?.message || 'Error al guardar el plan de compra');
+      toast.error(error.response?.data?.message || 'Error al guardar el plan de compra');
     }
   };
 
@@ -137,19 +174,14 @@ export default function PlanCompras() {
   };
 
   const confirmarRecepcion = async () => {
-    const confirmado = window.confirm("¿Estás seguro de confirmar la llegada de este pedido? Esto sumará el stock al inventario de forma automática.");
-    if (!confirmado) return;
-
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`${API_URL_PLANES}/${receivingPlan.id}/recibir`, { detallesRecibidos }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.put(`/planes-compra/${receivingPlan.id}/recibir`, { detallesRecibidos });
+      toast.success("¡Pedido recibido! Inventario actualizado correctamente.");
+      setConfirmDialog(false);
       setReceivingPlan(null);
       cargarDatos();
-      alert("¡Pedido recibido con éxito! Inventario actualizado.");
     } catch (error) {
-      alert(error.response?.data?.message || 'Error al procesar la recepción');
+      toast.error(error.response?.data?.message || 'Error al procesar la recepción');
     }
   };
 
@@ -160,27 +192,51 @@ export default function PlanCompras() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-neutral-950 mb-1 tracking-tight flex items-center gap-3">
-            <FaClipboardList className="text-verde-pastel drop-shadow-md" /> Plan de Compras y Pedidos
+            <FaClipboardList className="text-verde-pastel drop-shadow-md" /> Plan de Compras
           </h1>
           <p className="text-slate-500 text-sm font-medium">Gestiona los pedidos a proveedores y recepción de mercadería.</p>
         </div>
         
         {isAdmin && (
           <button onClick={() => setIsCreateModalOpen(true)} className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-bold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm whitespace-nowrap">
-              <FaPlus size={14} /> Nuevo Plan de Compra
+              <FaPlus size={14} /> Nuevo Plan
           </button>
         )}
       </div>
 
       {/* LISTADO DE PLANES EN TARJETAS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {planes.length === 0 ? (
+        {isLoading ? (
+          // SKELETON LOADER PARA TARJETAS
+          [...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-pulse flex flex-col justify-between h-64">
+              <div>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="w-1/2 h-4 bg-slate-200 rounded"></div>
+                  <div className="w-16 h-4 bg-slate-200 rounded-full"></div>
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div className="w-3/4 h-3 bg-slate-200 rounded"></div>
+                  <div className="w-2/4 h-3 bg-slate-200 rounded"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="w-full h-3 bg-slate-100 rounded"></div>
+                  <div className="w-full h-3 bg-slate-100 rounded"></div>
+                </div>
+              </div>
+              <div className="border-t border-slate-100 pt-4 flex justify-between items-end mt-2">
+                <div className="w-24 h-6 bg-slate-200 rounded"></div>
+                <div className="w-24 h-8 bg-slate-200 rounded-xl"></div>
+              </div>
+            </div>
+          ))
+        ) : planes.length === 0 ? (
           <div className="col-span-full py-16 text-center text-slate-500 bg-white border border-slate-200 rounded-2xl shadow-sm font-medium">
             No hay planes de compra registrados. Comienza creando un nuevo pedido.
           </div>
         ) : (
           planes.map((plan) => (
-            <div key={plan.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+            <div key={plan.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-full min-h-[16rem]">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -209,7 +265,7 @@ export default function PlanCompras() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-100 pt-3 mb-4 space-y-2 max-h-40 overflow-y-auto pr-2">
+                <div className="border-t border-slate-100 pt-3 mb-4 space-y-2 max-h-32 overflow-y-auto pr-2">
                   {plan.detalles.map((det) => (
                     <div key={det.id} className="flex justify-between text-xs items-center">
                       <span className="text-slate-700 font-bold truncate pr-2">{det.producto?.nombre}</span>
@@ -221,10 +277,10 @@ export default function PlanCompras() {
                 </div>
               </div>
 
-              <div className="border-t border-slate-100 pt-4 flex justify-between items-center mt-2">
+              <div className="border-t border-slate-100 pt-4 flex justify-between items-center mt-auto">
                 <div>
                   <p className="text-[10px] uppercase text-slate-500 tracking-wider font-bold">
-                    {plan.estado === 'RECIBIDO' ? 'Total Real Pagado' : 'Total Estimado'}
+                    {plan.estado === 'RECIBIDO' ? 'Total Pagado' : 'Total Estimado'}
                   </p>
                   <p className="text-emerald-700 font-black text-lg">
                     S/ {(plan.estado === 'RECIBIDO' ? plan.totalReal : plan.totalEsperado).toFixed(2)}
@@ -251,7 +307,7 @@ export default function PlanCompras() {
           <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 overflow-y-auto">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8 flex flex-col max-h-[90vh]">
               <div className="flex justify-between items-center p-4 sm:p-6 bg-neutral-950 border-t-4 border-verde-pastel shrink-0">
-                <h2 className="text-lg sm:text-xl font-extrabold text-white">Nuevo Plan de Compra</h2>
+                <h2 className="text-lg sm:text-xl font-extrabold text-white">Nuevo Plan</h2>
                 <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>
               </div>
               <form onSubmit={handleCrearPlan} className="flex flex-col flex-1 min-h-0">
@@ -260,31 +316,32 @@ export default function PlanCompras() {
                   {/* SECCIÓN 1: DATOS DEL PEDIDO */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     
-                    {/* Buscador de Proveedores */}
+                    {/* Buscador Dinámico de Proveedores */}
                     <div className="relative">
                       <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Proveedor *</label>
                       <div className="relative">
                         <FaSearch className="absolute left-3 top-3.5 text-slate-400" size={14} />
                         <input 
                           type="text" 
-                          placeholder="Escriba para buscar proveedor..." 
+                          placeholder="Buscar proveedor..." 
                           value={busquedaProv}
                           onChange={(e) => { setBusquedaProv(e.target.value); setShowProvDropdown(true); }}
                           onFocus={() => setShowProvDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowProvDropdown(false), 200)}
                           className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 font-medium transition-all" 
                         />
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-1.5 font-medium flex items-center gap-1"><FaInfoCircle/> Selecciona un proveedor de la lista desplegable.</p>
+                      <p className="text-[10px] text-slate-500 mt-1.5 font-medium flex items-center gap-1"><FaInfoCircle/> Selecciona de la lista desplegable.</p>
 
                       <AnimatePresence>
-                        {showProvDropdown && busquedaProv && (
+                        {showProvDropdown && (
                           <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} 
-                            className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-40 overflow-y-auto">
+                            className="absolute z-30 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-40 overflow-y-auto">
                             {proveedoresFiltrados.length === 0 ? (
                               <div className="p-3 text-xs text-slate-500 text-center">No se encontraron proveedores</div>
                             ) : (
                               proveedoresFiltrados.map(p => (
-                                <div key={p.id} onClick={() => { setFormData({...formData, proveedorId: p.id}); setBusquedaProv(p.nombre); setShowProvDropdown(false); }} 
+                                <div key={p.id} onMouseDown={() => handleSelectProvider(p)} 
                                   className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0">
                                   <p className="text-sm font-bold text-slate-800">{p.nombre}</p>
                                   <p className="text-[10px] font-mono text-slate-500">RUC: {p.ruc || 'N/A'}</p>
@@ -306,13 +363,13 @@ export default function PlanCompras() {
                   {/* SECCIÓN 2: AGREGAR PRODUCTOS */}
                   <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
                     <div>
-                      <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Agregar Productos al Pedido</h3>
-                      <p className="text-[11px] text-slate-500 mt-1 font-medium">Busca el producto, define la cantidad que pedirás y a qué costo unitario.</p>
+                      <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Productos del Pedido</h3>
+                      <p className="text-[11px] text-slate-500 mt-1 font-medium">Busca el producto, define la cantidad y el costo unitario.</p>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 relative">
                       
-                      {/* Buscador de Productos */}
+                      {/* Buscador Dinámico de Productos */}
                       <div className="md:col-span-5 relative">
                         <FaSearch className="absolute left-3 top-3.5 text-slate-400" size={14} />
                         <input 
@@ -321,17 +378,18 @@ export default function PlanCompras() {
                           value={busquedaProd}
                           onChange={(e) => { setBusquedaProd(e.target.value); setShowProdDropdown(true); }}
                           onFocus={() => setShowProdDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowProdDropdown(false), 200)}
                           className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 font-medium outline-none focus:border-emerald-500" 
                         />
                         <AnimatePresence>
-                          {showProdDropdown && busquedaProd && (
+                          {showProdDropdown && (
                             <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} 
                               className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                               {productosFiltrados.length === 0 ? (
-                                <div className="p-3 text-xs text-slate-500 text-center">Producto no encontrado</div>
+                                <div className="p-3 text-xs text-slate-500 text-center">No se encontró producto</div>
                               ) : (
                                 productosFiltrados.map(p => (
-                                  <div key={p.id} onClick={() => { setItemTemp({...itemTemp, productoId: p.id, precioCompra: p.precioCompra || ''}); setBusquedaProd(p.nombre); setShowProdDropdown(false); }} 
+                                  <div key={p.id} onMouseDown={() => handleSelectProduct(p)} 
                                     className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 flex justify-between items-center">
                                     <div>
                                       <p className="text-sm font-bold text-slate-800">{p.nombre}</p>
@@ -350,7 +408,6 @@ export default function PlanCompras() {
                         <input type="number" placeholder="Cant. Esperada" min="1" value={itemTemp.cantidadEsperada} onChange={e => setItemTemp({...itemTemp, cantidadEsperada: e.target.value})} className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 font-medium outline-none focus:border-emerald-500" />
                       </div>
                       <div className="md:col-span-3">
-                        {/* Mejora: Placeholder claro para el Costo Unitario */}
                         <input type="number" step="0.10" placeholder="Costo Unit. (S/)" min="0" value={itemTemp.precioCompra} onChange={e => setItemTemp({...itemTemp, precioCompra: e.target.value})} className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 font-medium outline-none focus:border-emerald-500" />
                       </div>
                       <div className="md:col-span-1">
@@ -379,7 +436,7 @@ export default function PlanCompras() {
                 <div className="p-5 border-t border-slate-100 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
                   <button type="button" onClick={() => setIsCreateModalOpen(false)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
                   <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none flex justify-center items-center gap-2">
-                    <FaCheck /> Confirmar Plan de Compra
+                    <FaCheck /> Confirmar
                   </button>
                 </div>
               </form>
@@ -405,7 +462,7 @@ export default function PlanCompras() {
                 <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl mb-4 flex items-start gap-3">
                   <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-blue-800 font-medium leading-relaxed">
-                    Compara la cantidad que esperabas con lo que realmente llegó. Si llegó todo completo, solo haz clic en "Confirmar Ingreso". Si faltó mercancía, ajusta el número en la casilla "Llegaron".
+                    Compara la cantidad que esperabas con lo que realmente llegó. Si faltó mercancía, ajusta el número en la casilla "Llegaron".
                   </p>
                 </div>
 
@@ -435,8 +492,38 @@ export default function PlanCompras() {
 
               <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col sm:flex-row justify-end gap-3">
                 <button type="button" onClick={() => setReceivingPlan(null)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-colors shadow-sm">Cancelar</button>
-                <button onClick={confirmarRecepcion} className="w-full sm:w-auto px-6 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2 order-first sm:order-none">
+                <button onClick={() => setConfirmDialog(true)} className="w-full sm:w-auto px-6 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2 order-first sm:order-none">
                   <FaCheck /> Confirmar Ingreso
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 3: CONFIRMACIÓN FINAL (Reemplaza window.confirm) */}
+      <AnimatePresence>
+        {confirmDialog && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center mb-4">
+                  <FaExclamationTriangle size={30} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">
+                  ¿Confirmar recepción?
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Esto sumará automáticamente el stock ingresado a tu inventario general y no se puede deshacer.
+                </p>
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button onClick={() => setConfirmDialog(false)} className="flex-1 py-3 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold hover:bg-slate-100 transition-colors">
+                  Revisar
+                </button>
+                <button onClick={confirmarRecepcion} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-colors">
+                  Aceptar
                 </button>
               </div>
             </motion.div>
