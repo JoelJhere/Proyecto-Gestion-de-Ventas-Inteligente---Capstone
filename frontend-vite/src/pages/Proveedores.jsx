@@ -42,10 +42,20 @@ export default function Proveedores() {
     }
 
     if (datos.telefono) {
-      const telRegex = /^\d{6,9}$/;
-      if (!telRegex.test(datos.telefono)) {
-        toast.error('El teléfono debe tener entre 6 y 9 números (válido para fijos y celulares).');
-        return false;
+      const tel = datos.telefono;
+      // Regla Celular: Si empieza con 9, debe tener exactamente 9 dígitos
+      if (tel.startsWith('9')) {
+        if (tel.length !== 9) {
+          toast.error('El número de celular debe tener exactamente 9 dígitos.');
+          return false;
+        }
+      } 
+      // Regla Fijo: Si no empieza con 9, es fijo (6 dígitos provincia, 7 Lima, o 9 con código de área como 076)
+      else {
+        if (tel.length !== 6 && tel.length !== 7 && tel.length !== 9) {
+          toast.error('El teléfono fijo debe tener 6 o 7 dígitos (o 9 si incluye el código de área).');
+          return false;
+        }
       }
     }
 
