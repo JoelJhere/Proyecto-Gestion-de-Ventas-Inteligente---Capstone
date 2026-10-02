@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaPlus, FaEdit, FaBox, FaBarcode, FaTimes, FaSearch, FaCheck, FaCamera, FaPrint, FaBoxOpen } from 'react-icons/fa';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 import Barcode from 'react-barcode';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -14,8 +15,6 @@ export default function Productos() {
   const [editingProduct, setEditingProduct] = useState(null); 
   const [stockProduct, setStockProduct] = useState(null);     
   const [barcodeView, setBarcodeView] = useState(null);
-
-  // Estado para el escáner de código de barras
   const [scannerTarget, setScannerTarget] = useState(null);
 
   const [formData, setFormData] = useState({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
@@ -24,106 +23,100 @@ export default function Productos() {
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = usuario.rol === 'ADMIN';
 
-  const API_URL_PROD = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/productos`;
-  const API_URL_PROV = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/proveedores`;
-
-  // 1. Cargar Productos y Proveedores juntos
+  // Cargar lista de productos y proveedores al inicio
   const cargarDatos = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const headers = { headers: { Authorization: `Bearer ${token}` } };
-      
+      // Usamos las rutas relativas gracias a la configuración global de Axios en App.jsx
       const [resProductos, resProveedores] = await Promise.all([
-        axios.get(API_URL_PROD, headers),
-        axios.get(API_URL_PROV, headers)
+        axios.get('/productos'),
+        axios.get('/proveedores')
       ]);
-      
       setProductos(resProductos.data);
       setProveedores(resProveedores.data);
     } catch (error) {
       console.error("Error al cargar datos:", error);
+      toast.error('Ocurrió un problema al cargar los datos');
     }
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargarDatos(); }, []);
 
-
-  // --- LÓGICA DEL ESCÁNER DE CÓDIGO DE BARRAS ---
+  // Lógica del escáner de código de barras por cámara
   useEffect(() => {
     let html5QrCode;
 
     if (scannerTarget) {
-      // 1. Usamos el motor puro, sin la interfaz prefabricada
       html5QrCode = new Html5Qrcode("reader");
 
       const iniciarCamara = async () => {
         try {
-          // 2. Iniciamos la cámara automáticamente (facingMode: "environment" fuerza la cámara trasera)
           await html5QrCode.start(
             { facingMode: "environment" }, 
             { fps: 10, qrbox: { width: 250, height: 100 } },
             async (decodedText) => {
               
-              // 3. Al leer el código, apagamos la cámara inmediatamente
               if (html5QrCode.isScanning) {
                 await html5QrCode.stop();
                 html5QrCode.clear();
               }
               setScannerTarget(null);
 
-              // 4. Lógica de búsqueda en las APIs
               if (scannerTarget === 'crear') {
                 setFormData(prev => ({ ...prev, codigo: decodedText }));
+                toast.success('Código escaneado. Buscando información...');
 
+                // Usamos fetch en lugar de axios para APIs públicas y no filtrar nuestro Token JWT
                 try {
-                  const resFood = await axios.get(`https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`);
-                  if (resFood.data.status === 1 && resFood.data.product.product_name) {
-                    setFormData(prev => ({ ...prev, nombre: resFood.data.product.product_name, codigo: decodedText }));
-                    return;
+                  const resFood = await fetch(`https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`).then(r => r.json());
+                  if (resFood.status === 1 && resFood.product.product_name) {
+                    setFormData(prev => ({ ...prev, nombre: resFood.product.product_name, codigo: decodedText }));
+                    return toast.success('Producto encontrado en la base de datos');
                   }
 
-                  const resBeauty = await axios.get(`https://world.openbeautyfacts.org/api/v0/product/${decodedText}.json`);
-                  if (resBeauty.data.status === 1 && resBeauty.data.product.product_name) {
-                    setFormData(prev => ({ ...prev, nombre: resBeauty.data.product.product_name, codigo: decodedText }));
-                    return;
+                  const resBeauty = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${decodedText}.json`).then(r => r.json());
+                  if (resBeauty.status === 1 && resBeauty.product.product_name) {
+                    setFormData(prev => ({ ...prev, nombre: resBeauty.product.product_name, codigo: decodedText }));
+                    return toast.success('Producto encontrado en la base de datos');
                   }
 
-                  const resProducts = await axios.get(`https://world.openproductsfacts.org/api/v0/product/${decodedText}.json`);
-                  if (resProducts.data.status === 1 && resProducts.data.product.product_name) {
-                    setFormData(prev => ({ ...prev, nombre: resProducts.data.product.product_name, codigo: decodedText }));
-                    return;
+                  const resProducts = await fetch(`https://world.openproductsfacts.org/api/v0/product/${decodedText}.json`).then(r => r.json());
+                  if (resProducts.status === 1 && resProducts.product.product_name) {
+                    setFormData(prev => ({ ...prev, nombre: resProducts.product.product_name, codigo: decodedText }));
+                    return toast.success('Producto encontrado en la base de datos');
                   }
 
-                  const resUpc = await axios.get(`https://api.upcitemdb.com/prod/trial/lookup?upc=${decodedText}`);
-                  if (resUpc.data.items && resUpc.data.items.length > 0) {
-                    setFormData(prev => ({ ...prev, nombre: resUpc.data.items[0].title, codigo: decodedText }));
-                    return;
+                  const resUpc = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${decodedText}`).then(r => r.json());
+                  if (resUpc.items && resUpc.items.length > 0) {
+                    setFormData(prev => ({ ...prev, nombre: resUpc.items[0].title, codigo: decodedText }));
+                    return toast.success('Producto encontrado en la base de datos');
                   }
+                  
+                  toast.error('Producto no encontrado. Requiere ingreso manual.');
                 } catch (error) {
-                  console.log("Producto no encontrado en bases públicas. Requiere ingreso manual.", error);
+                  console.log("Error consultando APIs externas:", error);
                 }
 
               } else if (scannerTarget === 'editar') {
                 setEditingProduct(prev => ({ ...prev, codigo: decodedText }));
+                toast.success('Código escaneado exitosamente');
               } else if (scannerTarget === 'busqueda') {
                 setBusqueda(decodedText);
+                toast.success('Buscando producto...');
               }
             },
-            () => {
-              // Ignoramos los errores continuos de enfoque mientras intenta leer
-            }
+            () => { /* Ignorar advertencias de enfoque continuas de la librería */ }
           );
         } catch (error) {
           console.error("Error al iniciar la cámara:", error);
-          alert("No se pudo iniciar la cámara. Verifica los permisos de tu navegador.");
+          toast.error("No se pudo iniciar la cámara. Verifica los permisos de tu navegador.");
         }
       };
 
       iniciarCamara();
     }
 
-    // Limpieza de seguridad al cerrar el modal con la "X"
+    // Apagar cámara si el componente se desmonta o el usuario cierra el modal
     return () => {
       if (html5QrCode && html5QrCode.isScanning) {
         html5QrCode.stop().then(() => html5QrCode.clear()).catch(console.error);
@@ -131,7 +124,7 @@ export default function Productos() {
     };
   }, [scannerTarget]);
 
-  // --- LÓGICA DE IMPRESIÓN DE ETIQUETA ---
+  // Generación de ventana de impresión de etiqueta
   const handleImprimirEtiqueta = () => {
     const contenido = document.getElementById("area-impresion-barcode").innerHTML;
     const ventana = window.open('', 'PRINT', 'height=600,width=800');
@@ -155,47 +148,64 @@ export default function Productos() {
     ventana.document.close();
   };
 
-  // --- FUNCIONES CRUD ---
+  // Creación de nuevo registro
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
       const dataAEnviar = { ...formData, proveedorId: formData.proveedorId ? parseInt(formData.proveedorId) : null };
-      await axios.post(API_URL_PROD, dataAEnviar, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      await axios.post('/productos', dataAEnviar);
+      
+      toast.success('Producto registrado correctamente');
       setIsCreateModalOpen(false);
       setFormData({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
       cargarDatos();
-    } catch (error) { alert(error.response?.data?.message || 'Error al guardar'); }
+    } catch (error) { 
+      toast.error(error.response?.data?.message || 'Error al guardar el producto'); 
+    }
   };
 
+  // Actualización de registro existente
   const handleUpdate = async (e) => {
     e.preventDefault();
     try {
       const dataAEnviar = { ...editingProduct, proveedorId: editingProduct.proveedorId ? parseInt(editingProduct.proveedorId) : null };
-      await axios.put(`${API_URL_PROD}/${editingProduct.id}`, dataAEnviar, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      await axios.put(`/productos/${editingProduct.id}`, dataAEnviar);
+      
+      toast.success('Producto actualizado correctamente');
       setEditingProduct(null);
       cargarDatos();
-    } catch (error) { alert(error.response?.data?.message || 'Error al actualizar'); }
+    } catch (error) { 
+      toast.error(error.response?.data?.message || 'Error al actualizar el producto'); 
+    }
   };
 
+  // Modificación del inventario (Ingreso/Salida manual)
   const handleManageStock = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL_PROD}/${stockProduct.id}/stock`, stockData, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      await axios.post(`/productos/${stockProduct.id}/stock`, stockData);
+      toast.success('Inventario actualizado');
       setStockProduct(null);
       setStockData({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
       cargarDatos();
-    } catch (error) { alert(error.response?.data?.message || 'Error al actualizar stock'); }
+    } catch (error) { 
+      toast.error(error.response?.data?.message || 'Error al actualizar el inventario'); 
+    }
   };
 
+  // Alta y Baja lógica (Descontinuar)
   const toggleEstado = async (id, estadoActual) => {
     const accion = estadoActual ? 'descontinuar' : 'reactivar';
     const confirmado = window.confirm(`¿Estás seguro de que deseas ${accion} este producto?`);
     if (!confirmado) return;
 
     try {
-      await axios.put(`${API_URL_PROD}/${id}/estado`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      await axios.put(`/productos/${id}/estado`, {});
+      toast.success(`Producto ${accion}do exitosamente`);
       cargarDatos();
-    } catch (error) { alert(error.response?.data?.message || 'Error al cambiar estado'); }
+    } catch (error) { 
+      toast.error(error.response?.data?.message || 'Error al cambiar estado del producto'); 
+    }
   };
 
   const productosFiltrados = productos.filter(prod => 
@@ -203,14 +213,13 @@ export default function Productos() {
     prod.codigo?.toLowerCase().includes(busqueda.toLowerCase())
   );
 
-return (
+  return (
     <div className="text-slate-950 pb-20 font-sans">
       
-      {/* CABECERA Y BUSCADOR */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-950 mb-1 tracking-tight flex items-center gap-3">
-            <FaBoxOpen className="text-verde-pastel drop-shadow-md"/> Gestión de Productos
+            <FaBoxOpen className="text-verde-pastel drop-shadow-md"/> Productos
           </h1>
           <p className="text-slate-500 text-sm font-medium">Administra tu inventario, costos y precios.</p>
         </div>
@@ -244,7 +253,6 @@ return (
         </div>
       </div>
 
-      {/* TABLA PRINCIPAL */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[950px]">
@@ -307,7 +315,7 @@ return (
         </div>
       </div>
 
-      {/* MODAL DEL ESCÁNER DE CÁMARA */}
+      {/* Escáner de Cámara Global para Productos */}
       <AnimatePresence>
         {scannerTarget && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
@@ -326,7 +334,6 @@ return (
         )}
       </AnimatePresence>
 
-      {/* MODAL 1: NUEVO PRODUCTO */}
       <AnimatePresence>
         {isCreateModalOpen && !scannerTarget && (
           <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[80px] pb-6 px-4 sm:items-center sm:pt-4 bg-slate-950/60 backdrop-blur-sm">
@@ -334,7 +341,7 @@ return (
               className="flex flex-col w-full max-w-2xl max-h-full sm:max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden">
               
               <div className="flex justify-between items-center p-4 sm:p-6 bg-slate-950 border-t-4 border-verde-pastel shrink-0">
-                <h2 className="text-lg sm:text-xl font-extrabold text-white">Registrar Nuevo Producto</h2>
+                <h2 className="text-lg sm:text-xl font-extrabold text-white">Nuevo Producto</h2>
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white p-1 transition-colors"><FaTimes size={20}/></button>
               </div>
               
@@ -349,7 +356,7 @@ return (
                         <FaCamera /> Escanear
                       </button>
                     </div>
-                    <p className="text-[11px] font-medium text-slate-500 mt-2">Si el producto no tiene código (ej. Papelotes), déjalo vacío y el sistema creará uno para imprimir.</p>
+                    <p className="text-[11px] font-medium text-slate-500 mt-2">Si el producto no tiene código, déjalo vacío y el sistema creará uno interno.</p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
@@ -373,19 +380,19 @@ return (
                       <input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium"/>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Costo de Compra (S/)</label>
-                      <input type="number" step="0.10" value={formData.precioCompra} onChange={e => setFormData({...formData, precioCompra: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium"/>
+                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Costo Unitario (S/)</label>
+                      <input type="number" step="0.10" value={formData.precioCompra} onChange={e => setFormData({...formData, precioCompra: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium" placeholder="0.00"/>
                     </div>
                     <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Precio de Venta (S/) *</label>
-                      <input type="number" step="0.10" required value={formData.precioVenta} onChange={e => setFormData({...formData, precioVenta: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-emerald-700 font-extrabold text-lg transition-all"/>
+                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Precio Unitario de Venta (S/) *</label>
+                      <input type="number" step="0.10" required value={formData.precioVenta} onChange={e => setFormData({...formData, precioVenta: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-emerald-700 font-extrabold text-lg transition-all" placeholder="0.00"/>
                     </div>
                   </div>
                 </div>
 
                 <div className="p-4 sm:p-5 border border-slate-300 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
                   <button type="button" onClick={() => setIsCreateModalOpen(false)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Guardar Producto</button>
+                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Guardar</button>
                 </div>
               </form>
             </motion.div>
@@ -393,7 +400,6 @@ return (
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: EDITAR PRODUCTO */}
       <AnimatePresence>
         {editingProduct && !scannerTarget && (
           <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[80px] pb-6 px-4 sm:items-center sm:pt-4 bg-slate-950/60 backdrop-blur-sm">
@@ -401,7 +407,7 @@ return (
               className="flex flex-col w-full max-w-2xl max-h-full sm:max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden">
               
               <div className="flex justify-between items-center p-4 sm:p-6 bg-slate-950 border-t-4 border-verde-pastel shrink-0">
-                <h2 className="text-lg sm:text-xl font-extrabold text-white">Editar: <span className="text-verde-pastel font-mono text-base ml-2">{editingProduct.codigo}</span></h2>
+                <h2 className="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2">Editar <span className="text-verde-pastel font-mono text-base bg-emerald-900/50 px-2 py-1 rounded-md">{editingProduct.codigo}</span></h2>
                 <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-white p-1 transition-colors"><FaTimes size={20}/></button>
               </div>
 
@@ -428,11 +434,11 @@ return (
                       <input type="number" disabled value={editingProduct.stock} className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed font-medium" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Costo de Compra (S/)</label>
+                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Costo Unitario (S/)</label>
                       <input type="number" step="0.10" value={editingProduct.precioCompra || ''} onChange={e => setEditingProduct({...editingProduct, precioCompra: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium"/>
                     </div>
                     <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Precio de Venta (S/) *</label>
+                      <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Precio Unitario de Venta (S/) *</label>
                       <input type="number" step="0.10" required value={editingProduct.precioVenta} onChange={e => setEditingProduct({...editingProduct, precioVenta: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-emerald-700 font-extrabold text-lg transition-all"/>
                     </div>
                   </div>
@@ -440,7 +446,7 @@ return (
                 
                 <div className="p-4 sm:p-5 border border-slate-300 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
                   <button type="button" onClick={() => setEditingProduct(null)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Actualizar Info</button>
+                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Actualizar</button>
                 </div>
               </form>
             </motion.div>
@@ -448,7 +454,6 @@ return (
         )}
       </AnimatePresence>
 
-      {/* MODAL 3: GESTIONAR STOCK */}
       <AnimatePresence>
         {stockProduct && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
@@ -488,7 +493,7 @@ return (
 
                 <div className="p-4 sm:p-5 border border-slate-300 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
                   <button type="button" onClick={() => setStockProduct(null)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Confirmar Acción</button>
+                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Confirmar</button>
                 </div>
               </form>
             </motion.div>
@@ -496,7 +501,6 @@ return (
         )}
       </AnimatePresence>
 
-      {/* MODAL 4: VISOR DE ETIQUETA */}
       <AnimatePresence>
         {barcodeView && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm" onClick={() => setBarcodeView(null)}>
