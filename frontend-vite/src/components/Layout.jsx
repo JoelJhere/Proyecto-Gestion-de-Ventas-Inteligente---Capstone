@@ -45,11 +45,15 @@ export default function Layout() {
       {/* SIDEBAR: Negro puro (Neutral-950) sin tonos azules */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-neutral-950 border-r border-neutral-900 flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
-        {/* LOGO */}
+        {/* LOGO EN SIDEBAR */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-neutral-800/50">
           <h2 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-verde-pastel shadow-[0_0_10px_rgba(167,243,208,0.4)]"></div>
-            {businessConfig.nombre}
+            {businessConfig.logo ? (
+              <img src={businessConfig.logo} alt="Logo" className="w-8 h-8 rounded-md object-cover bg-white shadow-sm" />
+            ) : (
+              <div className="w-3 h-3 rounded-full bg-verde-pastel shadow-[0_0_10px_rgba(167,243,208,0.4)]"></div>
+            )}
+            <span className="truncate max-w-[140px]">{businessConfig.nombre}</span>
           </h2>
           <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-neutral-400 hover:text-white"><FaTimes size={20} /></button>
         </div>
@@ -103,8 +107,12 @@ export default function Layout() {
         <header className="md:hidden h-16 border-b border-slate-200 bg-white flex items-center px-4 justify-between z-20 relative shadow-sm">
           <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-800 p-2 focus:outline-none"><FaBars size={22} /></button>
           <span className="font-extrabold text-slate-950 tracking-wide flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-verde-pastel"></div>
-            {businessConfig.nombre}
+            {businessConfig.logo ? (
+              <img src={businessConfig.logo} alt="Logo" className="w-7 h-7 rounded-md object-cover border border-slate-200" />
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-verde-pastel"></div>
+            )}
+            <span className="truncate max-w-[150px]">{businessConfig.nombre}</span>
           </span>
           <div className="w-8"></div>
         </header>

@@ -28,13 +28,14 @@ model User {
 // 2. Configuración del Negocio (Solo debería tener 1 registro)
 model BusinessConfig {
   id                 Int      @id @default(autoincrement())
-  nombre             String   @default("Bodega NOVA")
-  ruc                String   @default("00000000000")
+  nombre             String   @default("Mi Negocio")
+  ruc                String   @default("")
   direccion          String?
   telefono           String?
   email              String?
-  mensajeTicket      String?  @default("¡Gracias por su preferencia!")
-  impuestoPorcentaje Float    @default(18.0) // IGV por defecto
+  mensajeTicket      String?  @default("¡Gracias por su compra!")
+  impuestoPorcentaje Float    @default(18.0) 
+  logo               String?
   updatedAt          DateTime @updatedAt
 }
 

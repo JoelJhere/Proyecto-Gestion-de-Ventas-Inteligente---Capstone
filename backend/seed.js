@@ -4,28 +4,46 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  // 1. Crear la configuración del negocio
-  const negocio = await prisma.businessConfig.create({
-    data: {
-      nombre: 'Abarrotes AJ',
-      ruc: '20123456789', 
-      direccion: 'Cajamarca, Perú',
-    },
-  });
-  console.log('Negocio creado:', negocio.nombre);
+  // 1. Verificar si ya existe una configuración
+  let negocio = await prisma.businessConfig.findFirst();
 
-  // 2. Encriptar contraseña y crear al Dueño (Admin)
-  const hashedPassword = await bcrypt.hash('admin123', 10);
-  
-  const admin = await prisma.user.create({
-    data: {
-      nombre: 'Dueño Administrador',
-      email: 'admin@abarrotesaj.com',
-      password: hashedPassword,
-      rol: 'ADMIN',
-    },
+  // SOLO creamos la configuración si la tabla está completamente vacía
+  if (!negocio) {
+    negocio = await prisma.businessConfig.create({
+      data: {
+        nombre: 'Mi Negocio',
+        ruc: '', 
+        direccion: '',
+        mensajeTicket: '¡Gracias por su preferencia!',
+        impuestoPorcentaje: 18.0
+      },
+    });
+    console.log('Negocio creado por defecto:', negocio.nombre);
+  } else {
+    console.log('La configuración del negocio ya existe. Omitiendo creación.');
+  }
+
+  // 2. Verificar si ya existe algún Administrador en el sistema
+  const existingAdmin = await prisma.user.findFirst({
+    where: { rol: 'ADMIN' }
   });
-  console.log('Administrador creado con email:', admin.email);
+
+  // SOLO creamos el admin genérico si no hay ninguno registrado
+  if (!existingAdmin) {
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    
+    const admin = await prisma.user.create({
+      data: {
+        nombre: 'Dueño Administrador',
+        email: 'admin@minegocio.com',
+        password: hashedPassword,
+        rol: 'ADMIN',
+      },
+    });
+    console.log('Administrador genérico creado con email:', admin.email);
+  } else {
+    console.log('Ya existe un administrador en el sistema. Omitiendo creación.');
+  }
 }
 
 main()
