@@ -137,7 +137,7 @@ export default function Proveedores() {
                     {isAdmin && (
                       <td className="p-4 align-middle">
                         <div className="flex justify-center gap-2">
-                          <button onClick={() => setEditingProveedor(prov)} className="p-2 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Editar Info"><FaEdit /></button>
+                          <button onClick={() => setEditingProveedor(prov)} className="p-2 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Editar Proveedor"><FaEdit /></button>
                         </div>
                       </td>
                     )}

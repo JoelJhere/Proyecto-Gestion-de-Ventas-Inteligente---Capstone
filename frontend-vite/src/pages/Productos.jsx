@@ -216,6 +216,7 @@ export default function Productos() {
   return (
     <div className="text-slate-950 pb-20 font-sans">
       
+      {/* CABECERA Y BUSCADOR */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-950 mb-1 tracking-tight flex items-center gap-3">
@@ -253,6 +254,7 @@ export default function Productos() {
         </div>
       </div>
 
+      {/* TABLA PRINCIPAL */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[950px]">
@@ -285,14 +287,15 @@ export default function Productos() {
                     </td>
                     <td className="p-4 align-middle">
                     <div className="flex justify-center gap-2">
-                    <button onClick={() => setBarcodeView(prod)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Ver Código"><FaBarcode /></button>
+                    
+                    <button onClick={() => setBarcodeView(prod)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Ver Etiqueta"><FaBarcode /></button>
                     
                     {prod.estado && (
                         <>
                         {isAdmin && (
-                            <button onClick={() => setEditingProduct(prod)} className="p-2 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Editar Info"><FaEdit /></button>
+                            <button onClick={() => setEditingProduct(prod)} className="p-2 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Editar"><FaEdit /></button>
                         )}
-                        <button onClick={() => setStockProduct(prod)} className="p-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors" title="Gestionar Stock"><FaBox /></button>
+                        <button onClick={() => setStockProduct(prod)} className="p-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors" title="Actualizar Stock"><FaBox /></button>
                         </>
                     )}
 
@@ -300,7 +303,7 @@ export default function Productos() {
                         <button 
                         onClick={() => toggleEstado(prod.id, prod.estado)}
                         className={`p-2 rounded-lg transition-colors ${prod.estado ? 'text-red-500 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
-                        title={prod.estado ? 'Descontinuar Producto' : 'Activar Producto'}
+                        title={prod.estado ? 'Descontinuar' : 'Activar'}
                         >
                         {prod.estado ? <FaTimes /> : <FaCheck />}
                         </button>
@@ -334,6 +337,7 @@ export default function Productos() {
         )}
       </AnimatePresence>
 
+      {/* MODAL 1: NUEVO PRODUCTO */}
       <AnimatePresence>
         {isCreateModalOpen && !scannerTarget && (
           <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[80px] pb-6 px-4 sm:items-center sm:pt-4 bg-slate-950/60 backdrop-blur-sm">
@@ -400,6 +404,7 @@ export default function Productos() {
         )}
       </AnimatePresence>
 
+      {/* MODAL 2: EDITAR PRODUCTO */}
       <AnimatePresence>
         {editingProduct && !scannerTarget && (
           <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[80px] pb-6 px-4 sm:items-center sm:pt-4 bg-slate-950/60 backdrop-blur-sm">
@@ -454,6 +459,7 @@ export default function Productos() {
         )}
       </AnimatePresence>
 
+      {/* MODAL 3: GESTIONAR STOCK */}
       <AnimatePresence>
         {stockProduct && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
@@ -501,6 +507,7 @@ export default function Productos() {
         )}
       </AnimatePresence>
 
+      {/* MODAL 4: VISOR DE ETIQUETA */}
       <AnimatePresence>
         {barcodeView && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm" onClick={() => setBarcodeView(null)}>
