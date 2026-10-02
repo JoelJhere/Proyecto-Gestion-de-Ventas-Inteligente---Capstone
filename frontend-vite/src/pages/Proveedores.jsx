@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 export default function Proveedores() {
   const [proveedores, setProveedores] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingProveedor, setEditingProveedor] = useState(null); 
@@ -17,12 +18,15 @@ export default function Proveedores() {
   const isAdmin = usuario.rol === 'ADMIN';
 
   const cargarProveedores = async () => {
+    setIsLoading(true);
     try {
       const res = await axios.get('/proveedores');
       setProveedores(res.data);
     } catch (error) {
       console.error("Error al cargar proveedores:", error);
       toast.error('Ocurrió un problema al cargar los proveedores');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -126,7 +130,21 @@ export default function Proveedores() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {proveedoresFiltrados.length === 0 ? (
+              {isLoading ? (
+                // SKELETON LOADER (Animación de carga)
+                [...Array(5)].map((_, index) => (
+                  <tr key={index} className="animate-pulse">
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-48"></div></td>
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
+                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-32"></div></td>
+                    {isAdmin && (
+                      <td className="p-4 flex justify-center">
+                        <div className="h-8 w-8 bg-slate-200 rounded"></div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : proveedoresFiltrados.length === 0 ? (
                 <tr><td colSpan={isAdmin ? "4" : "3"} className="p-12 text-center text-slate-500 font-medium">{busqueda ? 'No se encontraron proveedores.' : 'No hay proveedores registrados.'}</td></tr>
               ) : (
                 proveedoresFiltrados.map((prov) => (

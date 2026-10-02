@@ -6,9 +6,54 @@ import toast from 'react-hot-toast';
 import Barcode from 'react-barcode';
 import { Html5Qrcode } from 'html5-qrcode';
 
+// Sub-componente dinámico para buscar y seleccionar proveedores (Definido afuera para evitar bugs visuales)
+const SelectorProveedor = ({ proveedores, valorActual, onChange }) => {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+
+  const proveedorSeleccionado = proveedores.find(p => p.id === parseInt(valorActual));
+  const textoMostrar = abierto ? busqueda : (proveedorSeleccionado ? proveedorSeleccionado.nombre : '');
+  const filtrados = proveedores.filter(p => p.nombre.toLowerCase().includes(busqueda.toLowerCase()));
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium cursor-text"
+        placeholder={proveedorSeleccionado ? proveedorSeleccionado.nombre : "Buscar proveedor..."}
+        value={textoMostrar}
+        onFocus={() => { setAbierto(true); setBusqueda(''); }}
+        onBlur={() => setTimeout(() => setAbierto(false), 200)}
+        onChange={(e) => { setBusqueda(e.target.value); setAbierto(true); }}
+      />
+      {abierto && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+          <div
+            className="p-3 hover:bg-slate-50 cursor-pointer text-slate-600 text-sm font-bold border-b border-slate-100"
+            onClick={() => { onChange(''); setAbierto(false); }}
+          >
+            Sin proveedor asignado
+          </div>
+          {filtrados.length > 0 ? filtrados.map(prov => (
+            <div
+              key={prov.id}
+              className="p-3 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer text-slate-800 text-sm font-medium transition-colors"
+              onClick={() => { onChange(prov.id); setAbierto(false); }}
+            >
+              {prov.nombre}
+            </div>
+          )) : (
+            <div className="p-3 text-slate-400 text-sm italic text-center">No se encontraron resultados</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Productos() {
   const [productos, setProductos] = useState([]);
-  const [proveedores, setProveedores] = useState([]); 
+  const [proveedores, setProveedores] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   
   // Estados de carga (Skeleton)
@@ -20,7 +65,7 @@ export default function Productos() {
   const [stockProduct, setStockProduct] = useState(null);     
   const [barcodeView, setBarcodeView] = useState(null);
   const [scannerTarget, setScannerTarget] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState(null); // Nuevo estado para el modal de confirmación
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   const [formData, setFormData] = useState({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
   const [stockData, setStockData] = useState({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
@@ -29,7 +74,7 @@ export default function Productos() {
   const isAdmin = usuario.rol === 'ADMIN';
 
   const cargarDatos = async () => {
-    setIsLoading(true); // Activamos la animación de carga
+    setIsLoading(true); 
     try {
       const [resProductos, resProveedores] = await Promise.all([
         axios.get('/productos'),
@@ -41,7 +86,7 @@ export default function Productos() {
       console.error("Error al cargar datos:", error);
       toast.error('Ocurrió un problema al cargar los datos');
     } finally {
-      setIsLoading(false); // Apagamos la animación de carga
+      setIsLoading(false); 
     }
   };
 
@@ -192,12 +237,10 @@ export default function Productos() {
     }
   };
 
-  // Abre el modal en lugar de mostrar alert()
   const prepararToggleEstado = (prod) => {
     setConfirmDialog(prod);
   };
 
-  // Ejecuta la acción después de confirmar
   const ejecutarToggleEstado = async () => {
     if (!confirmDialog) return;
     const accion = confirmDialog.estado ? 'descontinuar' : 'reactivar';
@@ -426,10 +469,11 @@ export default function Productos() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Proveedor</label>
-                      <select value={formData.proveedorId} onChange={e => setFormData({...formData, proveedorId: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium">
-                        <option value="">Sin proveedor asignado</option>
-                        {proveedores.map(prov => <option key={prov.id} value={prov.id}>{prov.nombre}</option>)}
-                      </select>
+                      <SelectorProveedor 
+                        proveedores={proveedores} 
+                        valorActual={formData.proveedorId} 
+                        onChange={(id) => setFormData({...formData, proveedorId: id})} 
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Stock Inicial</label>
@@ -481,10 +525,11 @@ export default function Productos() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Proveedor</label>
-                      <select value={editingProduct.proveedorId || ''} onChange={e => setEditingProduct({...editingProduct, proveedorId: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium">
-                        <option value="">Sin proveedor asignado</option>
-                        {proveedores.map(prov => <option key={prov.id} value={prov.id}>{prov.nombre}</option>)}
-                      </select>
+                      <SelectorProveedor 
+                        proveedores={proveedores} 
+                        valorActual={editingProduct.proveedorId} 
+                        onChange={(id) => setEditingProduct({...editingProduct, proveedorId: id})} 
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Stock Actual (Lectura)</label>
