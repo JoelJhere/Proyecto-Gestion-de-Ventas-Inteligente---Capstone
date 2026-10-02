@@ -24,8 +24,8 @@ export default function Productos() {
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = usuario.rol === 'ADMIN';
 
-  const API_URL_PROD = `http://${window.location.hostname}:4000/api/productos`;
-  const API_URL_PROV = `http://${window.location.hostname}:4000/api/proveedores`;
+  const API_URL_PROD = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/productos`;
+  const API_URL_PROV = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/proveedores`;
 
   // 1. Cargar Productos y Proveedores juntos
   const cargarDatos = async () => {

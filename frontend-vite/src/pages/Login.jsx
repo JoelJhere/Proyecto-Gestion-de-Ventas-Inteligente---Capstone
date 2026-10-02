@@ -17,7 +17,7 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(`http://${window.location.hostname}:4000/api/auth/login`, {
+      const res = await axios.post(`https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/auth/login`, {
         email,
         password
       });

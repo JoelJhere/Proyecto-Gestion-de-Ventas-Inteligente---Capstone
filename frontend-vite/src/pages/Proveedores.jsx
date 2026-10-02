@@ -15,7 +15,7 @@ export default function Proveedores() {
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = usuario.rol === 'ADMIN';
 
-  const API_URL = `http://${window.location.hostname}:4000/api/proveedores`;
+  const API_URL = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/proveedores`;
 
   const cargarProveedores = async () => {
     try {

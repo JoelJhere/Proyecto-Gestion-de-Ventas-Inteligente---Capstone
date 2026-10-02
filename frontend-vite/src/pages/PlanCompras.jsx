@@ -34,9 +34,9 @@ export default function PlanCompras() {
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = usuario.rol === 'ADMIN';
 
-  const API_URL_PLANES = `http://${window.location.hostname}:4000/api/planes-compra`;
-  const API_URL_PROV = `http://${window.location.hostname}:4000/api/proveedores`;
-  const API_URL_PROD = `http://${window.location.hostname}:4000/api/productos`;
+  const API_URL_PLANES = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/planes-compra`;
+  const API_URL_PROV = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/proveedores`;
+  const API_URL_PROD = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/productos`;
 
   const cargarDatos = async () => {
     try {

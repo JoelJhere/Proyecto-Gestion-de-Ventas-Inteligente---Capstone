@@ -6,7 +6,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { io } from 'socket.io-client';
 import { useBusiness } from '../context/BusinessContext';
 
-const socket = io(`http://${window.location.hostname}:4000`);
+const socket = io(`https://proyecto-gestion-de-ventas-inteligente.onrender.com`);
 
 export default function Ventas() {
   const { businessConfig } = useBusiness();
@@ -29,7 +29,7 @@ export default function Ventas() {
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
-  const API_URL = `http://${window.location.hostname}:4000/api/productos`;
+  const API_URL = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/productos`;
 
   useEffect(() => {
     const cargarCatalogo = async () => {

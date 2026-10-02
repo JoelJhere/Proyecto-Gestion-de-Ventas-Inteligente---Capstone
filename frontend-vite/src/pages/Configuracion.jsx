@@ -11,7 +11,7 @@ export default function Configuracion() {
     nombre: '', ruc: '', direccion: '', telefono: '', email: '', mensajeTicket: '', impuestoPorcentaje: 18
   });
 
-  const API_URL = `http://${window.location.hostname}:4000/api/configuracion`;
+  const API_URL = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/configuracion`;
 
   useEffect(() => {
     const cargarDatos = async () => {

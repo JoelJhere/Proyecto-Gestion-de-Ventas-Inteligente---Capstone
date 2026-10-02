@@ -16,7 +16,7 @@ export const BusinessProvider = ({ children }) => {
       if (!token) return; 
 
       try {
-        const url = `http://${window.location.hostname}:4000/api/configuracion`;
+        const url = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/configuracion`;
         const res = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` }
         });
