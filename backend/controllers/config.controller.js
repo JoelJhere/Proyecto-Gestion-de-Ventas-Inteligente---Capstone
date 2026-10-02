@@ -8,13 +8,15 @@ export const obtenerConfiguracion = async (req, res) => {
     // Buscamos el primer (y único) registro
     let config = await prisma.businessConfig.findFirst();
 
-    // Si la base de datos está vacía, creamos la configuración por defecto
+    // Si la base de datos está vacía, creamos la configuración genérica por defecto
     if (!config) {
       config = await prisma.businessConfig.create({
         data: {
-          nombre: 'Bodega NOVA',
-          ruc: '20000000000',
-          direccion: 'Dirección no configurada'
+          nombre: 'Mi Negocio',
+          ruc: '',
+          direccion: '',
+          mensajeTicket: '¡Gracias por su preferencia!',
+          impuestoPorcentaje: 18.0
         }
       });
     }
@@ -27,7 +29,8 @@ export const obtenerConfiguracion = async (req, res) => {
 
 // 2. Actualizar la configuración
 export const actualizarConfiguracion = async (req, res) => {
-  const { nombre, ruc, direccion, telefono, email, mensajeTicket, impuestoPorcentaje } = req.body;
+  // AÑADIDO: Extracción del campo "logo"
+  const { nombre, ruc, direccion, telefono, email, mensajeTicket, impuestoPorcentaje, logo } = req.body;
 
   try {
     const configExistente = await prisma.businessConfig.findFirst();
@@ -45,7 +48,8 @@ export const actualizarConfiguracion = async (req, res) => {
         telefono,
         email,
         mensajeTicket,
-        impuestoPorcentaje: parseFloat(impuestoPorcentaje) || 18.0
+        impuestoPorcentaje: parseFloat(impuestoPorcentaje) || 18.0,
+        logo // AÑADIDO: Ahora sí se guardará la imagen en Base64 en la base de datos
       }
     });
 
