@@ -149,6 +149,15 @@ export default function PlanCompras() {
     }
   };
 
+  // Nueva función para limpiar todo el estado al cerrar el modal
+  const cerrarModalCrear = () => {
+    setIsCreateModalOpen(false);
+    setFormData({ proveedorId: '', fechaEsperada: '', detalles: [] });
+    setBusquedaProv('');
+    setBusquedaProd('');
+    setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '' });
+  };
+
   // --- LÓGICA DE RECEPCIÓN ---
   const abrirModalRecibir = (plan) => {
     setReceivingPlan(plan);
@@ -308,8 +317,7 @@ export default function PlanCompras() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8 flex flex-col max-h-[90vh]">
               <div className="flex justify-between items-center p-4 sm:p-6 bg-neutral-950 border-t-4 border-verde-pastel shrink-0">
                 <h2 className="text-lg sm:text-xl font-extrabold text-white">Nuevo Plan</h2>
-                <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>
-              </div>
+                <button onClick={cerrarModalCrear} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>              </div>
               <form onSubmit={handleCrearPlan} className="flex flex-col flex-1 min-h-0">
                 <div className="p-6 overflow-y-auto space-y-6 flex-1">
                   
@@ -325,7 +333,15 @@ export default function PlanCompras() {
                           type="text" 
                           placeholder="Buscar proveedor..." 
                           value={busquedaProv}
-                          onChange={(e) => { setBusquedaProv(e.target.value); setShowProvDropdown(true); }}
+                          onChange={(e) => { 
+                            const valor = e.target.value;
+                            setBusquedaProv(valor); 
+                            setShowProvDropdown(true);
+                            // Si borras el texto, desvinculamos el proveedor para liberar los productos
+                            if (valor === '') {
+                              setFormData(prev => ({ ...prev, proveedorId: '' }));
+                            }
+                          }}
                           onFocus={() => setShowProvDropdown(true)}
                           onBlur={() => setTimeout(() => setShowProvDropdown(false), 200)}
                           className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 font-medium transition-all" 
@@ -434,8 +450,7 @@ export default function PlanCompras() {
                 </div>
 
                 <div className="p-5 border-t border-slate-100 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
-                  <button type="button" onClick={() => setIsCreateModalOpen(false)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none flex justify-center items-center gap-2">
+                    <button type="button" onClick={cerrarModalCrear} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none flex justify-center items-center gap-2">
                     <FaCheck /> Confirmar
                   </button>
                 </div>
