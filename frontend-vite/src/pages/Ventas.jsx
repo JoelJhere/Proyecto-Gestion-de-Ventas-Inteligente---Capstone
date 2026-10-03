@@ -158,7 +158,7 @@ export default function Ventas() {
       const token = localStorage.getItem('token');
       const tipoConsulta = tipoDoc === 'FACTURA' ? 'ruc' : 'dni';
       
-      const res = await axios.get(`/api/externa/consulta/${tipoConsulta}/${numeroBuscar}`, {
+      const res = await axios.get(`/externa/consulta/${tipoConsulta}/${numeroBuscar}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
