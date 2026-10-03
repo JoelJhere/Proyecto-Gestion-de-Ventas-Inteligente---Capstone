@@ -178,7 +178,9 @@ export default function Ventas() {
         tipoComprobante,
         subtotal: subtotalBase,
         igv: montoIgv,
-        total: totalPagado
+        total: totalPagado,
+        cliente,
+        metodoEnvio
       };
 
       const res = await axios.post('/ventas', payload, {
@@ -194,7 +196,8 @@ export default function Ventas() {
         total: totalPagado,
         cliente: tipoComprobante === 'TICKET' ? 'Cliente Varios' : (cliente.nombre || 'Cliente Varios'),
         metodoEnvio: tipoComprobante === 'TICKET' ? 'NINGUNO' : metodoEnvio,
-        contactoEnvio: tipoComprobante === 'TICKET' ? '' : (metodoEnvio === 'CORREO' ? cliente.correo : cliente.telefono)
+        contactoEnvio: tipoComprobante === 'TICKET' ? '' : (metodoEnvio === 'CORREO' ? cliente.correo : cliente.telefono),
+        enlacePdf: res.data.enlacePdf
       });
 
       // Limpiamos la caja

@@ -34,7 +34,7 @@ export const obtenerConfiguracion = async (req, res) => {
 export const actualizarConfiguracion = async (req, res) => {
   const { 
     razonSocial, nombre, ruc, direccionFiscal, ciudad, departamento, 
-    telefono, email, mensajeTicket, impuestoPorcentaje, logo 
+    telefono, email, mensajeTicket, impuestoPorcentaje, logo, nubefactRuta, nubefactToken
   } = req.body;
 
   try {
@@ -57,7 +57,9 @@ export const actualizarConfiguracion = async (req, res) => {
         email,
         mensajeTicket,
         impuestoPorcentaje: parseFloat(impuestoPorcentaje) || 18.0,
-        logo 
+        logo,
+        nubefactRuta,
+        nubefactToken
       }
     });
 

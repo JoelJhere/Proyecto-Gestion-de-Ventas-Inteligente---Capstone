@@ -39,6 +39,11 @@ model BusinessConfig {
   mensajeTicket      String?  @default("¡Gracias por su preferencia!")
   impuestoPorcentaje Float    @default(18.0) 
   logo               String?
+  
+  // --- NUEVOS CAMPOS PARA MULTI-BODEGA ---
+  nubefactRuta       String?  @default("")
+  nubefactToken      String?  @default("")
+  
   updatedAt          DateTime @updatedAt
 }
 

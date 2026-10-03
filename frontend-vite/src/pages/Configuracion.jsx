@@ -251,8 +251,27 @@ export default function Configuracion() {
                 </div>
               </div>
             </div>
-
           </div>
+
+          {/* CAMPOS PARA NUBEFACT */}
+                <div className="pt-4 border-t border-slate-200 mt-2 space-y-4">
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
+                    <p className="text-xs text-indigo-800 font-bold mb-1">Integración SUNAT (Nubefact API)</p>
+                    <p className="text-[10px] text-indigo-600">Pegue aquí sus credenciales de integración para habilitar la facturación electrónica automática.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Ruta (URL) API *</label>
+                    <input type="text" value={formData.nubefactRuta || ''} onChange={e => setFormData({...formData, nubefactRuta: e.target.value})} 
+                      className="w-full p-3 bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-slate-800 text-xs transition-all shadow-sm font-mono" 
+                      placeholder="https://api.nubefact.com/api/v1/..." />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Token de Seguridad *</label>
+                    <input type="password" value={formData.nubefactToken || ''} onChange={e => setFormData({...formData, nubefactToken: e.target.value})} 
+                      className="w-full p-3 bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-slate-800 text-xs transition-all shadow-sm font-mono" 
+                      placeholder="••••••••••••••••••••••••••••••" />
+                  </div>
+                </div>
 
           {/* BOTÓN GUARDAR */}
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex justify-center mt-6">
