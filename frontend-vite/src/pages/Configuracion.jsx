@@ -12,7 +12,8 @@ export default function Configuracion() {
   const fileInputRef = useRef(null);
   
   const [formData, setFormData] = useState({
-    razonSocial: '', nombre: '', ruc: '', direccionFiscal: '', ciudad: '', departamento: '', telefono: '', email: '', mensajeTicket: '', impuestoPorcentaje: 18, logo: null
+    razonSocial: '', nombre: '', ruc: '', direccionFiscal: '', ciudad: '', departamento: '', telefono: '', email: '', mensajeTicket: '', impuestoPorcentaje: 18, logo: null,
+    nubefactRuta: '', nubefactToken: ''
   });
 
   const [previewLogo, setPreviewLogo] = useState(null);
