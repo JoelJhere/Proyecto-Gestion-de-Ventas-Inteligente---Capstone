@@ -28,12 +28,15 @@ model User {
 // 2. Configuración del Negocio (Solo debería tener 1 registro)
 model BusinessConfig {
   id                 Int      @id @default(autoincrement())
-  nombre             String   @default("Mi Negocio")
-  ruc                String   @default("")
-  direccion          String?
-  telefono           String?
-  email              String?
-  mensajeTicket      String?  @default("¡Gracias por su compra!")
+  razonSocial        String   @default("") // El nombre legal en SUNAT (Ej: BODEGA NOVA S.A.C.)
+  nombre             String   @default("Mi Negocio") // Nombre Comercial (El que ve el cliente)
+  ruc                String   @default("") // Debe ser de 11 dígitos
+  direccionFiscal    String   @default("") // Ej: Jr. Inca 372
+  ciudad             String   @default("") // Ej: Cajamarca
+  departamento       String   @default("") // Ej: Cajamarca
+  telefono           String   @default("") // Obligatorio para el comprobante
+  email              String   @default("") // Obligatorio para el comprobante
+  mensajeTicket      String?  @default("¡Gracias por su preferencia!")
   impuestoPorcentaje Float    @default(18.0) 
   logo               String?
   updatedAt          DateTime @updatedAt
