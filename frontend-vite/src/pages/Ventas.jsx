@@ -155,7 +155,7 @@ export default function Ventas() {
   const handleProcesarVenta = async () => {
     if (carrito.length === 0) return toast.error('El carrito está vacío.');
 
-    // Validaciones de SUNAT
+    // Validaciones exclusivas para SUNAT (Boletas y Facturas)
     if (tipoComprobante === 'FACTURA') {
       if (!cliente.documento || cliente.documento.length !== 11) return toast.error('Ingrese un RUC válido de 11 dígitos.');
       if (!cliente.nombre.trim()) return toast.error('Ingrese la Razón Social.');
@@ -164,7 +164,7 @@ export default function Ventas() {
       if (!cliente.nombre.trim()) return toast.error('Ingrese el Nombre del cliente.');
     }
 
-    // Validaciones de Método de Envío
+    // Validaciones de Método de Envío solo si no es Venta Rápida
     if (tipoComprobante !== 'TICKET') {
       if (metodoEnvio === 'CORREO' && !cliente.correo.trim()) return toast.error('Ingrese el correo electrónico para enviar el comprobante.');
       if (metodoEnvio === 'WHATSAPP' && (!cliente.telefono || cliente.telefono.length !== 9)) return toast.error('Ingrese un número de WhatsApp válido (9 dígitos).');
@@ -187,17 +187,17 @@ export default function Ventas() {
 
       toast.success('¡Venta registrada con éxito!', { icon: '✅' });
       
-      // Guardamos la info para el Modal del Comprobante
+      // Guardamos info para el Modal. Si es TICKET, forzamos datos limpios.
       setVentaGenerada({
         id: res.data.venta.id,
         tipo: tipoComprobante,
         total: totalPagado,
-        cliente: cliente.nombre || 'Cliente Varios',
-        metodoEnvio: metodoEnvio,
-        contactoEnvio: metodoEnvio === 'CORREO' ? cliente.correo : cliente.telefono
+        cliente: tipoComprobante === 'TICKET' ? 'Cliente Varios' : (cliente.nombre || 'Cliente Varios'),
+        metodoEnvio: tipoComprobante === 'TICKET' ? 'NINGUNO' : metodoEnvio,
+        contactoEnvio: tipoComprobante === 'TICKET' ? '' : (metodoEnvio === 'CORREO' ? cliente.correo : cliente.telefono)
       });
 
-      // Limpiamos la caja para el siguiente cliente
+      // Limpiamos la caja
       setCarrito([]);
       setCliente({ documento: '', nombre: '', correo: '', telefono: '' });
       setMetodoEnvio('NINGUNO');
@@ -229,7 +229,6 @@ export default function Ventas() {
           </h2>
           
           <div className="flex gap-3">
-            {/* Buscador Desplegable Inteligente */}
             <div className="relative w-full">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <FaSearch className="text-slate-400" />
@@ -378,7 +377,6 @@ export default function Ventas() {
                   className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm" />
               </div>
 
-              {/* SECCIÓN DE MEDIO DE ENVÍO REDISEÑADA */}
               <div className="pt-3 border-t border-slate-200 mt-4">
                 <label className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide block">
                   Medio de Envío (Opcional)
@@ -520,28 +518,37 @@ export default function Ventas() {
 
               <div className="p-5 bg-white border-t border-slate-100 flex flex-col gap-3">
                 
-                {/* Botón dinámico según el método de envío elegido */}
-                {ventaGenerada.metodoEnvio === 'WHATSAPP' && (
-                  <button className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
-                    <FaWhatsapp size={18} /> Enviar Ticket por WhatsApp
-                  </button>
-                )}
-                {ventaGenerada.metodoEnvio === 'CORREO' && (
-                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
-                    <FaEnvelope size={16} /> Enviar PDF por Correo
-                  </button>
-                )}
-                {ventaGenerada.metodoEnvio === 'NINGUNO' && (
-                  <button className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
-                    <FaPrint size={16} /> Imprimir Comprobante
-                  </button>
+                {/* BOTONES DE ENVÍO/IMPRESIÓN (SOLO APARECEN PARA BOLETAS Y FACTURAS) */}
+                {ventaGenerada.tipo !== 'TICKET' && (
+                  <>
+                    {ventaGenerada.metodoEnvio === 'WHATSAPP' && (
+                      <button className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                        <FaWhatsapp size={18} /> Enviar {ventaGenerada.tipo} por WhatsApp
+                      </button>
+                    )}
+                    {ventaGenerada.metodoEnvio === 'CORREO' && (
+                      <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                        <FaEnvelope size={16} /> Enviar PDF por Correo
+                      </button>
+                    )}
+                    {ventaGenerada.metodoEnvio === 'NINGUNO' && (
+                      <button className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                        <FaPrint size={16} /> Imprimir {ventaGenerada.tipo}
+                      </button>
+                    )}
+                  </>
                 )}
                 
+                {/* BOTÓN PRINCIPAL SIEMPRE VISIBLE */}
                 <button 
                   onClick={() => setVentaGenerada(null)}
-                  className="w-full bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-3.5 px-4 rounded-xl transition-all flex justify-center items-center text-sm"
+                  className={`w-full font-bold py-3.5 px-4 rounded-xl transition-all flex justify-center items-center text-sm ${
+                    ventaGenerada.tipo === 'TICKET' 
+                      ? 'bg-verde-pastel text-emerald-950 hover:bg-emerald-300' 
+                      : 'bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700'
+                  }`}
                 >
-                  Siguiente Venta
+                  {ventaGenerada.tipo === 'TICKET' ? 'Siguiente Cliente' : 'Siguiente Venta'}
                 </button>
               </div>
             </motion.div>
