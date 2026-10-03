@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaReceipt, FaUser, FaFileInvoice, FaIdCard, FaTimes } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaReceipt, FaUser, FaFileInvoice, FaIdCard, FaTimes, FaEnvelope, FaWhatsapp, FaPrint } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -18,11 +18,15 @@ export default function Ventas() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [carrito, setCarrito] = useState(() => JSON.parse(localStorage.getItem('pos_carrito')) || []);
   const [tipoComprobante, setTipoComprobante] = useState(() => localStorage.getItem('pos_tipo_comprobante') || 'TICKET');
+  
+  // Estados del Cliente y Envío
   const [cliente, setCliente] = useState(() => JSON.parse(localStorage.getItem('pos_cliente')) || { documento: '', nombre: '', correo: '', telefono: '' });
+  const [metodoEnvio, setMetodoEnvio] = useState('NINGUNO'); // NINGUNO, CORREO, WHATSAPP
 
   // Estados de UI
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [ventaGenerada, setVentaGenerada] = useState(null);
 
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -42,7 +46,6 @@ export default function Ventas() {
   const cargarCatalogo = async () => {
     try {
       const token = localStorage.getItem('token');
-      // Asegúrate de que la URL base de axios esté configurada, o usa la URL completa
       const res = await axios.get('/productos', { headers: { Authorization: `Bearer ${token}` } });
       setProductos(res.data.filter(p => p.estado === true && p.stock > 0));
     } catch (error) {
@@ -152,13 +155,19 @@ export default function Ventas() {
   const handleProcesarVenta = async () => {
     if (carrito.length === 0) return toast.error('El carrito está vacío.');
 
-    // Validaciones estrictas de documentos según tipo de comprobante
+    // Validaciones de SUNAT
     if (tipoComprobante === 'FACTURA') {
       if (!cliente.documento || cliente.documento.length !== 11) return toast.error('Ingrese un RUC válido de 11 dígitos.');
-      if (!cliente.nombre.trim()) return toast.error('Ingrese la Razón Social de la empresa.');
+      if (!cliente.nombre.trim()) return toast.error('Ingrese la Razón Social.');
     } else if (tipoComprobante === 'BOLETA') {
       if (!cliente.documento || cliente.documento.length !== 8) return toast.error('Ingrese un DNI válido de 8 dígitos.');
       if (!cliente.nombre.trim()) return toast.error('Ingrese el Nombre del cliente.');
+    }
+
+    // Validaciones de Método de Envío
+    if (tipoComprobante !== 'TICKET') {
+      if (metodoEnvio === 'CORREO' && !cliente.correo.trim()) return toast.error('Ingrese el correo electrónico para enviar el comprobante.');
+      if (metodoEnvio === 'WHATSAPP' && (!cliente.telefono || cliente.telefono.length !== 9)) return toast.error('Ingrese un número de WhatsApp válido (9 dígitos).');
     }
 
     setIsProcessing(true);
@@ -170,22 +179,30 @@ export default function Ventas() {
         subtotal: subtotalBase,
         igv: montoIgv,
         total: totalPagado
-        // Ya no enviamos vendedorId, el backend lo sacará del token por seguridad
       };
 
-      await axios.post('/ventas', payload, {
+      const res = await axios.post('/ventas', payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      toast.success('¡Venta registrada con éxito!', { icon: '✅', duration: 4000 });
+      toast.success('¡Venta registrada con éxito!', { icon: '✅' });
       
-      // Limpiar datos post-venta
+      // Guardamos la info para el Modal del Comprobante
+      setVentaGenerada({
+        id: res.data.venta.id,
+        tipo: tipoComprobante,
+        total: totalPagado,
+        cliente: cliente.nombre || 'Cliente Varios',
+        metodoEnvio: metodoEnvio,
+        contactoEnvio: metodoEnvio === 'CORREO' ? cliente.correo : cliente.telefono
+      });
+
+      // Limpiamos la caja para el siguiente cliente
       setCarrito([]);
       setCliente({ documento: '', nombre: '', correo: '', telefono: '' });
+      setMetodoEnvio('NINGUNO');
       setTipoComprobante('TICKET');
       socket.emit('sincronizar_carrito', { usuarioId: usuario.id, carrito: [] });
-      
-      // Recargar catálogo para actualizar el stock visible
       cargarCatalogo();
 
     } catch (error) {
@@ -346,7 +363,6 @@ export default function Ventas() {
                 <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
                   <FaIdCard/> {tipoComprobante === 'FACTURA' ? 'RUC *' : 'DNI *'}
                 </label>
-                {/* Filtro en tiempo real para DNI (8) y RUC (11) */}
                 <input type="text" required placeholder={`Ingresa el ${tipoComprobante === 'FACTURA' ? 'RUC (11 dígitos)' : 'DNI (8 dígitos)'}`}
                   value={cliente.documento} 
                   onChange={e => setCliente({...cliente, documento: e.target.value.replace(/\D/g, '').slice(0, tipoComprobante === 'FACTURA' ? 11 : 8)})}
@@ -362,11 +378,38 @@ export default function Ventas() {
                   className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                 <input type="email" placeholder="Correo (Opcional)" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-xs" />
-                 <input type="text" placeholder="WhatsApp (Opcional)" value={cliente.telefono} onChange={e => setCliente({...cliente, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})}
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-xs font-mono" />
+              {/* SECCIÓN DE MEDIO DE ENVÍO REDISEÑADA */}
+              <div className="pt-3 border-t border-slate-200 mt-4">
+                <label className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide block">
+                  Medio de Envío (Opcional)
+                </label>
+                <div className="flex bg-slate-200 p-1 rounded-lg mb-3">
+                  <button onClick={() => setMetodoEnvio('NINGUNO')} 
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                    Físico
+                  </button>
+                  <button onClick={() => setMetodoEnvio('CORREO')} 
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                    Correo
+                  </button>
+                  <button onClick={() => setMetodoEnvio('WHATSAPP')} 
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                    WhatsApp
+                  </button>
+                </div>
+
+                {metodoEnvio === 'CORREO' && (
+                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
+                    <input type="email" required placeholder="ejemplo@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
+                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm" />
+                  </motion.div>
+                )}
+                {metodoEnvio === 'WHATSAPP' && (
+                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
+                    <input type="text" required placeholder="Número de WhatsApp (9 dígitos)" value={cliente.telefono} onChange={e => setCliente({...cliente, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})}
+                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
+                  </motion.div>
+                )}
               </div>
             </div>
           )}
@@ -436,6 +479,71 @@ export default function Ventas() {
               >
                 <FaTimes /> Cancelar Escáner
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* --- MODAL DE VENTA EXITOSA (COMPROBANTE) --- */}
+      <AnimatePresence>
+        {ventaGenerada && (
+          <div className="fixed inset-0 bg-neutral-950/80 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="bg-emerald-500 p-6 flex flex-col items-center justify-center text-white text-center">
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-3 shadow-inner">
+                  <FaReceipt className="text-emerald-500 text-3xl" />
+                </div>
+                <h2 className="text-2xl font-black tracking-tight">¡Venta Exitosa!</h2>
+                <p className="text-emerald-50 font-medium text-sm mt-1 opacity-90">
+                  {ventaGenerada.tipo === 'TICKET' ? 'Ticket Interno' : `${ventaGenerada.tipo} ELECTRÓNICA`} generada.
+                </p>
+              </div>
+
+              <div className="p-6 bg-slate-50 space-y-4">
+                <div className="flex justify-between items-center pb-4 border-b border-slate-200 border-dashed">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">N° Operación</span>
+                  <span className="text-slate-800 font-mono font-bold">#000{ventaGenerada.id}</span>
+                </div>
+                <div className="flex justify-between items-center pb-4 border-b border-slate-200 border-dashed">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Cliente</span>
+                  <span className="text-slate-800 font-bold truncate max-w-[150px]">{ventaGenerada.cliente}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Pagado</span>
+                  <span className="text-emerald-600 font-black text-2xl tracking-tighter">S/ {ventaGenerada.total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="p-5 bg-white border-t border-slate-100 flex flex-col gap-3">
+                
+                {/* Botón dinámico según el método de envío elegido */}
+                {ventaGenerada.metodoEnvio === 'WHATSAPP' && (
+                  <button className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                    <FaWhatsapp size={18} /> Enviar Ticket por WhatsApp
+                  </button>
+                )}
+                {ventaGenerada.metodoEnvio === 'CORREO' && (
+                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                    <FaEnvelope size={16} /> Enviar PDF por Correo
+                  </button>
+                )}
+                {ventaGenerada.metodoEnvio === 'NINGUNO' && (
+                  <button className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                    <FaPrint size={16} /> Imprimir Comprobante
+                  </button>
+                )}
+                
+                <button 
+                  onClick={() => setVentaGenerada(null)}
+                  className="w-full bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-3.5 px-4 rounded-xl transition-all flex justify-center items-center text-sm"
+                >
+                  Siguiente Venta
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
