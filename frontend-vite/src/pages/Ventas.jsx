@@ -27,6 +27,7 @@ export default function Ventas() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [ventaGenerada, setVentaGenerada] = useState(null);
+  const [isLoadingDoc, setIsLoadingDoc] = useState(false);
 
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -149,6 +150,37 @@ export default function Ventas() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScannerOpen, productos]);
+
+  // --- CONSULTA A RENIEC / SUNAT ---
+  const buscarDocumento = async (numeroBuscar, tipoDoc) => {
+    setIsLoadingDoc(true);
+    try {
+      const token = localStorage.getItem('token');
+      const tipoConsulta = tipoDoc === 'FACTURA' ? 'ruc' : 'dni';
+      
+      const res = await axios.get(`/api/externa/consulta/${tipoConsulta}/${numeroBuscar}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // apis.net.pe devuelve estructuras distintas para DNI y RUC
+      let nombreEncontrado = '';
+      if (tipoConsulta === 'ruc') {
+        nombreEncontrado = res.data.razonSocial;
+      } else {
+        nombreEncontrado = `${res.data.nombres} ${res.data.apellidoPaterno} ${res.data.apellidoMaterno}`;
+      }
+
+      setCliente(prev => ({ ...prev, nombre: nombreEncontrado }));
+      toast.success('Datos encontrados', { icon: '🔍' });
+
+    } catch (error) {
+      console.error(error);
+      setCliente(prev => ({ ...prev, nombre: '' }));
+      toast.error('Documento no encontrado en la base de datos.');
+    } finally {
+      setIsLoadingDoc(false);
+    }
+  };
 
 
   // --- PROCESAMIENTO DE VENTA ---
@@ -365,19 +397,32 @@ export default function Ventas() {
                 <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
                   <FaIdCard/> {tipoComprobante === 'FACTURA' ? 'RUC *' : 'DNI *'}
                 </label>
-                <input type="text" required placeholder={`Ingresa el ${tipoComprobante === 'FACTURA' ? 'RUC (11 dígitos)' : 'DNI (8 dígitos)'}`}
-                  value={cliente.documento} 
-                  onChange={e => setCliente({...cliente, documento: e.target.value.replace(/\D/g, '').slice(0, tipoComprobante === 'FACTURA' ? 11 : 8)})}
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
+                <div className="relative">
+                  <input type="text" required placeholder={`Ingresa el ${tipoComprobante === 'FACTURA' ? 'RUC (11 dígitos)' : 'DNI (8 dígitos)'}`}
+                    value={cliente.documento} 
+                    onChange={e => {
+                      const limit = tipoComprobante === 'FACTURA' ? 11 : 8;
+                      const num = e.target.value.replace(/\D/g, '').slice(0, limit);
+                      setCliente({...cliente, documento: num});
+                      
+                      // Disparador automático al llegar al límite exacto
+                      if (num.length === limit) {
+                        buscarDocumento(num, tipoComprobante);
+                      }
+                    }}
+                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
+                </div>
               </div>
               
               <div>
                 <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
                   <FaUser/> {tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre Completo *'}
                 </label>
-                <input type="text" required placeholder={`Ingresa ${tipoComprobante === 'FACTURA' ? 'la razón social' : 'el nombre'}`}
-                  value={cliente.nombre} onChange={e => setCliente({...cliente, nombre: e.target.value})}
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm" />
+                <input type="text" required placeholder={isLoadingDoc ? 'Buscando en servidor...' : `Ingresa ${tipoComprobante === 'FACTURA' ? 'la razón social' : 'el nombre'}`}
+                  value={cliente.nombre} 
+                  onChange={e => setCliente({...cliente, nombre: e.target.value})}
+                  disabled={isLoadingDoc}
+                  className={`w-full p-2.5 border rounded-lg outline-none text-sm transition-colors ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-400 animate-pulse' : 'bg-white border-slate-300 focus:border-dorado focus:ring-1 focus:ring-dorado text-slate-900'}`} />
               </div>
 
               <div className="pt-3 border-t border-slate-200 mt-4">
