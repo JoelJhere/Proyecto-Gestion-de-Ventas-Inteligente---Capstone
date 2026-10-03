@@ -9,6 +9,7 @@ import proveedorRoutes from './routes/proveedor.routes.js';
 import planCompraRoutes from './routes/planCompra.routes.js';
 import configRoutes from './routes/config.routes.js';
 import ventaRoutes from './routes/venta.routes.js';
+import apiRoutes from './routes/api.routes.js';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -30,6 +31,7 @@ app.use('/api/proveedores', proveedorRoutes);
 app.use('/api/planes-compra', planCompraRoutes); 
 app.use('/api/configuracion', configRoutes);
 app.use('/api/ventas', ventaRoutes);
+app.use('/api/externa', apiRoutes);
 app.get('/api/status', (req, res) => {
   res.json({ mensaje: 'Servidor del POS Abarrotes AJ funcionando correctamente' });
 });
