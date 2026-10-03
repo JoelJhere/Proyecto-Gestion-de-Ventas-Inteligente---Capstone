@@ -103,9 +103,9 @@ export default function Configuracion() {
       {/* CABECERA */}
       <div className="mb-8">
         <h1 className="text-3xl font-extrabold text-neutral-950 mb-1 tracking-tight flex items-center gap-3">
-          <FaStore className="text-verde-pastel drop-shadow-md" /> Configuración del Negocio
+          <FaStore className="text-verde-pastel drop-shadow-md" /> Configuración
         </h1>
-        <p className="text-slate-500 text-sm font-medium">Administra los datos principales, facturación y logo de tu punto de venta.</p>
+        <p className="text-slate-500 text-sm font-medium">Administra los datos principales, facturación y logo de tu negocio.</p>
       </div>
 
       {isLoadingData ? (

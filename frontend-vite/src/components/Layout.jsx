@@ -24,7 +24,7 @@ export default function Layout() {
     { path: '/compras', icon: FaClipboardList, label: 'Plan de Compras' },
     { path: '/historial', icon: FaHistory, label: 'Historial' },
     { path: '/ia-panel', icon: FaRobot, label: 'Asistente IA' },
-    { path: '/configuracion', icon: FaCog, label: 'Configuración del Negocio' },
+    { path: '/configuracion', icon: FaCog, label: 'Configuración' },
   ];
 
   const handleNavigation = () => setIsMobileMenuOpen(false);
