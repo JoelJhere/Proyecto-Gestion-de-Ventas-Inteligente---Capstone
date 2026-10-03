@@ -233,7 +233,7 @@ export default function Configuracion() {
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex justify-center mt-6">
               <button type="submit" disabled={loading} 
                   className="w-full sm:w-72 bg-neutral-950 hover:bg-neutral-800 text-verde-pastel font-extrabold py-4 px-8 rounded-xl transition-all shadow-[0_4px_15px_rgba(0,0,0,0.1)] flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed uppercase tracking-wider text-sm">
-                  <FaSave size={18} /> {loading ? 'Guardando...' : 'Guardar Configuración'}
+                  <FaSave size={18} /> {loading ? 'Guardando...' : 'Guardar'}
               </button>
           </div>
 
