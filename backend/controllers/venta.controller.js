@@ -40,14 +40,21 @@ export const crearVenta = async (req, res) => {
       }
 
       // Obtener el último correlativo para seguir la secuencia
-      const ultimaVenta = await prisma.venta.findFirst({
+     const ultimaVenta = await prisma.venta.findFirst({
         where: { tipoComprobante: tipoDocDB },
         orderBy: { id: 'desc' }
       });
       
-      let numeroCorrelativo = 1;
+      let numeroCorrelativo = 1; 
+      
       if (ultimaVenta && ultimaVenta.numeroComprobante && ultimaVenta.numeroComprobante.includes('-')) {
-        numeroCorrelativo = parseInt(ultimaVenta.numeroComprobante.split('-')[1]) + 1;
+        // Extraemos el número después del guion
+        const numeroExtraido = parseInt(ultimaVenta.numeroComprobante.split('-')[1]);
+        
+        // VALIDACIÓN CLAVE: Solo le sumamos 1 si es un número normal de boleta (máximo 8 dígitos)
+        if (!isNaN(numeroExtraido) && String(numeroExtraido).length <= 8) {
+          numeroCorrelativo = numeroExtraido + 1;
+        }
       }
       
       const serieDoc = tipoComprobante === 'FACTURA' ? 'F001' : 'B001';
