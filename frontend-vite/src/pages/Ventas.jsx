@@ -162,12 +162,13 @@ export default function Ventas() {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // apis.net.pe devuelve estructuras distintas para DNI y RUC
       let nombreEncontrado = '';
       if (tipoConsulta === 'ruc') {
-        nombreEncontrado = res.data.razonSocial;
+        // Soporte para la nueva API (business_name) o la antigua (razonSocial)
+        nombreEncontrado = res.data.business_name || res.data.razonSocial || res.data.razon_social;
       } else {
-        nombreEncontrado = `${res.data.nombres} ${res.data.apellidoPaterno} ${res.data.apellidoMaterno}`;
+        // NUEVA ESTRUCTURA DE DECOLECTA USANDO full_name
+        nombreEncontrado = res.data.full_name || `${res.data.first_name} ${res.data.first_last_name}`;
       }
 
       setCliente(prev => ({ ...prev, nombre: nombreEncontrado }));
@@ -181,7 +182,6 @@ export default function Ventas() {
       setIsLoadingDoc(false);
     }
   };
-
 
   // --- PROCESAMIENTO DE VENTA ---
   const handleProcesarVenta = async () => {
