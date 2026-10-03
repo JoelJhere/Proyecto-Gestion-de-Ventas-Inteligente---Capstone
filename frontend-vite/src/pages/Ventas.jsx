@@ -525,18 +525,27 @@ export default function Ventas() {
                 {ventaGenerada.tipo !== 'TICKET' && (
                   <>
                     {ventaGenerada.metodoEnvio === 'WHATSAPP' && (
-                      <button className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                      <button 
+                        onClick={() => window.open(`https://wa.me/51${ventaGenerada.contactoEnvio}?text=Gracias por tu compra. Aquí tienes tu comprobante electrónico: ${ventaGenerada.enlacePdf}`, '_blank')}
+                        className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                      >
                         <FaWhatsapp size={18} /> Enviar {ventaGenerada.tipo} por WhatsApp
                       </button>
                     )}
                     {ventaGenerada.metodoEnvio === 'CORREO' && (
-                      <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
-                        <FaEnvelope size={16} /> Enviar PDF por Correo
+                      <button 
+                        onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                      >
+                        <FaEnvelope size={16} /> Ver PDF / Correo Enviado
                       </button>
                     )}
                     {ventaGenerada.metodoEnvio === 'NINGUNO' && (
-                      <button className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
-                        <FaPrint size={16} /> Imprimir {ventaGenerada.tipo}
+                      <button 
+                        onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
+                        className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                      >
+                        <FaPrint size={16} /> Ver e Imprimir {ventaGenerada.tipo}
                       </button>
                     )}
                   </>
