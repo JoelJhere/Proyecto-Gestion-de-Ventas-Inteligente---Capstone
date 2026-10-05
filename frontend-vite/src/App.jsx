@@ -50,7 +50,40 @@ function App() {
   return (
   <BusinessProvider>
     {/* 2. Toaster Global: Funciona para toda la app, encima de todo */}
-    <Toaster position="top-center" reverseOrder={false} />
+    <Toaster 
+      position="top-center" 
+      reverseOrder={false}
+      containerStyle={{
+        top: 80, 
+      }}
+      toastOptions={{
+        style: {
+          fontSize: '17px',
+          padding: '16px 32px',
+          maxWidth: '600px',
+          borderRadius: '16px',
+          fontWeight: '600',
+          textAlign: 'center',
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+        },
+        success: {
+          duration: 4000,
+          style: {
+            background: '#ecfdf5',
+            color: '#065f46',
+            border: '1px solid #a7f3d0'
+          },
+        },
+        error: {
+          duration: 5000,
+          style: {
+            background: '#fef2f2',
+            color: '#991b1b',
+            border: '1px solid #fecaca'
+          },
+        }
+      }}
+    />
     
     <Router>
       <Routes>
