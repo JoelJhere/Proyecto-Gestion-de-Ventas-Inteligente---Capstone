@@ -10,6 +10,7 @@ import Ventas from './pages/Ventas';
 import PlanCompras from './pages/PlanCompras';
 import { BusinessProvider } from './context/BusinessContext';
 import Configuracion from './pages/Configuracion';
+import Fiados from './pages/Fiados';
 
 // --- CONFIGURACIÓN GLOBAL DE AXIOS ---
 
@@ -94,6 +95,7 @@ function App() {
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/productos" element={<Productos />} />  
           <Route path="/proveedores" element={<Proveedores />} />
+          <Route path="/fiados" element={<Fiados />} />
           <Route path="/compras" element={<PlanCompras />} />
           <Route path="/historial" element={<HistorialPlaceholder />} />
           <Route path="/ia-panel" element={<IAPlaceholder />} />
