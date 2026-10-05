@@ -190,8 +190,7 @@ export default function Ventas() {
     // Validación exclusiva para Fiados
     if (esFiado) {
       if (!cliente.nombre.trim()) return toast.error('Ingrese el nombre del vecino para fiarle.');
-      if (!cliente.telefono || cliente.telefono.length !== 9) return toast.error('Ingrese un número de WhatsApp válido (9 dígitos) para fiarle.');
-    }
+      if (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9')) return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');    }
 
     // Validaciones exclusivas para SUNAT (Boletas y Facturas)
     if (tipoComprobante === 'FACTURA') {
@@ -205,8 +204,7 @@ export default function Ventas() {
     // Validaciones de Método de Envío solo si no es Venta Rápida
     if (tipoComprobante !== 'TICKET') {
       if (metodoEnvio === 'CORREO' && !cliente.correo.trim()) return toast.error('Ingrese el correo electrónico para enviar el comprobante.');
-      if (metodoEnvio === 'WHATSAPP' && (!cliente.telefono || cliente.telefono.length !== 9)) return toast.error('Ingrese un número de WhatsApp válido (9 dígitos).');
-    }
+      if (metodoEnvio === 'WHATSAPP' && (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9'))) return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');    }
 
     setIsProcessing(true);
     try {
@@ -448,9 +446,13 @@ export default function Ventas() {
                   <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
                     <FaWhatsapp className="text-emerald-500 text-base" /> WhatsApp del Vecino *
                   </label>
-                  <input type="text" required placeholder="Ingresa número de 9 dígitos" 
+                  <input type="text" required placeholder="Ej: 987654321" 
                     value={cliente.telefono} 
-                    onChange={e => setCliente({...cliente, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})}
+                    onChange={e => {
+                      let num = e.target.value.replace(/\D/g, '');
+                      if (num.length > 0 && !num.startsWith('9')) return; 
+                      setCliente({...cliente, telefono: num.slice(0, 9)});
+                    }}
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
                 </motion.div>
               )}
@@ -484,7 +486,13 @@ export default function Ventas() {
                   )}
                   {metodoEnvio === 'WHATSAPP' && (
                     <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
-                      <input type="text" required placeholder="Número de WhatsApp (9 dígitos)" value={cliente.telefono} onChange={e => setCliente({...cliente, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})}
+                      <input type="text" required placeholder="Número de WhatsApp (Empieza con 9)" 
+                        value={cliente.telefono} 
+                        onChange={e => {
+                          let num = e.target.value.replace(/\D/g, '');
+                          if (num.length > 0 && !num.startsWith('9')) return;
+                          setCliente({...cliente, telefono: num.slice(0, 9)});
+                        }}
                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
                     </motion.div>
                   )}
