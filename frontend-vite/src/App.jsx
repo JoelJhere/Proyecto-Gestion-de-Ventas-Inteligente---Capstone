@@ -67,7 +67,7 @@ function App() {
           boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
         },
         success: {
-          duration: 4000,
+          duration: 3000,
           style: {
             background: '#ecfdf5',
             color: '#065f46',
@@ -75,7 +75,7 @@ function App() {
           },
         },
         error: {
-          duration: 5000,
+          duration: 3500,
           style: {
             background: '#fef2f2',
             color: '#991b1b',
