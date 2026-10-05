@@ -106,6 +106,7 @@ model Venta {
   total            Float
   detalles         DetalleVenta[]
   createdAt        DateTime       @default(now())
+  cuentaPorCobrar  CuentaPorCobrar? // Relación opcional (solo si la venta fue fiada)
 }
 
 // 7. Detalle de Ventas (Productos dentro de una venta)
@@ -157,6 +158,41 @@ model DetallePlanCompra {
 enum Role {
   ADMIN
   AYUDANTE
+}
+
+// 8. Clientes (Vital para el módulo de Fiados)
+model Cliente {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  telefono  String?  // CRÍTICO para poder enviarle el recordatorio por WhatsApp
+  fiados    CuentaPorCobrar[] // Relación: Un cliente puede tener varias cuentas fiadas
+  createdAt DateTime @default(now())
+}
+
+// 9. Cuentas por Cobrar (El módulo de Fiados)
+model CuentaPorCobrar {
+  id          Int      @id @default(autoincrement())
+  
+  clienteId   Int
+  cliente     Cliente  @relation(fields: [clienteId], references: [id])
+  
+  ventaId     Int      @unique
+  venta       Venta    @relation(fields: [ventaId], references: [id])
+  
+  monto       Float    // Cuánto debe de esta venta específica
+  estado      EstadoFiado @default(PENDIENTE)
+  
+  fechaLimite DateTime? // Ej: Si le fías a 3 días, aquí se guarda esa fecha para que el CronJob le avise
+  fechaPago   DateTime? // Se llenará cuando venga a pagar
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Agregar este nuevo Enum al final del archivo junto a los otros
+enum EstadoFiado {
+  PENDIENTE
+  PAGADO
 }
 
 enum TipoMovimiento {

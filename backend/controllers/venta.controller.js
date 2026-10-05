@@ -4,18 +4,26 @@ import axios from 'axios';
 const prisma = new PrismaClient();
 
 export const crearVenta = async (req, res) => {
-  // AÑADIDO: cliente y metodoEnvio para Nubefact
-  const { carrito, tipoComprobante, subtotal, igv, total, cliente, metodoEnvio } = req.body;
+  // AÑADIDO: Recibimos la variable 'esFiado' desde el frontend
+  const { carrito, tipoComprobante, subtotal, igv, total, cliente, metodoEnvio, esFiado } = req.body;
   const vendedorId = req.user.id; 
 
   if (!carrito || carrito.length === 0) {
     return res.status(400).json({ message: 'El carrito está vacío' });
   }
 
+  // Validación de seguridad para Fiados
+  if (esFiado && (!cliente.nombre || !cliente.telefono)) {
+    return res.status(400).json({ message: 'Para fiar es obligatorio ingresar el Nombre y el WhatsApp del vecino.' });
+  }
+
   try {
+    // Si es fiado, forzamos internamente a que sea un ticket simple
     let tipoDocDB = 'SIN_COMPROBANTE';
-    if (tipoComprobante === 'BOLETA') tipoDocDB = 'BOLETA';
-    if (tipoComprobante === 'FACTURA') tipoDocDB = 'FACTURA';
+    if (!esFiado) {
+      if (tipoComprobante === 'BOLETA') tipoDocDB = 'BOLETA';
+      if (tipoComprobante === 'FACTURA') tipoDocDB = 'FACTURA';
+    }
 
     // 1. VALIDACIÓN PREVIA DE STOCK
     for (const item of carrito) {
@@ -27,20 +35,18 @@ export const crearVenta = async (req, res) => {
 
     let linkPdf = null;
     let linkXml = null;
-    let correlativoFinal = `${tipoDocDB.charAt(0)}-${Date.now()}`; // Por defecto para TICKET SIMPLE
+    let correlativoFinal = esFiado ? `FIADO-${Date.now()}` : `${tipoDocDB.charAt(0)}-${Date.now()}`;
 
-    // 2. INTEGRACIÓN CON NUBEFACT (SOLO BOLETAS Y FACTURAS)
-    if (tipoComprobante !== 'TICKET') {
+    // 2. INTEGRACIÓN CON NUBEFACT (SOLO SI NO ES FIADO Y NO ES TICKET)
+    if (tipoComprobante !== 'TICKET' && !esFiado) {
       
-      // A) Obtener configuración y credenciales del negocio activo desde la BD
       const configNegocio = await prisma.businessConfig.findFirst();
       
       if (!configNegocio || !configNegocio.nubefactRuta || !configNegocio.nubefactToken) {
         return res.status(400).json({ message: 'El negocio no tiene configuradas las credenciales de facturación (Ruta y Token API).' });
       }
 
-      // Obtener el último correlativo para seguir la secuencia
-     const ultimaVenta = await prisma.venta.findFirst({
+      const ultimaVenta = await prisma.venta.findFirst({
         where: { tipoComprobante: tipoDocDB },
         orderBy: { id: 'desc' }
       });
@@ -48,10 +54,7 @@ export const crearVenta = async (req, res) => {
       let numeroCorrelativo = 1; 
       
       if (ultimaVenta && ultimaVenta.numeroComprobante && ultimaVenta.numeroComprobante.includes('-')) {
-        // Extraemos el número después del guion
         const numeroExtraido = parseInt(ultimaVenta.numeroComprobante.split('-')[1]);
-        
-        // VALIDACIÓN CLAVE: Solo le sumamos 1 si es un número normal de boleta (máximo 8 dígitos)
         if (!isNaN(numeroExtraido) && String(numeroExtraido).length <= 8) {
           numeroCorrelativo = numeroExtraido + 1;
         }
@@ -60,14 +63,12 @@ export const crearVenta = async (req, res) => {
       const serieDoc = tipoComprobante === 'FACTURA' ? 'F001' : 'B001';
       correlativoFinal = `${serieDoc}-${String(numeroCorrelativo).padStart(6, '0')}`;
 
-      // Configuración del tipo de documento del cliente
       let tipoDocIdentidad = "-"; 
-      if (tipoComprobante === 'FACTURA') tipoDocIdentidad = "6"; // 6 = RUC
-      else if (cliente.documento && String(cliente.documento).length === 8) tipoDocIdentidad = "1"; // 1 = DNI
+      if (tipoComprobante === 'FACTURA') tipoDocIdentidad = "6"; 
+      else if (cliente.documento && String(cliente.documento).length === 8) tipoDocIdentidad = "1"; 
 
       const factorIgv = 1 + (configNegocio.impuestoPorcentaje / 100); 
 
-      // Construir los items para Nubefact
       const itemsNubefact = carrito.map(item => {
         const precioUnitarioConIgv = parseFloat(item.precioVenta);
         const valorUnitarioSinIgv = precioUnitarioConIgv / factorIgv;
@@ -88,7 +89,6 @@ export const crearVenta = async (req, res) => {
         };
       });
 
-      // JSON final que exige Nubefact
       const nubefactJSON = {
         "operacion": "generar_comprobante",
         "tipo_de_comprobante": tipoComprobante === 'FACTURA' ? "1" : "2",
@@ -98,7 +98,7 @@ export const crearVenta = async (req, res) => {
         "cliente_tipo_de_documento": tipoDocIdentidad,
         "cliente_numero_de_documento": cliente.documento || "00000000",
         "cliente_denominacion": cliente.nombre || "CLIENTE VARIOS",
-        "cliente_email": (metodoEnvio === 'CORREO' && cliente.correo) ? cliente.correo : "",
+        "cliente_email": "", // El correo se eliminó por regla de negocio
         "fecha_de_emision": new Date().toISOString().split('T')[0],
         "moneda": "1", 
         "porcentaje_de_igv": configNegocio.impuestoPorcentaje,
@@ -106,12 +106,11 @@ export const crearVenta = async (req, res) => {
         "total_igv": parseFloat(igv),
         "total": parseFloat(total),
         "enviar_automaticamente_a_la_sunat": "true",
-        "enviar_automaticamente_al_cliente": (metodoEnvio === 'CORREO' && cliente.correo) ? "true" : "false",
+        "enviar_automaticamente_al_cliente": "false",
         "items": itemsNubefact
       };
 
       try {
-        // B) Petición con Credenciales Dinámicas
         const responseNube = await axios.post(
           configNegocio.nubefactRuta, 
           nubefactJSON, 
@@ -130,17 +129,55 @@ export const crearVenta = async (req, res) => {
     // 3. GUARDAR EN NUESTRA BASE DE DATOS (Transacción)
     const nuevaVenta = await prisma.$transaction(async (tx) => {
       
+      // A) Si es fiado, buscamos o creamos al vecino en la tabla Cliente
+      let clienteIdDb = null;
+      if (esFiado) {
+        // Buscamos si el vecino ya existe por su nombre y teléfono
+        let clienteDB = await tx.cliente.findFirst({
+          where: { nombre: cliente.nombre, telefono: cliente.telefono }
+        });
+        
+        // Si no existe, lo registramos por primera vez
+        if (!clienteDB) {
+          clienteDB = await tx.cliente.create({
+            data: { 
+              nombre: cliente.nombre, 
+              telefono: cliente.telefono 
+            }
+          });
+        }
+        clienteIdDb = clienteDB.id;
+      }
+
+      // B) Creamos la Venta (Cabecera)
       const venta = await tx.venta.create({
         data: {
           vendedorId: parseInt(vendedorId),
           tipoComprobante: tipoDocDB,
-          numeroComprobante: correlativoFinal, // Usamos el correlativo real de Nubefact
+          numeroComprobante: correlativoFinal,
           subtotal: parseFloat(subtotal),
           igv: parseFloat(igv),
           total: parseFloat(total),
         }
       });
 
+      // C) Si es fiado, vinculamos la deuda a la venta y al cliente
+      if (esFiado) {
+        const fechaLimitePago = new Date();
+        fechaLimitePago.setDate(fechaLimitePago.getDate() + 3); // Le damos 3 días para pagar
+
+        await tx.cuentaPorCobrar.create({
+          data: {
+            clienteId: clienteIdDb,
+            ventaId: venta.id,
+            monto: parseFloat(total),
+            estado: 'PENDIENTE',
+            fechaLimite: fechaLimitePago
+          }
+        });
+      }
+
+      // D) Guardamos los productos, descontamos stock y registramos el movimiento
       for (const item of carrito) {
         await tx.detalleVenta.create({
           data: {
@@ -162,7 +199,7 @@ export const crearVenta = async (req, res) => {
             productoId: item.id,
             tipo: 'VENTA',
             cantidad: item.cantidad,
-            motivo: `Venta POS ${correlativoFinal}`
+            motivo: esFiado ? `Fiado POS ${correlativoFinal}` : `Venta POS ${correlativoFinal}`
           }
         });
       }
@@ -171,13 +208,13 @@ export const crearVenta = async (req, res) => {
     });
 
     res.status(201).json({ 
-      message: 'Venta procesada con éxito', 
+      message: esFiado ? 'Fiado registrado correctamente' : 'Venta procesada con éxito', 
       venta: nuevaVenta,
-      enlacePdf: linkPdf // Enviamos el link de SUNAT al Frontend
+      enlacePdf: linkPdf 
     });
 
   } catch (error) {
-    console.error('Error procesando venta:', error);
-    res.status(400).json({ message: error.message || 'Error interno al procesar la venta' });
+    console.error('Error procesando venta/fiado:', error);
+    res.status(400).json({ message: error.message || 'Error interno al procesar' });
   }
 };

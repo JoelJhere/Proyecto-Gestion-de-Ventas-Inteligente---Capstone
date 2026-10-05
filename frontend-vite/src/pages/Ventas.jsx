@@ -184,8 +184,14 @@ export default function Ventas() {
   };
 
   // --- PROCESAMIENTO DE VENTA ---
-  const handleProcesarVenta = async () => {
+  const handleProcesarVenta = async (esFiado = false) => {
     if (carrito.length === 0) return toast.error('El carrito está vacío.');
+
+    // Validación exclusiva para Fiados
+    if (esFiado) {
+      if (!cliente.nombre.trim()) return toast.error('Ingrese el nombre del vecino para fiarle.');
+      if (!cliente.telefono || cliente.telefono.length !== 9) return toast.error('Ingrese un número de WhatsApp válido (9 dígitos) para fiarle.');
+    }
 
     // Validaciones exclusivas para SUNAT (Boletas y Facturas)
     if (tipoComprobante === 'FACTURA') {
@@ -212,7 +218,8 @@ export default function Ventas() {
         igv: montoIgv,
         total: totalPagado,
         cliente,
-        metodoEnvio
+        metodoEnvio,
+        esFiado
       };
 
       const res = await axios.post('/ventas', payload, {
@@ -377,21 +384,25 @@ export default function Ventas() {
             <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Tipo de Venta</label>
             <div className="flex bg-slate-200 p-1 rounded-lg">
               <button onClick={() => setTipoComprobante('TICKET')} 
-                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Simple
               </button>
               <button onClick={() => setTipoComprobante('BOLETA')} 
-                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${tipoComprobante === 'BOLETA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'BOLETA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Boleta
               </button>
               <button onClick={() => setTipoComprobante('FACTURA')} 
-                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FACTURA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FACTURA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Factura
+              </button>
+              <button onClick={() => setTipoComprobante('FIADO')} 
+                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FIADO' ? 'bg-[#d4af37] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                Fiar
               </button>
             </div>
           </div>
 
-          {tipoComprobante !== 'TICKET' && (
+          {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
             <div className="space-y-4 animate-fade-in">
               <div>
                 <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
@@ -486,13 +497,20 @@ export default function Ventas() {
             <span className="text-3xl font-black text-neutral-950 tracking-tighter">S/ {totalPagado.toFixed(2)}</span>
           </div>
 
+          {/* BOTÓN DINÁMICO (VENTA O FIADO) */}
           <button 
-            onClick={handleProcesarVenta}
+            onClick={() => tipoComprobante === 'FIADO' ? handleProcesarVenta(true) : handleProcesarVenta(false)}
             disabled={carrito.length === 0 || isProcessing} 
-            className="w-full bg-verde-pastel hover:bg-emerald-400 text-neutral-950 font-extrabold py-4 px-6 rounded-xl transition-all shadow-[0_4px_15px_rgba(0,0,0,0.1)] flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wide text-sm"
+            className={`w-full font-extrabold py-4 px-6 rounded-xl transition-all shadow-[0_4px_15px_rgba(0,0,0,0.1)] flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wide text-sm ${
+              tipoComprobante === 'FIADO' 
+                ? 'bg-gradient-to-r from-amber-500 to-[#d4af37] hover:from-amber-400 hover:to-yellow-500 text-white' // Botón Dorado
+                : 'bg-verde-pastel hover:bg-emerald-400 text-neutral-950' // Botón Verde
+            }`}
           >
             {isProcessing ? (
               <span className="animate-pulse">Procesando...</span>
+            ) : tipoComprobante === 'FIADO' ? (
+              <><FaUser size={16} /> Fiar a este Vecino</>
             ) : (
               <><FaShoppingCart size={16} /> Procesar Venta</>
             )}
