@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList } from 'react-icons/fa';
+import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
 
 export default function Layout() {
@@ -19,6 +19,7 @@ export default function Layout() {
 
   const menuItems = [
     { path: '/ventas', icon: FaShoppingCart, label: 'Nueva Venta' },
+    { path: '/fiados', icon: FaFileInvoiceDollar, label: 'Fiados' },
     { path: '/productos', icon: FaBoxOpen, label: 'Productos' },
     { path: '/proveedores', icon: FaTruck, label: 'Proveedores' },
     { path: '/compras', icon: FaClipboardList, label: 'Plan de Compras' },
