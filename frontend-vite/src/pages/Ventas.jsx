@@ -387,6 +387,11 @@ export default function Ventas() {
                 className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Simple
               </button>
+              {/* BOTÓN FIAR MOVIDO AQUÍ */}
+              <button onClick={() => setTipoComprobante('FIADO')} 
+                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FIADO' ? 'bg-[#d4af37] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                Fiar
+              </button>
               <button onClick={() => setTipoComprobante('BOLETA')} 
                 className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'BOLETA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Boleta
@@ -395,79 +400,97 @@ export default function Ventas() {
                 className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FACTURA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Factura
               </button>
-              <button onClick={() => setTipoComprobante('FIADO')} 
-                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FIADO' ? 'bg-[#d4af37] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                Fiar
-              </button>
             </div>
           </div>
 
           {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
             <div className="space-y-4 animate-fade-in">
-              <div>
-                <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                  <FaIdCard/> {tipoComprobante === 'FACTURA' ? 'RUC *' : 'DNI *'}
-                </label>
-                <div className="relative">
-                  <input type="text" required placeholder={`Ingresa el ${tipoComprobante === 'FACTURA' ? 'RUC (11 dígitos)' : 'DNI (8 dígitos)'}`}
-                    value={cliente.documento} 
-                    onChange={e => {
-                      const limit = tipoComprobante === 'FACTURA' ? 11 : 8;
-                      const num = e.target.value.replace(/\D/g, '').slice(0, limit);
-                      setCliente({...cliente, documento: num});
-                      
-                      // Disparador automático al llegar al límite exacto
-                      if (num.length === limit) {
-                        buscarDocumento(num, tipoComprobante);
-                      }
-                    }}
-                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
-                </div>
-              </div>
               
+              {/* 1. DNI/RUC (SE OCULTA SI ES FIADO) */}
+              {tipoComprobante !== 'FIADO' && (
+                <div>
+                  <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
+                    <FaIdCard/> {tipoComprobante === 'FACTURA' ? 'RUC *' : 'DNI *'}
+                  </label>
+                  <div className="relative">
+                    <input type="text" required placeholder={`Ingresa el ${tipoComprobante === 'FACTURA' ? 'RUC (11 dígitos)' : 'DNI (8 dígitos)'}`}
+                      value={cliente.documento} 
+                      onChange={e => {
+                        const limit = tipoComprobante === 'FACTURA' ? 11 : 8;
+                        const num = e.target.value.replace(/\D/g, '').slice(0, limit);
+                        setCliente({...cliente, documento: num});
+                        
+                        if (num.length === limit) {
+                          buscarDocumento(num, tipoComprobante);
+                        }
+                      }}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
+                  </div>
+                </div>
+              )}
+              
+              {/* 2. CAMPO NOMBRE (CAMBIA DE TEXTO SI ES FIADO) */}
               <div>
                 <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                  <FaUser/> {tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre Completo *'}
+                  <FaUser/> {tipoComprobante === 'FIADO' ? 'Nombre de Referencia *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre Completo *')}
                 </label>
-                <input type="text" required placeholder={isLoadingDoc ? 'Buscando en servidor...' : `Ingresa ${tipoComprobante === 'FACTURA' ? 'la razón social' : 'el nombre'}`}
+                <input type="text" required 
+                  placeholder={isLoadingDoc ? 'Buscando en servidor...' : (tipoComprobante === 'FIADO' ? 'Ej: Vecino de al frente, Juan...' : `Ingresa ${tipoComprobante === 'FACTURA' ? 'la razón social' : 'el nombre'}`)}
                   value={cliente.nombre} 
                   onChange={e => setCliente({...cliente, nombre: e.target.value})}
                   disabled={isLoadingDoc}
                   className={`w-full p-2.5 border rounded-lg outline-none text-sm transition-colors ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-400 animate-pulse' : 'bg-white border-slate-300 focus:border-dorado focus:ring-1 focus:ring-dorado text-slate-900'}`} />
               </div>
 
-              <div className="pt-3 border-t border-slate-200 mt-4">
-                <label className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide block">
-                  Medio de Envío (Opcional)
-                </label>
-                <div className="flex bg-slate-200 p-1 rounded-lg mb-3">
-                  <button onClick={() => setMetodoEnvio('NINGUNO')} 
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    Físico
-                  </button>
-                  <button onClick={() => setMetodoEnvio('CORREO')} 
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    Correo
-                  </button>
-                  <button onClick={() => setMetodoEnvio('WHATSAPP')} 
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    WhatsApp
-                  </button>
-                </div>
+              {/* 3. CAMPO WHATSAPP EXCLUSIVO PARA FIADOS */}
+              {tipoComprobante === 'FIADO' && (
+                <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
+                  <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
+                    <FaWhatsapp className="text-emerald-500 text-base" /> WhatsApp del Vecino *
+                  </label>
+                  <input type="text" required placeholder="Ingresa número de 9 dígitos" 
+                    value={cliente.telefono} 
+                    onChange={e => setCliente({...cliente, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})}
+                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
+                </motion.div>
+              )}
 
-                {metodoEnvio === 'CORREO' && (
-                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
-                    <input type="email" required placeholder="ejemplo@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
-                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm" />
-                  </motion.div>
-                )}
-                {metodoEnvio === 'WHATSAPP' && (
-                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
-                    <input type="text" required placeholder="Número de WhatsApp (9 dígitos)" value={cliente.telefono} onChange={e => setCliente({...cliente, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})}
-                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
-                  </motion.div>
-                )}
-              </div>
+              {/* 4. MEDIO DE ENVÍO OPCIONAL (SE OCULTA TOTALMENTE SI ES FIADO) */}
+              {tipoComprobante !== 'FIADO' && (
+                <div className="pt-3 border-t border-slate-200 mt-4">
+                  <label className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide block">
+                    Medio de Envío (Opcional)
+                  </label>
+                  <div className="flex bg-slate-200 p-1 rounded-lg mb-3">
+                    <button onClick={() => setMetodoEnvio('NINGUNO')} 
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                      Físico
+                    </button>
+                    <button onClick={() => setMetodoEnvio('CORREO')} 
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                      Correo
+                    </button>
+                    <button onClick={() => setMetodoEnvio('WHATSAPP')} 
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                      WhatsApp
+                    </button>
+                  </div>
+
+                  {metodoEnvio === 'CORREO' && (
+                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
+                      <input type="email" required placeholder="ejemplo@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
+                       className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm" />
+                    </motion.div>
+                  )}
+                  {metodoEnvio === 'WHATSAPP' && (
+                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
+                      <input type="text" required placeholder="Número de WhatsApp (9 dígitos)" value={cliente.telefono} onChange={e => setCliente({...cliente, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})}
+                       className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
+                    </motion.div>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
 
