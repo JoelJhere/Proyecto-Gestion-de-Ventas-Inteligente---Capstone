@@ -11,6 +11,8 @@ import configRoutes from './routes/config.routes.js';
 import ventaRoutes from './routes/venta.routes.js';
 import apiRoutes from './routes/api.routes.js';
 import fiadoRoutes from './routes/fiado.routes.js';
+import dns from 'dns';
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 const prisma = new PrismaClient();
