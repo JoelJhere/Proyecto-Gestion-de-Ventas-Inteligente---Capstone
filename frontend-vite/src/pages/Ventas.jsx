@@ -21,7 +21,7 @@ export default function Ventas() {
   
   // Estados del Cliente y Envío
   const [cliente, setCliente] = useState(() => JSON.parse(localStorage.getItem('pos_cliente')) || { documento: '', nombre: '', correo: '', telefono: '' });
-  const [metodoEnvio, setMetodoEnvio] = useState('NINGUNO'); // NINGUNO, CORREO, WHATSAPP
+  const [metodoEnvio, setMetodoEnvio] = useState('NINGUNO');
 
   // Estados de UI
   const [isScannerOpen, setIsScannerOpen] = useState(false);

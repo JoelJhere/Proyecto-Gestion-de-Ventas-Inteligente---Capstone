@@ -2,13 +2,17 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { FaSearch, FaUser, FaWhatsapp, FaMoneyBillWave, FaCalendarAlt, FaCheckCircle, FaShoppingBag, FaFileInvoiceDollar } from 'react-icons/fa';
+import { FaSearch, FaUser, FaWhatsapp, FaMoneyBillWave, FaCalendarAlt, FaCheckCircle, FaShoppingBag, FaFileInvoiceDollar, FaTimes, FaBell } from 'react-icons/fa';
 
 export default function Fiados() {
   const [fiados, setFiados] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [procesandoId, setProcesandoId] = useState(null);
+
+  // Estados para el Modal de Cambio de Fecha
+  const [modalPlazo, setModalPlazo] = useState(null); // Guardará el fiado que se está editando
+  const [nuevaFecha, setNuevaFecha] = useState('');
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -33,7 +37,6 @@ export default function Fiados() {
     try {
       await axios.put(`/fiados/pagar/${id}`);
       toast.success(`Deuda de ${nombreVecino} liquidada con éxito.`, { icon: '💰' });
-      // Quitamos el fiado de la lista visualmente sin tener que recargar toda la página
       setFiados(prev => prev.filter(f => f.id !== id));
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error al procesar el pago.');
@@ -42,16 +45,30 @@ export default function Fiados() {
     }
   };
 
+  const handleActualizarFecha = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`/fiados/plazo/${modalPlazo.id}`, { nuevaFecha });
+      toast.success('Día de aviso actualizado correctamente', { icon: '📅' });
+      
+      // Actualizamos visualmente la lista sin recargar
+      setFiados(prev => prev.map(f => f.id === modalPlazo.id ? { ...f, fechaLimite: nuevaFecha } : f));
+      setModalPlazo(null);
+    } catch (error) {
+      console.error(error);
+      toast.error(error.response?.data?.message || 'Error al actualizar la fecha.');
+    }
+  };
+
   const fiadosFiltrados = fiados.filter(f => 
     f.cliente.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
   return (
-    <div className="flex flex-col gap-6 text-slate-900 pb-20 lg:pb-0 font-sans min-h-[calc(100vh-6rem)]">
+    <div className="flex flex-col gap-6 text-slate-900 pb-20 lg:pb-0 font-sans min-h-[calc(100vh-6rem)] relative">
       
       {/* HEADER LIMPIO (ESTILO PRODUCTOS) */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-5 border border-slate-200 rounded-2xl shadow-sm relative overflow-hidden">
-        {/* Decoración sutil en la esquina */}
         <div className="absolute -top-10 -right-10 w-32 h-32 bg-verde-pastel/10 rounded-full blur-2xl pointer-events-none"></div>
         
         <div>
@@ -99,7 +116,6 @@ export default function Fiados() {
                     exit={{ opacity: 0, scale: 0.95 }}
                     className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-verde-pastel/50 transition-all flex flex-col overflow-hidden relative"
                   >
-                    {/* Borde superior verde pastel */}
                     <div className="h-1.5 w-full bg-verde-pastel"></div>
                     
                     <div className="p-5 flex-1">
@@ -108,9 +124,22 @@ export default function Fiados() {
                           <h3 className="font-extrabold text-slate-800 flex items-center gap-2 uppercase tracking-wide text-sm">
                             <FaUser className="text-slate-400" /> {fiado.cliente.nombre}
                           </h3>
-                          <p className="text-xs text-slate-500 font-mono mt-1 flex items-center gap-1">
+                          <p className="text-[11px] text-slate-400 font-mono mt-1 flex items-center gap-1">
                             <FaCalendarAlt /> Fió el: {new Date(fiado.createdAt).toLocaleDateString('es-PE')}
                           </p>
+                          {/* BOTÓN PARA CAMBIAR FECHA DE AVISO */}
+                          <button 
+                            onClick={() => {
+                              setModalPlazo(fiado);
+                              // Convertimos la fecha de la BD a formato YYYY-MM-DD para el input de calendario
+                              const fechaBD = new Date(fiado.fechaLimite);
+                              setNuevaFecha(fechaBD.toISOString().split('T')[0]);
+                            }}
+                            className="text-[11px] text-amber-600 font-bold mt-1.5 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-md border border-amber-200 flex items-center gap-1 transition-colors group"
+                          >
+                            <FaBell className="text-amber-500" /> Aviso: {new Date(fiado.fechaLimite).toLocaleDateString('es-PE')}
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 text-amber-700">✏️ Editar</span>
+                          </button>
                         </div>
                         <div className="text-right">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Deuda</span>
@@ -118,7 +147,6 @@ export default function Fiados() {
                         </div>
                       </div>
 
-                      {/* Resumen de Productos */}
                       <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 mb-4">
                         <p className="text-[11px] font-bold text-slate-500 mb-2 flex items-center gap-1 uppercase tracking-wider">
                           <FaShoppingBag className="text-slate-400" /> Productos Llevados
@@ -134,7 +162,6 @@ export default function Fiados() {
                       </div>
                     </div>
 
-                    {/* Botones de Acción */}
                     <div className="p-4 bg-slate-50 border-t border-slate-200 flex gap-3">
                       <a 
                         href={`https://wa.me/51${fiado.cliente.telefono}?text=Hola ${fiado.cliente.nombre}, te saludamos de la bodega. Te escribimos para recordarte que tienes un fiado pendiente de S/ ${fiado.monto.toFixed(2)}. ¡Te esperamos pronto!`}
@@ -161,6 +188,54 @@ export default function Fiados() {
           </AnimatePresence>
         )}
       </div>
+
+      {/* MODAL PARA CAMBIAR FECHA DE AVISO */}
+      <AnimatePresence>
+        {modalPlazo && (
+          <div className="fixed inset-0 bg-neutral-950/80 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="bg-amber-500 p-5 flex justify-between items-center text-white">
+                <h3 className="font-extrabold flex items-center gap-2">
+                  <FaBell /> Cambiar día de aviso
+                </h3>
+                <button onClick={() => setModalPlazo(null)} className="text-white/80 hover:text-white transition-colors">
+                  <FaTimes size={18} />
+                </button>
+              </div>
+              
+              <form onSubmit={handleActualizarFecha} className="p-6 bg-slate-50">
+                <p className="text-sm text-slate-600 font-medium mb-4">
+                  El robot IA enviará un mensaje al WhatsApp de <strong className="text-slate-800">{modalPlazo.cliente.nombre}</strong> en la fecha seleccionada.
+                </p>
+                
+                <div className="mb-6">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                    Nueva fecha límite
+                  </label>
+                  <input 
+                    type="date" 
+                    required 
+                    value={nuevaFecha} 
+                    onChange={e => setNuevaFecha(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]} // No permite elegir días pasados
+                    className="w-full p-3 bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none text-slate-800 font-bold"
+                  />
+                </div>
+                
+                <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-md text-sm uppercase tracking-wide">
+                  Guardar Cambios
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

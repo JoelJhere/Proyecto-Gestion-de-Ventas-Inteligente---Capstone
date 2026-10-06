@@ -49,3 +49,26 @@ export const liquidarFiado = async (req, res) => {
     res.status(500).json({ message: 'Error al procesar el pago del fiado' });
   }
 };
+
+// 3. Actualizar la fecha límite del recordatorio
+export const actualizarPlazo = async (req, res) => {
+  const { id } = req.params;
+  const { nuevaFecha } = req.body; // Esperamos un formato YYYY-MM-DD
+
+  try {
+    const fiadoActualizado = await prisma.cuentaPorCobrar.update({
+      where: { id: parseInt(id) },
+      data: {
+        fechaLimite: new Date(nuevaFecha) // Actualizamos la fecha en la BD
+      }
+    });
+
+    res.status(200).json({ 
+      message: 'Fecha de recordatorio actualizada', 
+      fiado: fiadoActualizado 
+    });
+  } catch (error) {
+    console.error('Error al actualizar plazo:', error);
+    res.status(500).json({ message: 'Error al actualizar el plazo del fiado' });
+  }
+};
