@@ -1,23 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
-import nodemailer from 'nodemailer';
 
 const prisma = new PrismaClient();
-
-// Configuración de Nodemailer (El cartero central)
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true, // true para el puerto 465
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  family: 4 // Forzamos IPv4 para evitar problemas de conexión en algunos entornos
-});
 
 export const crearVenta = async (req, res) => {
   // AÑADIDO: Recibimos la variable 'esFiado' desde el frontend
@@ -114,7 +98,7 @@ export const crearVenta = async (req, res) => {
         "cliente_tipo_de_documento": tipoDocIdentidad,
         "cliente_numero_de_documento": cliente.documento || "00000000",
         "cliente_denominacion": cliente.nombre || "CLIENTE VARIOS",
-        "cliente_email": "", // El correo se eliminó por regla de negocio
+        "cliente_email": "", 
         "fecha_de_emision": new Date().toISOString().split('T')[0],
         "moneda": "1", 
         "porcentaje_de_igv": configNegocio.impuestoPorcentaje,
@@ -145,27 +129,20 @@ export const crearVenta = async (req, res) => {
     // 3. GUARDAR EN NUESTRA BASE DE DATOS (Transacción)
     const nuevaVenta = await prisma.$transaction(async (tx) => {
       
-      // A) Si es fiado, buscamos o creamos al vecino en la tabla Cliente
       let clienteIdDb = null;
       if (esFiado) {
-        // Buscamos si el vecino ya existe por su nombre y teléfono
         let clienteDB = await tx.cliente.findFirst({
           where: { nombre: cliente.nombre, telefono: cliente.telefono }
         });
         
-        // Si no existe, lo registramos por primera vez
         if (!clienteDB) {
           clienteDB = await tx.cliente.create({
-            data: { 
-              nombre: cliente.nombre, 
-              telefono: cliente.telefono 
-            }
+            data: { nombre: cliente.nombre, telefono: cliente.telefono }
           });
         }
         clienteIdDb = clienteDB.id;
       }
 
-      // B) Creamos la Venta (Cabecera)
       const venta = await tx.venta.create({
         data: {
           vendedorId: parseInt(vendedorId),
@@ -177,10 +154,9 @@ export const crearVenta = async (req, res) => {
         }
       });
 
-      // C) Si es fiado, vinculamos la deuda a la venta y al cliente
       if (esFiado) {
         const fechaLimitePago = new Date();
-        fechaLimitePago.setDate(fechaLimitePago.getDate() + 3); // Le damos 3 días para pagar
+        fechaLimitePago.setDate(fechaLimitePago.getDate() + 3);
 
         await tx.cuentaPorCobrar.create({
           data: {
@@ -193,7 +169,6 @@ export const crearVenta = async (req, res) => {
         });
       }
 
-      // D) Guardamos los productos, descontamos stock y registramos el movimiento
       for (const item of carrito) {
         await tx.detalleVenta.create({
           data: {
@@ -223,50 +198,54 @@ export const crearVenta = async (req, res) => {
       return venta;
     });
 
-    // --- 4. ENVÍO DE COMPROBANTE POR CORREO (NODEMAILER) ---
+    // --- 4. ENVÍO DE COMPROBANTE POR CORREO (API DE BREVO) ---
     if (!esFiado && metodoEnvio === 'CORREO' && cliente.correo && linkPdf) {
       try {
         const configNegocio = await prisma.businessConfig.findFirst();
-        const nombreNegocio = configNegocio?.nombre || 'Nuestra Tienda';
-        const correoNegocio = configNegocio?.email || process.env.EMAIL_USER;
+        const nombreNegocio = configNegocio?.nombre || 'Bodega NOVA';
+        const remitenteOficial = process.env.EMAIL_USER; 
 
-        const mailOptions = {
-          from: `"${nombreNegocio} - Comprobantes" <${process.env.EMAIL_USER}>`,
-          to: cliente.correo,
-          replyTo: correoNegocio, // Si responden, va a la bodega, no al sistema
-          subject: `Tu comprobante electrónico de ${nombreNegocio} ya está listo`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-w: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-              <div style="background-color: #092b1a; padding: 20px; text-align: center; border-bottom: 4px solid #a7f3d0;">
-                <h1 style="color: #ffffff; margin: 0; font-size: 24px;">¡Gracias por tu compra!</h1>
+        const htmlTemplate = `
+          <div style="font-family: Arial, sans-serif; max-w: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+            <div style="background-color: #092b1a; padding: 20px; text-align: center; border-bottom: 4px solid #a7f3d0;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">¡Gracias por tu compra!</h1>
+            </div>
+            <div style="padding: 30px; background-color: #ffffff; color: #334155;">
+              <p style="font-size: 16px;">Hola <strong>${cliente.nombre || 'Cliente'}</strong>,</p>
+              <p style="font-size: 16px;">Adjuntamos el enlace para que puedas visualizar y descargar tu comprobante electrónico de manera segura.</p>
+              
+              <div style="background-color: #f8fafc; border-left: 4px solid #d4af37; padding: 15px; margin: 25px 0;">
+                <p style="margin: 0; font-size: 14px; color: #64748b;">Total pagado:</p>
+                <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">S/ ${parseFloat(total).toFixed(2)}</p>
               </div>
-              <div style="padding: 30px; background-color: #ffffff; color: #334155;">
-                <p style="font-size: 16px;">Hola <strong>${cliente.nombre}</strong>,</p>
-                <p style="font-size: 16px;">Adjuntamos el enlace para que puedas visualizar y descargar tu comprobante electrónico de manera segura.</p>
-                
-                <div style="background-color: #f8fafc; border-left: 4px solid #d4af37; padding: 15px; margin: 25px 0;">
-                  <p style="margin: 0; font-size: 14px; color: #64748b;">Total pagado:</p>
-                  <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">S/ ${parseFloat(total).toFixed(2)}</p>
-                </div>
 
-                <div style="text-align: center; margin-top: 30px;">
-                  <a href="${linkPdf}" target="_blank" style="background-color: #a7f3d0; color: #064e3b; padding: 14px 28px; text-decoration: none; font-weight: bold; border-radius: 8px; display: inline-block; font-size: 16px;">
-                    📄 Ver Comprobante PDF
-                  </a>
-                </div>
-              </div>
-              <div style="background-color: #f1f5f9; padding: 15px; text-align: center; color: #94a3b8; font-size: 12px;">
-                <p style="margin: 0;">Este es un mensaje automático del sistema de facturación de ${nombreNegocio}. Por favor, no respondas a este correo.</p>
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="${linkPdf}" target="_blank" style="background-color: #a7f3d0; color: #064e3b; padding: 14px 28px; text-decoration: none; font-weight: bold; border-radius: 8px; display: inline-block; font-size: 16px;">
+                  📄 Ver Comprobante PDF
+                </a>
               </div>
             </div>
-          `
+          </div>
+        `;
+
+        const payloadBrevo = {
+          sender: { name: nombreNegocio, email: remitenteOficial },
+          to: [{ email: cliente.correo, name: cliente.nombre || 'Cliente' }],
+          subject: `Tu comprobante electrónico de ${nombreNegocio} ya está listo`,
+          htmlContent: htmlTemplate
         };
 
-        // Se envía en segundo plano para no hacer esperar al cajero
-        transporter.sendMail(mailOptions).catch(err => console.error("Error enviando correo:", err));
+        // Enviar la petición HTTP a Brevo (no bloqueada por Render)
+        axios.post('https://api.brevo.com/v3/smtp/email', payloadBrevo, {
+          headers: {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json'
+          }
+        }).catch(err => console.error("Error desde Brevo:", err.response?.data || err.message));
 
       } catch (emailError) {
-        console.error("Error al preparar el envío del correo:", emailError);
+        console.error("Error al preparar el envío del correo con Brevo:", emailError);
       }
     }
 
