@@ -1,7 +1,17 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
+import nodemailer from 'nodemailer';
 
 const prisma = new PrismaClient();
+
+// Configuración de Nodemailer (El cartero central)
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 export const crearVenta = async (req, res) => {
   // AÑADIDO: Recibimos la variable 'esFiado' desde el frontend
@@ -206,6 +216,53 @@ export const crearVenta = async (req, res) => {
 
       return venta;
     });
+
+    // --- 4. ENVÍO DE COMPROBANTE POR CORREO (NODEMAILER) ---
+    if (!esFiado && metodoEnvio === 'CORREO' && cliente.correo && linkPdf) {
+      try {
+        const configNegocio = await prisma.businessConfig.findFirst();
+        const nombreNegocio = configNegocio?.nombre || 'Nuestra Tienda';
+        const correoNegocio = configNegocio?.email || process.env.EMAIL_USER;
+
+        const mailOptions = {
+          from: `"${nombreNegocio} - Comprobantes" <${process.env.EMAIL_USER}>`,
+          to: cliente.correo,
+          replyTo: correoNegocio, // Si responden, va a la bodega, no al sistema
+          subject: `Tu comprobante electrónico de ${nombreNegocio} ya está listo`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-w: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+              <div style="background-color: #092b1a; padding: 20px; text-align: center; border-bottom: 4px solid #a7f3d0;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px;">¡Gracias por tu compra!</h1>
+              </div>
+              <div style="padding: 30px; background-color: #ffffff; color: #334155;">
+                <p style="font-size: 16px;">Hola <strong>${cliente.nombre}</strong>,</p>
+                <p style="font-size: 16px;">Adjuntamos el enlace para que puedas visualizar y descargar tu comprobante electrónico de manera segura.</p>
+                
+                <div style="background-color: #f8fafc; border-left: 4px solid #d4af37; padding: 15px; margin: 25px 0;">
+                  <p style="margin: 0; font-size: 14px; color: #64748b;">Total pagado:</p>
+                  <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">S/ ${parseFloat(total).toFixed(2)}</p>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                  <a href="${linkPdf}" target="_blank" style="background-color: #a7f3d0; color: #064e3b; padding: 14px 28px; text-decoration: none; font-weight: bold; border-radius: 8px; display: inline-block; font-size: 16px;">
+                    📄 Ver Comprobante PDF
+                  </a>
+                </div>
+              </div>
+              <div style="background-color: #f1f5f9; padding: 15px; text-align: center; color: #94a3b8; font-size: 12px;">
+                <p style="margin: 0;">Este es un mensaje automático del sistema de facturación de ${nombreNegocio}. Por favor, no respondas a este correo.</p>
+              </div>
+            </div>
+          `
+        };
+
+        // Se envía en segundo plano para no hacer esperar al cajero
+        transporter.sendMail(mailOptions).catch(err => console.error("Error enviando correo:", err));
+
+      } catch (emailError) {
+        console.error("Error al preparar el envío del correo:", emailError);
+      }
+    }
 
     res.status(201).json({ 
       message: esFiado ? 'Fiado registrado correctamente' : 'Venta procesada con éxito', 
