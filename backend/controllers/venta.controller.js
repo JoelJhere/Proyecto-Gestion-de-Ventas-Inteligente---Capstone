@@ -6,10 +6,15 @@ const prisma = new PrismaClient();
 
 // Configuración de Nodemailer (El cartero central)
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // true para el puerto 465
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: false // Evita bloqueos estrictos de certificados en la nube
   }
 });
 
