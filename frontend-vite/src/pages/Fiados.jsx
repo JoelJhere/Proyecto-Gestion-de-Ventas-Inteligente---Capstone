@@ -48,15 +48,17 @@ export default function Fiados() {
   const handleActualizarFecha = async (e) => {
     e.preventDefault();
     try {
-      await axios.put(`/fiados/plazo/${modalPlazo.id}`, { nuevaFecha });
+      const fechaLocalString = `${nuevaFecha}T12:00:00.000Z`;
+
+      await axios.put(`/fiados/plazo/${modalPlazo.id}`, { nuevaFecha: fechaLocalString });
       toast.success('Día de aviso actualizado correctamente', { icon: '📅' });
       
       // Actualizamos visualmente la lista sin recargar
-      setFiados(prev => prev.map(f => f.id === modalPlazo.id ? { ...f, fechaLimite: nuevaFecha } : f));
+      setFiados(prev => prev.map(f => f.id === modalPlazo.id ? { ...f, fechaLimite: fechaLocalString } : f));
       setModalPlazo(null);
     } catch (error) {
       console.error(error);
-      toast.error(error.response?.data?.message || 'Error al actualizar la fecha.');
+      toast.error('Error al actualizar la fecha.');
     }
   };
 
@@ -131,9 +133,9 @@ export default function Fiados() {
                           <button 
                             onClick={() => {
                               setModalPlazo(fiado);
-                              // Convertimos la fecha de la BD a formato YYYY-MM-DD para el input de calendario
                               const fechaBD = new Date(fiado.fechaLimite);
-                              setNuevaFecha(fechaBD.toISOString().split('T')[0]);
+                              const localDateString = new Date(fechaBD.getTime() - (fechaBD.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                              setNuevaFecha(localDateString);
                             }}
                             className="text-[11px] text-amber-600 font-bold mt-1.5 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-md border border-amber-200 flex items-center gap-1 transition-colors group"
                           >
