@@ -14,8 +14,9 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS
   },
   tls: {
-    rejectUnauthorized: false // Evita bloqueos estrictos de certificados en la nube
-  }
+    rejectUnauthorized: false
+  },
+  family: 4 // Forzamos IPv4 para evitar problemas de conexión en algunos entornos
 });
 
 export const crearVenta = async (req, res) => {
