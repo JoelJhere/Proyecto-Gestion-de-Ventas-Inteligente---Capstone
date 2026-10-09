@@ -8,6 +8,9 @@ export const crearVenta = async (req, res) => {
   const { carrito, tipoComprobante, subtotal, igv, total, cliente, metodoEnvio, esFiado } = req.body;
   const vendedorId = req.user.id; 
 
+  const configNegocioFinal = await prisma.businessConfig.findFirst();
+  const nombreParaFrontend = configNegocioFinal?.nombre || 'nuestro local';
+
   if (!carrito || carrito.length === 0) {
     return res.status(400).json({ message: 'El carrito está vacío' });
   }
@@ -252,7 +255,8 @@ export const crearVenta = async (req, res) => {
     res.status(201).json({ 
       message: esFiado ? 'Fiado registrado correctamente' : 'Venta procesada con éxito', 
       venta: nuevaVenta,
-      enlacePdf: linkPdf 
+      enlacePdf: linkPdf,
+      nombreNegocio: nombreParaFrontend
     });
 
   } catch (error) {

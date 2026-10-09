@@ -232,9 +232,11 @@ export default function Ventas() {
         tipo: tipoComprobante,
         total: totalPagado,
         cliente: tipoComprobante === 'TICKET' ? 'Cliente Varios' : (cliente.nombre || 'Cliente Varios'),
+        documentoCliente: cliente.documento,
         metodoEnvio: tipoComprobante === 'TICKET' ? 'NINGUNO' : metodoEnvio,
         contactoEnvio: tipoComprobante === 'TICKET' ? '' : (metodoEnvio === 'CORREO' ? cliente.correo : cliente.telefono),
-        enlacePdf: res.data.enlacePdf
+        enlacePdf: res.data.enlacePdf,
+        nombreNegocio: res.data.nombreNegocio
       });
 
       // Limpiamos la caja
@@ -620,7 +622,25 @@ export default function Ventas() {
                   <>
                     {ventaGenerada.metodoEnvio === 'WHATSAPP' && (
                       <button 
-                        onClick={() => window.open(`https://wa.me/51${ventaGenerada.contactoEnvio}?text=Gracias por tu compra. Aquí tienes tu comprobante electrónico: ${ventaGenerada.enlacePdf}`, '_blank')}
+                        onClick={() => {
+                          // 1. Lógica inteligente para Personas vs Empresas
+                          let saludo = `Hola *${ventaGenerada.cliente}*`;
+                          if (ventaGenerada.tipo === 'FACTURA' && ventaGenerada.documentoCliente) {
+                            if (String(ventaGenerada.documentoCliente).startsWith('20')) {
+                              saludo = `Hola equipo de *${ventaGenerada.cliente}*`;
+                            }
+                          }
+
+                          // 2. Armamos el mensaje final
+                          const textoMensaje = `${saludo} 👋,\nGracias por su compra en *${ventaGenerada.nombreNegocio}*.\n\nAquí tiene el enlace directo para descargar su comprobante electrónico:\n📄 ${ventaGenerada.enlacePdf}\n\n¡Gracias por su preferencia!`;
+
+                          // 3. Limpiamos y aseguramos el código de país
+                          const numeroLimpio = ventaGenerada.contactoEnvio.replace(/[^0-9]/g, '');
+                          const numeroFinal = numeroLimpio.startsWith('51') ? numeroLimpio : `51${numeroLimpio}`;
+
+                          // 4. Abrimos WhatsApp
+                          window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(textoMensaje)}`, '_blank');
+                        }}
                         className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
                       >
                         <FaWhatsapp size={18} /> Enviar {ventaGenerada.tipo} por WhatsApp
