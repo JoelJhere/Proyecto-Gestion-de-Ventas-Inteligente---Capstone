@@ -2,17 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, FaHistory, FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice, FaTimes } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
+import { FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, FaHistory, FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice, FaTimes, FaExternalLinkAlt } from 'react-icons/fa';
+import { useBusiness } from '../context/BusinessContext'; // 1. Importamos tu configuración de negocio
 
 export default function Historial() {
   const [ventas, setVentas] = useState([]);
   const [resumen, setResumen] = useState({ totalIngresos: 0, cantidadOperaciones: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const { businessConfig } = useBusiness(); // Extraemos los datos para el ticket falso
 
-  // Estados de Paginación y Filtros
+  // Paginación y Filtros
   const [busqueda, setBusqueda] = useState('');
-  const [filtroActivo, setFiltroActivo] = useState('MES'); // HOY, SEMANA, MES, ANIO, CUSTOM
+  const [filtroActivo, setFiltroActivo] = useState('MES'); 
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   
@@ -20,11 +22,10 @@ export default function Historial() {
   const [hayMas, setHayMas] = useState(false);
   const limiteCarga = 25;
 
-  // Estados para Modales de Vista Previa
+  // Modales
   const [modalDetalles, setModalDetalles] = useState(null);
-  const [modalPdf, setModalPdf] = useState(null);
+  const [visorComprobante, setVisorComprobante] = useState(null); // 2. Ahora guarda toda la venta para dibujar la réplica
 
-  // Función para calcular las fechas según el botón rápido seleccionado
   const calcularFechasFiltro = useCallback((tipo) => {
     const hoy = new Date();
     const formato = (fecha) => fecha.toISOString().split('T')[0];
@@ -49,7 +50,6 @@ export default function Historial() {
     return { inicio, fin };
   }, []);
 
-  // Efecto principal para cargar datos cuando cambian los filtros o la página
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
     cargarHistorial(true);
@@ -62,7 +62,6 @@ export default function Historial() {
       const token = localStorage.getItem('token');
       const paginaACargar = resetear ? 1 : paginaActual + 1;
 
-      // Si no es un filtro personalizado, calculamos las fechas automáticamente
       let fInicio = fechaInicio;
       let fFin = fechaFin;
       
@@ -111,7 +110,6 @@ export default function Historial() {
   };
 
   const handleExportarExcel = async () => {
-    // Mostramos un toast de carga porque si hay miles de ventas tomará un segundo
     const toastId = toast.loading('Generando reporte Excel...');
     
     try {
@@ -143,7 +141,6 @@ export default function Historial() {
         return;
       }
 
-      // 1. Mapear datos (Corrigiendo el problema de los NULLs en documentos antiguos)
       const dataExcel = ventasExportar.map(venta => ({
         'Fecha': new Date(venta.createdAt).toLocaleDateString('es-PE'),
         'Hora': new Date(venta.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
@@ -157,28 +154,17 @@ export default function Historial() {
         'Total (S/)': parseFloat(venta.total)
       }));
 
-      // 2. Convertir JSON a Hoja de cálculo
       const hoja = XLSX.utils.json_to_sheet(dataExcel);
-
-      // --- 3. MEJORA VISUAL: AUTO-AJUSTE DEL ANCHO DE COLUMNAS ---
       const anchosDeColumna = [
-        { wch: 12 }, // A: Fecha
-        { wch: 10 }, // B: Hora
-        { wch: 20 }, // C: Tipo de Comprobante
-        { wch: 20 }, // D: N° Comprobante
-        { wch: 35 }, // E: Nombre del Cliente (Más ancho para razones sociales largas)
-        { wch: 15 }, // F: Documento
-        { wch: 20 }, // G: Atendido por
-        { wch: 15 }, // H: Subtotal (S/)
-        { wch: 12 }, // I: IGV (S/)
-        { wch: 15 }  // J: Total (S/)
+        { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, 
+        { wch: 35 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, 
+        { wch: 12 }, { wch: 15 }
       ];
-      hoja['!cols'] = anchosDeColumna; // Se inyecta la configuración de ancho a la hoja
+      hoja['!cols'] = anchosDeColumna;
 
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, 'Historial');
 
-      // Descargamos el archivo
       const nombreArchivo = `Historial_Ventas_${filtroActivo}_${new Date().getTime()}.xlsx`;
       XLSX.writeFile(libro, nombreArchivo);
 
@@ -190,7 +176,6 @@ export default function Historial() {
     }
   };
 
-  // Iconos de comprobantes
   const IconoComprobante = ({ tipo }) => {
     if (tipo === 'FACTURA') return <FaFileInvoice className="text-blue-500" title="Factura" />;
     if (tipo === 'BOLETA') return <FaReceipt className="text-orange-500" title="Boleta" />;
@@ -211,7 +196,7 @@ export default function Historial() {
         </div>
       </div>
 
-      {/* TARJETAS DE RESUMEN (TOP) */}
+      {/* TARJETAS DE RESUMEN */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden">
           <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center shrink-0 z-10">
@@ -239,8 +224,6 @@ export default function Historial() {
       {/* CONTROLES Y FILTROS */}
       <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
         <div className="flex flex-col xl:flex-row justify-between gap-4">
-          
-          {/* Barra de Búsqueda */}
           <div className="relative w-full xl:w-1/3">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <FaSearch className="text-slate-400" />
@@ -254,7 +237,6 @@ export default function Historial() {
             />
           </div>
 
-          {/* Filtros Rápidos */}
           <div className="flex flex-wrap items-center gap-2">
             {['HOY', 'SEMANA', 'MES', 'ANIO', 'CUSTOM'].map(filtro => (
               <button
@@ -271,7 +253,6 @@ export default function Historial() {
             ))}
           </div>
 
-          {/* Botón Excel */}
           <button 
             onClick={handleExportarExcel}
             className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wide shrink-0 shadow-sm hover:shadow"
@@ -280,7 +261,6 @@ export default function Historial() {
           </button>
         </div>
 
-        {/* Selector de Fechas Personalizado (Aparece solo si elige CUSTOM) */}
         <AnimatePresence>
           {filtroActivo === 'CUSTOM' && (
             <motion.div 
@@ -302,7 +282,7 @@ export default function Historial() {
         </AnimatePresence>
       </div>
 
-      {/* TABLA DE HISTORIAL (DISEÑO PRODUCTOS) */}
+      {/* TABLA DE HISTORIAL */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex-1 flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -326,12 +306,8 @@ export default function Historial() {
                 ventas.map((venta) => (
                   <tr key={venta.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                     <td className="p-4 whitespace-nowrap">
-                      <p className="font-bold text-slate-800 text-sm">
-                        {new Date(venta.createdAt).toLocaleDateString('es-PE')}
-                      </p>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        {new Date(venta.createdAt).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'})}
-                      </p>
+                      <p className="font-bold text-slate-800 text-sm">{new Date(venta.createdAt).toLocaleDateString('es-PE')}</p>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">{new Date(venta.createdAt).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'})}</p>
                     </td>
                     <td className="p-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
@@ -340,9 +316,7 @@ export default function Historial() {
                           <p className="font-bold text-slate-800 text-sm">
                             {venta.tipoComprobante === 'SIN_COMPROBANTE' ? 'TICKET SIMPLE' : venta.tipoComprobante}
                           </p>
-                          <p className="text-xs text-slate-500 font-mono mt-0.5">
-                            {venta.numeroComprobante || 'TICKET INTERNO'}
-                          </p>
+                          <p className="text-xs text-slate-500 font-mono mt-0.5">{venta.numeroComprobante || 'TICKET INTERNO'}</p>
                         </div>
                       </div>
                     </td>
@@ -359,7 +333,7 @@ export default function Historial() {
                     </td>
                     <td className="p-4 text-center whitespace-nowrap">
                       <div className="flex justify-center items-center gap-2">
-                        {/* Botón Ojito (Detalles) */}
+                        {/* Botón Ojito (Detalles rápidos) */}
                         <button 
                           onClick={() => setModalDetalles(venta)}
                           className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-lg transition-colors border border-slate-200" title="Ver Detalles de Productos"
@@ -367,13 +341,16 @@ export default function Historial() {
                           <FaEye size={16} />
                         </button>
                         
-                        {/* Botón Comprobante (PDF o Ticket) */}
+                        {/* Botón Comprobante (Carga la réplica o el ticket) */}
                         <button 
                           onClick={() => {
                             if (venta.enlacePdf) {
-                              setModalPdf(venta.enlacePdf);
+                              setVisorComprobante(venta); // Abrimos nuestro modal de réplica
                             } else {
-                              window.open(`/ticket/${venta.id}`, '_blank', 'width=400,height=600');
+                              const width = 400; const height = 600;
+                              const left = (window.innerWidth / 2) - (width / 2);
+                              const top = (window.innerHeight / 2) - (height / 2);
+                              window.open(`/ticket/${venta.id}`, 'Ticket', `width=${width},height=${height},top=${top},left=${left}`);
                             }
                           }}
                           className="bg-red-50 hover:bg-red-100 text-red-500 p-2 rounded-lg transition-colors border border-red-100" title="Ver Comprobante"
@@ -388,48 +365,28 @@ export default function Historial() {
             </tbody>
           </table>
         </div>
-
-        {/* Botón Cargar Más (Paginación Ligera) */}
-        {isLoading && (
-          <div className="p-4 text-center text-sm font-bold text-slate-400 animate-pulse">Cargando ventas...</div>
-        )}
-        
+        {isLoading && <div className="p-4 text-center text-sm font-bold text-slate-400 animate-pulse">Cargando ventas...</div>}
         {hayMas && !isLoading && (
           <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
-            <button 
-              onClick={() => cargarHistorial(false)}
-              className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-neutral-950 px-4 py-2 border border-slate-300 rounded-lg bg-white shadow-sm hover:shadow transition-all"
-            >
+            <button onClick={() => cargarHistorial(false)} className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-neutral-950 px-4 py-2 border border-slate-300 rounded-lg bg-white shadow-sm hover:shadow transition-all">
               Cargar más ventas...
             </button>
           </div>
         )}
       </div>
 
-      {/* MODAL 1: DETALLES DE LOS PRODUCTOS (EL OJITO) */}
+      {/* MODAL 1: DETALLES DE PRODUCTOS (EL OJITO) */}
       <AnimatePresence>
         {modalDetalles && (
           <div className="fixed inset-0 bg-neutral-950/80 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col"
-            >
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
               <div className="bg-neutral-950 p-5 flex justify-between items-center text-white border-b-4 border-verde-pastel">
                 <div>
-                  <h3 className="font-extrabold text-lg flex items-center gap-2 uppercase tracking-wide">
-                    <FaShoppingBag className="text-verde-pastel" /> Productos Vendidos
-                  </h3>
-                  <p className="text-xs text-slate-400 font-mono mt-1">
-                    OP: {modalDetalles.numeroComprobante || `#000${modalDetalles.id}`}
-                  </p>
+                  <h3 className="font-extrabold text-lg flex items-center gap-2 uppercase tracking-wide"><FaShoppingBag className="text-verde-pastel" /> Productos Vendidos</h3>
+                  <p className="text-xs text-slate-400 font-mono mt-1">OP: {modalDetalles.numeroComprobante || `#000${modalDetalles.id}`}</p>
                 </div>
-                <button onClick={() => setModalDetalles(null)} className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all">
-                  <FaTimes size={18} />
-                </button>
+                <button onClick={() => setModalDetalles(null)} className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all"><FaTimes size={18} /></button>
               </div>
-              
               <div className="p-0 bg-slate-50 max-h-[60vh] overflow-y-auto">
                 <table className="w-full text-left border-collapse text-sm">
                   <thead className="bg-slate-100 sticky top-0 border-b border-slate-200">
@@ -447,15 +404,12 @@ export default function Historial() {
                           <p className="font-bold text-slate-800">{item.producto.nombre}</p>
                           <p className="text-[10px] text-slate-400 font-mono">Cód: {item.producto.codigo}</p>
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-emerald-600 whitespace-nowrap">
-                          S/ {item.subtotal.toFixed(2)}
-                        </td>
+                        <td className="py-3 px-4 text-right font-black text-emerald-600 whitespace-nowrap">S/ {item.subtotal.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              
               <div className="bg-white p-5 border-t border-slate-200 flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total de esta venta</span>
                 <span className="text-2xl font-black text-slate-900 tracking-tighter">S/ {modalDetalles.total.toFixed(2)}</span>
@@ -465,31 +419,106 @@ export default function Historial() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: VISTA PREVIA DEL PDF (FACTURA/BOLETA SUNAT) */}
+      {/* MODAL 2: RÉPLICA DEL COMPROBANTE NUBEFACT (VISTA PREVIA HTML) */}
       <AnimatePresence>
-        {modalPdf && (
-          <div className="fixed inset-0 bg-neutral-950/90 z-[90] flex flex-col items-center justify-center p-4 backdrop-blur-md">
+        {visorComprobante && (
+          <div className="fixed inset-0 bg-neutral-950/90 z-[90] flex flex-col items-center justify-center p-4 backdrop-blur-md overflow-y-auto">
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-4xl h-[85vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col border border-neutral-800"
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-4xl min-h-[85vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col border border-neutral-800 my-8"
             >
-              <div className="bg-neutral-950 p-4 flex justify-between items-center border-b border-neutral-800 shrink-0">
+              {/* Barra superior de herramientas */}
+              <div className="bg-neutral-950 p-4 flex justify-between items-center border-b border-neutral-800 shrink-0 sticky top-0 z-10">
                 <h3 className="text-white font-bold flex items-center gap-2 text-sm uppercase tracking-widest">
-                  <FaFilePdf className="text-red-500 text-lg" /> Visor de Comprobante Electrónico
+                  <FaFilePdf className="text-red-500 text-lg" /> Vista Previa del Comprobante
                 </h3>
                 <div className="flex gap-2">
-                  <a href={modalPdf} target="_blank" rel="noreferrer" className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors">
-                    Abrir en otra pestaña
+                  <a href={visorComprobante.enlacePdf} target="_blank" rel="noreferrer" className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
+                    <FaExternalLinkAlt size={12} /> Abrir Original (SUNAT)
                   </a>
-                  <button onClick={() => setModalPdf(null)} className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
+                  <button onClick={() => setVisorComprobante(null)} className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
                     <FaTimes size={14} /> Cerrar
                   </button>
                 </div>
               </div>
-              <div className="flex-1 bg-neutral-800 w-full">
-                <iframe src={modalPdf} title="Comprobante PDF" className="w-full h-full border-none" />
+
+              {/* Contenedor gris simulando el visor de PDF */}
+              <div className="flex-1 bg-neutral-800 w-full flex items-start justify-center p-8 overflow-y-auto">
+                
+                {/* RÉPLICA EXACTA DEL TICKET DE NUBEFACT */}
+                <div className="bg-white text-black font-sans w-[80mm] shadow-2xl p-4 shrink-0 mx-auto leading-snug">
+                  
+                  {/* Datos Empresa */}
+                  <div className="text-center mb-4">
+                    <h1 className="font-extrabold uppercase text-[13px]">{businessConfig.razonSocial || businessConfig.nombre}</h1>
+                    <p className="text-[12px] mt-1 font-bold">RUC {businessConfig.ruc}</p>
+                    <p className="text-[13px] font-bold mt-1 uppercase">
+                      {visorComprobante.tipoComprobante === 'FACTURA' ? 'FACTURA DE VENTA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}
+                    </p>
+                    <p className="text-[13px] font-bold">{visorComprobante.numeroComprobante}</p>
+                  </div>
+
+                  {/* Datos Cliente y Emisión */}
+                  <div className="text-[11px] mb-4">
+                    <p className="font-bold">ADQUIRIENTE</p>
+                    <p>{visorComprobante.tipoComprobante === 'FACTURA' ? 'RUC:' : 'DNI:'} {visorComprobante.clienteDocumento}</p>
+                    <p className="uppercase">{visorComprobante.clienteNombre}</p>
+                    <p><span className="font-bold">FECHA EMISIÓN:</span> {new Date(visorComprobante.createdAt).toLocaleDateString('es-PE')}</p>
+                    <p><span className="font-bold">MONEDA:</span> SOLES</p>
+                    <p><span className="font-bold">IGV:</span> {businessConfig.impuestoPorcentaje || '18.00'} %</p>
+                  </div>
+
+                  {/* Tabla de Productos */}
+                  <table className="w-full text-left text-[11px] mb-4 border-t border-b border-dashed border-black py-2">
+                    <thead>
+                      <tr>
+                        <th className="pb-1 font-bold">[ CANT. ] DESCRIPCIÓN</th>
+                        <th className="pb-1 font-bold text-right">P/U</th>
+                        <th className="pb-1 font-bold text-right">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody className="align-top">
+                      {visorComprobante.detalles.map(det => (
+                        <tr key={det.id}>
+                          <td className="pt-2">
+                            <span className="font-bold">[ {det.cantidad} ]</span> NIU {det.producto.nombre}
+                          </td>
+                          <td className="pt-2 text-right">{(det.subtotal / det.cantidad).toFixed(3)}</td>
+                          <td className="pt-2 text-right">{det.subtotal.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Totales */}
+                  <div className="text-[11px] w-full flex flex-col items-end border-b border-dashed border-black pb-2 mb-2">
+                    <div className="flex w-3/4 justify-between">
+                      <span className="font-bold">GRAVADA</span>
+                      <span>S/</span>
+                      <span className="font-bold text-right w-16">{visorComprobante.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex w-3/4 justify-between">
+                      <span className="font-bold">IGV</span>
+                      <span>S/</span>
+                      <span className="font-bold text-right w-16">{visorComprobante.igv.toFixed(2)}</span>
+                    </div>
+                    <div className="flex w-3/4 justify-between mt-1">
+                      <span className="font-bold">TOTAL</span>
+                      <span>S/</span>
+                      <span className="font-bold text-right w-16">{visorComprobante.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Footer Text */}
+                  <div className="text-center text-[10px]">
+                    <p>Representación impresa de la {visorComprobante.tipoComprobante === 'FACTURA' ? 'FACTURA' : 'BOLETA'} DE VENTA ELECTRÓNICA, visita</p>
+                    <p className="font-bold mt-1">www.nubefact.com/{businessConfig.ruc}</p>
+                    <div className="mt-4 border border-black w-32 h-32 mx-auto flex items-center justify-center p-1 opacity-70">
+                       <span className="text-gray-400">QR SUNAT</span>
+                    </div>
+                    <p className="mt-2 text-[9px] text-gray-500">Emitido desde el Sistema POS</p>
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>
