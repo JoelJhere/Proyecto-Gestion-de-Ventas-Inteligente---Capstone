@@ -631,8 +631,8 @@ export default function Ventas() {
                             }
                           }
 
-                          // 2. Armamos el mensaje final
-                          const textoMensaje = `${saludo} 👋,\nGracias por su compra en *${ventaGenerada.nombreNegocio}*.\n\nAquí tiene el enlace directo para descargar su comprobante electrónico:\n📄 ${ventaGenerada.enlacePdf}\n\n¡Gracias por su preferencia!`;
+                          // 2. Armamos el mensaje final totalmente limpio de emojis
+                          const textoMensaje = `${saludo},\nGracias por su compra en *${ventaGenerada.nombreNegocio}*.\n\nAquí tiene el enlace directo para descargar su comprobante electrónico:\n${ventaGenerada.enlacePdf}\n\n¡Gracias por su preferencia!`;
 
                           // 3. Limpiamos y aseguramos el código de país
                           const numeroLimpio = ventaGenerada.contactoEnvio.replace(/[^0-9]/g, '');
