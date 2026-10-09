@@ -3,9 +3,12 @@ import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
+import axios from 'axios'; 
 
 export default function Layout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [hayAlertasFiados, setHayAlertasFiados] = useState(false); 
+  
   const location = useLocation();
   const navigate = useNavigate();
   const { businessConfig } = useBusiness();
@@ -35,6 +38,33 @@ export default function Layout() {
     if (mainRef.current) mainRef.current.scrollTo(0, 0);
   }, [location.pathname]);
 
+  // Lógica para detectar si hay Fiados que necesitan enviarse por WhatsApp hoy
+  useEffect(() => {
+    const verificarAlertas = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get('/fiados', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        
+        const requiereCobro = res.data.some(f => {
+          const limite = new Date(f.fechaLimite);
+          limite.setHours(0, 0, 0, 0);
+          return limite <= hoy && f.estado === 'PENDIENTE';
+        });
+        
+        setHayAlertasFiados(requiereCobro);
+      } catch (error) {
+        console.error("Error verificando alertas de fiados:", error);
+      }
+    };
+
+    verificarAlertas();
+  }, [location.pathname]);
+
   return (
     <div className="flex h-[100dvh] bg-slate-50 text-slate-950 overflow-hidden relative font-sans"> 
       
@@ -43,7 +73,7 @@ export default function Layout() {
         <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* SIDEBAR: Negro puro (Neutral-950) sin tonos azules */}
+      {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-neutral-950 border-r border-neutral-900 flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
         {/* LOGO EN SIDEBAR */}
@@ -79,17 +109,36 @@ export default function Layout() {
           {menuItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             const Icon = item.icon;
+            
+            const isFiados = item.path === '/fiados';
+            const showAlerta = isFiados && hayAlertasFiados;
+
             return (
               <Link key={item.path} to={item.path} onClick={handleNavigation}>
                 <motion.div whileTap={{ scale: 0.98 }}
-                  className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 ${
+                  className={`flex flex-col px-4 py-3 rounded-lg transition-all duration-200 relative ${
                     isActive 
-                      ? 'bg-verde-pastel/10 text-verde-pastel border-l-4 border-verde-pastel font-semibold shadow-lg shadow-verde-pastel/5' 
-                      : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200 font-medium'
+                      ? 'bg-verde-pastel/10 border-l-4 border-verde-pastel shadow-lg shadow-verde-pastel/5' 
+                      : 'hover:bg-neutral-900'
                   }`}
                 >
-                  <Icon className={`text-lg ${isActive ? 'text-verde-pastel' : 'text-neutral-500'}`} />
-                  <span className="text-sm tracking-wide">{item.label}</span>
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      {/* Ícono con punto rojo si hay alertas */}
+                      <Icon className={`text-lg ${isActive ? 'text-verde-pastel' : 'text-neutral-500'} ${showAlerta && !isActive ? 'text-red-400 animate-pulse' : ''}`} />
+                      
+                      {showAlerta && (
+                        <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                        </span>
+                      )}
+                    </div>
+                    
+                    <span className={`text-sm tracking-wide font-medium ${isActive ? 'text-verde-pastel font-semibold' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                      {item.label}
+                    </span>
+                  </div>
                 </motion.div>
               </Link>
             );
