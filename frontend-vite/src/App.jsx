@@ -11,6 +11,7 @@ import PlanCompras from './pages/PlanCompras';
 import { BusinessProvider } from './context/BusinessContext';
 import Configuracion from './pages/Configuracion';
 import Fiados from './pages/Fiados';
+import Historial from './pages/Historial';
 
 // --- CONFIGURACIÓN GLOBAL DE AXIOS ---
 
@@ -44,7 +45,6 @@ axios.interceptors.response.use(
   }
 );
 
-const HistorialPlaceholder = () => <div className="text-white"><h1 className="text-3xl font-bold text-dorado mb-4">Historial de Transacciones</h1></div>;
 const IAPlaceholder = () => <div className="text-white"><h1 className="text-3xl font-bold text-dorado mb-4">Panel de Asistente IA</h1></div>;
 
 function App() {
@@ -97,7 +97,7 @@ function App() {
           <Route path="/proveedores" element={<Proveedores />} />
           <Route path="/fiados" element={<Fiados />} />
           <Route path="/compras" element={<PlanCompras />} />
-          <Route path="/historial" element={<HistorialPlaceholder />} />
+          <Route path="/historial" element={<Historial />} />
           <Route path="/ia-panel" element={<IAPlaceholder />} />
           <Route path="/configuracion" element={<Configuracion />} />
         </Route>

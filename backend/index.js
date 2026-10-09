@@ -11,6 +11,7 @@ import configRoutes from './routes/config.routes.js';
 import ventaRoutes from './routes/venta.routes.js';
 import apiRoutes from './routes/api.routes.js';
 import fiadoRoutes from './routes/fiado.routes.js';
+import historialRoutes from './routes/historial.routes.js';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -34,6 +35,8 @@ app.use('/api/configuracion', configRoutes);
 app.use('/api/ventas', ventaRoutes);
 app.use('/api/externa', apiRoutes);
 app.use('/api/fiados', fiadoRoutes);
+app.use('/api/historial', historialRoutes);
+
 app.get('/api/status', (req, res) => {
   res.json({ mensaje: 'Servidor del POS Abarrotes AJ funcionando correctamente' });
 });
