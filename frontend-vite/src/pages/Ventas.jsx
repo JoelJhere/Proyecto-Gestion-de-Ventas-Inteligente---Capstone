@@ -343,6 +343,9 @@ export default function Ventas() {
                       <span className="text-slate-500 font-semibold bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
                         Unit: <strong className="text-slate-700">S/ {item.precioVenta.toFixed(2)}</strong>
                       </span>
+                      <span className="text-slate-500 font-semibold bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
+                        Stock: <strong className={item.stock <= 5 ? "text-red-500" : "text-emerald-600"}>{item.stock}</strong>
+                      </span>
                     </div>
                   </div>
                   
