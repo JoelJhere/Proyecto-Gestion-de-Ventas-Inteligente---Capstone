@@ -446,12 +446,14 @@ export default function Historial() {
               <div className="flex-1 bg-neutral-800 w-full flex items-start justify-center p-8 overflow-y-auto">
                 
                 {/* RÉPLICA EXACTA DEL TICKET DE NUBEFACT */}
-                <div className="bg-white text-black font-sans w-[80mm] shadow-2xl p-4 shrink-0 mx-auto leading-snug">
+                <div className="bg-white text-black font-sans w-[80mm] shadow-2xl p-4 shrink-0 mx-auto leading-tight">
                   
                   {/* Datos Empresa */}
-                  <div className="text-center mb-4">
+                  <div className="text-center mb-3">
                     <h1 className="font-extrabold uppercase text-[13px]">{businessConfig.razonSocial || businessConfig.nombre}</h1>
-                    <p className="text-[12px] mt-1 font-bold">RUC {businessConfig.ruc}</p>
+                    <p className="text-[12px] font-bold leading-none">-</p>
+                    <p className="text-[12px] font-bold leading-none mb-1">- - - - -</p>
+                    <p className="text-[12px] font-bold">RUC {businessConfig.ruc}</p>
                     <p className="text-[13px] font-bold mt-1 uppercase">
                       {visorComprobante.tipoComprobante === 'FACTURA' ? 'FACTURA DE VENTA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}
                     </p>
@@ -459,9 +461,9 @@ export default function Historial() {
                   </div>
 
                   {/* Datos Cliente y Emisión */}
-                  <div className="text-[11px] mb-4">
+                  <div className="text-[11px] mb-3">
                     <p className="font-bold">ADQUIRIENTE</p>
-                    <p>{visorComprobante.tipoComprobante === 'FACTURA' ? 'RUC:' : 'DNI:'} {visorComprobante.clienteDocumento}</p>
+                    <p className="uppercase">{visorComprobante.tipoComprobante === 'FACTURA' ? 'RUC:' : 'DNI:'} {visorComprobante.clienteDocumento}</p>
                     <p className="uppercase">{visorComprobante.clienteNombre}</p>
                     <p><span className="font-bold">FECHA EMISIÓN:</span> {new Date(visorComprobante.createdAt).toLocaleDateString('es-PE')}</p>
                     <p><span className="font-bold">MONEDA:</span> SOLES</p>
@@ -469,53 +471,65 @@ export default function Historial() {
                   </div>
 
                   {/* Tabla de Productos */}
-                  <table className="w-full text-left text-[11px] mb-4 border-t border-b border-dashed border-black py-2">
+                  <table className="w-full text-left text-[11px] mb-2 border-t border-b border-dashed border-black py-1">
                     <thead>
                       <tr>
-                        <th className="pb-1 font-bold">[ CANT. ] DESCRIPCIÓN</th>
-                        <th className="pb-1 font-bold text-right">P/U</th>
-                        <th className="pb-1 font-bold text-right">TOTAL</th>
+                        <th className="py-1 font-bold">[ CANT. ] DESCRIPCIÓN</th>
+                        <th className="py-1 font-bold text-right">P/U</th>
+                        <th className="py-1 font-bold text-right">TOTAL</th>
                       </tr>
                     </thead>
                     <tbody className="align-top">
                       {visorComprobante.detalles.map(det => (
                         <tr key={det.id}>
-                          <td className="pt-2">
+                          <td className="py-1 pr-1">
                             <span className="font-bold">[ {det.cantidad} ]</span> NIU {det.producto.nombre}
                           </td>
-                          <td className="pt-2 text-right">{(det.subtotal / det.cantidad).toFixed(3)}</td>
-                          <td className="pt-2 text-right">{det.subtotal.toFixed(2)}</td>
+                          <td className="py-1 text-right">{(det.subtotal / det.cantidad).toFixed(3)}</td>
+                          <td className="py-1 text-right">{det.subtotal.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
 
-                  {/* Totales */}
-                  <div className="text-[11px] w-full flex flex-col items-end border-b border-dashed border-black pb-2 mb-2">
-                    <div className="flex w-3/4 justify-between">
-                      <span className="font-bold">GRAVADA</span>
-                      <span>S/</span>
-                      <span className="font-bold text-right w-16">{visorComprobante.subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex w-3/4 justify-between">
-                      <span className="font-bold">IGV</span>
-                      <span>S/</span>
-                      <span className="font-bold text-right w-16">{visorComprobante.igv.toFixed(2)}</span>
-                    </div>
-                    <div className="flex w-3/4 justify-between mt-1">
-                      <span className="font-bold">TOTAL</span>
-                      <span>S/</span>
-                      <span className="font-bold text-right w-16">{visorComprobante.total.toFixed(2)}</span>
-                    </div>
+                  {/* Totales (CORREGIDO: Alineación perfecta con tabla) */}
+                  <div className="w-full flex justify-end text-[11px] font-bold mb-2">
+                    <table className="text-right border-collapse">
+                      <tbody>
+                        <tr>
+                          <td className="pr-4 py-0.5">GRAVADA</td>
+                          <td className="pr-2 py-0.5">S/</td>
+                          <td className="py-0.5 w-12">{visorComprobante.subtotal.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                          <td className="pr-4 py-0.5">IGV</td>
+                          <td className="pr-2 py-0.5">S/</td>
+                          <td className="py-0.5">{visorComprobante.igv.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                          <td className="pr-4 py-0.5">TOTAL</td>
+                          <td className="pr-2 py-0.5">S/</td>
+                          <td className="py-0.5">{visorComprobante.total.toFixed(2)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Simulador de importe en letras */}
+                  <div className="border-t border-b border-gray-300 py-1 mb-2 text-center text-[10px] font-bold text-gray-500 uppercase">
+                     IMPORTE EN LETRAS: (VER PDF ORIGINAL)
                   </div>
 
                   {/* Footer Text */}
-                  <div className="text-center text-[10px]">
+                  <div className="text-center text-[10px] leading-tight">
                     <p>Representación impresa de la {visorComprobante.tipoComprobante === 'FACTURA' ? 'FACTURA' : 'BOLETA'} DE VENTA ELECTRÓNICA, visita</p>
-                    <p className="font-bold mt-1">www.nubefact.com/{businessConfig.ruc}</p>
-                    <div className="mt-4 border border-black w-32 h-32 mx-auto flex items-center justify-center p-1 opacity-70">
-                       <span className="text-gray-400">QR SUNAT</span>
+                    <p className="font-bold mt-0.5">www.nubefact.com/{businessConfig.ruc}</p>
+                    
+                    {/* Placeholder QR */}
+                    <div className="mt-3 border border-gray-300 w-24 h-24 mx-auto flex items-center justify-center p-1 opacity-70">
+                       <span className="text-gray-400 font-bold">QR SUNAT</span>
                     </div>
+                    
                     <p className="mt-2 text-[9px] text-gray-500">Emitido desde el Sistema POS</p>
                   </div>
                 </div>
