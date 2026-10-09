@@ -50,7 +50,7 @@ export const liquidarFiado = async (req, res) => {
   }
 };
 
-// 3. Actualizar la fecha límite del recordatorio
+// 3. Actualizar la fecha límite del recordatorio (Edición manual)
 export const actualizarPlazo = async (req, res) => {
   const { id } = req.params;
   const { nuevaFecha } = req.body; // Esperamos un formato YYYY-MM-DD
@@ -70,5 +70,40 @@ export const actualizarPlazo = async (req, res) => {
   } catch (error) {
     console.error('Error al actualizar plazo:', error);
     res.status(500).json({ message: 'Error al actualizar el plazo del fiado' });
+  }
+};
+
+// 4. NUEVO: Registrar envío de WhatsApp (Pospone 1 día y cuenta el aviso)
+export const registrarAvisoWhatsApp = async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const fiado = await prisma.cuentaPorCobrar.findUnique({ 
+      where: { id: parseInt(id) } 
+    });
+
+    if (!fiado) {
+      return res.status(404).json({ message: 'Fiado no encontrado' });
+    }
+    
+    // Sumamos 1 día a la fecha actual para el próximo recordatorio
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+
+    const fiadoActualizado = await prisma.cuentaPorCobrar.update({
+      where: { id: parseInt(id) },
+      data: {
+        fechaLimite: manana,
+        recordatorios: (fiado.recordatorios || 0) + 1
+      }
+    });
+
+    res.status(200).json({ 
+      message: 'Aviso registrado exitosamente.', 
+      fiado: fiadoActualizado 
+    });
+  } catch (error) {
+    console.error('Error al registrar aviso:', error);
+    res.status(500).json({ message: 'Error al registrar el aviso en el sistema' });
   }
 };

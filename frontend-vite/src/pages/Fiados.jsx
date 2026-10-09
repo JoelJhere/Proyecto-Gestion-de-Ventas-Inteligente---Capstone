@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { FaSearch, FaUser, FaWhatsapp, FaMoneyBillWave, FaCalendarAlt, FaCheckCircle, FaShoppingBag, FaFileInvoiceDollar, FaTimes, FaBell, FaExclamationTriangle } from 'react-icons/fa';
+import { useBusiness } from '../context/BusinessContext'; // <--- IMPORTANTE: Añadimos el contexto
 
 export default function Fiados() {
   const [fiados, setFiados] = useState([]);
@@ -10,12 +11,13 @@ export default function Fiados() {
   const [isLoading, setIsLoading] = useState(true);
   const [procesandoId, setProcesandoId] = useState(null);
 
-  // Estados para el Modal de Cambio de Fecha
+  // Traemos el nombre del negocio configurado
+  const { businessConfig } = useBusiness();
+
+  // Estados para modales
   const [modalPlazo, setModalPlazo] = useState(null);
   const [nuevaFecha, setNuevaFecha] = useState('');
-
-  // Estado para ocultar la alerta temporalmente después de enviar el WhatsApp
-  const [notificados, setNotificados] = useState([]);
+  const [modalCobro, setModalCobro] = useState(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -35,7 +37,6 @@ export default function Fiados() {
     }
   };
 
-  // Función para detectar si la fecha de aviso ya se cumplió (Hoy o fechas pasadas)
   const esFechaCumplida = (fechaLimite) => {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
@@ -44,64 +45,53 @@ export default function Fiados() {
     return limite <= hoy; 
   };
 
-  // Función con mensaje de confirmación
-  const handleLiquidarConfirmado = (id, nombreVecino, monto) => {
-    // Lanzamos un toast personalizado que no se cierra automáticamente
-    toast((t) => (
-      <div className="flex flex-col gap-3 p-1">
-        <p className="text-sm font-bold text-slate-800 text-center">
-          ¿Estás seguro de liquidar y marcar como <span className="text-verde-pastel bg-neutral-950 px-1.5 py-0.5 rounded">PAGADA</span> la deuda de S/ {monto.toFixed(2)} de {nombreVecino}?
-        </p>
-        <div className="flex justify-center gap-3 mt-2">
-          <button
-            onClick={async () => {
-              toast.dismiss(t.id); // Cerramos el toast de confirmación
-              setProcesandoId(id);
-              try {
-                await axios.put(`/fiados/pagar/${id}`);
-                toast.success(`Deuda de ${nombreVecino} liquidada con éxito.`, { icon: '💰' });
-                setFiados(prev => prev.filter(f => f.id !== id));
-              } catch (error) {
-                toast.error(error.response?.data?.message || 'Error al procesar el pago.');
-              } finally {
-                setProcesandoId(null);
-              }
-            }}
-            className="flex-1 bg-neutral-950 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-neutral-800 transition-colors shadow-sm"
-          >
-            Sí, Cobrar
-          </button>
-          <button
-            onClick={() => toast.dismiss(t.id)}
-            className="flex-1 bg-slate-100 text-slate-600 border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors"
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    ), {
-      duration: Infinity, // Se queda abierto hasta que el usuario decida
-      position: 'top-center',
-      style: {
-        border: '1px solid #e2e8f0',
-        padding: '16px',
-        maxWidth: '350px'
-      }
-    });
+  const handleLiquidar = async () => {
+    if (!modalCobro) return;
+    
+    setProcesandoId(modalCobro.id);
+    try {
+      await axios.put(`/fiados/pagar/${modalCobro.id}`);
+      toast.success(`Deuda de ${modalCobro.cliente.nombre} liquidada con éxito.`, { icon: '💰' });
+      setFiados(prev => prev.filter(f => f.id !== modalCobro.id));
+      setModalCobro(null);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al procesar el pago.');
+    } finally {
+      setProcesandoId(null);
+    }
   };
 
-  // Función para enviar WhatsApp y quitar la alerta visual
-  const handleWhatsApp = (fiado) => {
+  // Función MEJORADA: Envía el WhatsApp dinámico y actualiza la BD
+  const handleWhatsApp = async (fiado) => {
     const numeroLimpio = fiado.cliente.telefono.replace(/[^0-9]/g, '');
     const numeroFinal = numeroLimpio.startsWith('51') ? numeroLimpio : `51${numeroLimpio}`;
+    const nombreLocal = businessConfig?.nombre || 'la bodega';
     
-    // Mensaje totalmente limpio, sin emojis que se puedan romper
-    const mensaje = `Hola ${fiado.cliente.nombre},\nTe saludamos de la bodega.\n\nTe escribimos para recordarte que tienes una cuenta pendiente por S/ ${fiado.monto.toFixed(2)}.\n\nPor favor, acercate para regularizarlo. Gracias por tu preferencia.`;
+    const mensaje = `Hola ${fiado.cliente.nombre},\nTe saludamos de *${nombreLocal}*.\n\nTe escribimos para recordarte que tienes una cuenta pendiente por S/ ${fiado.monto.toFixed(2)}.\n\nPor favor, acércate para regularizarlo. Gracias por tu preferencia.`;
     
+    // 1. Abrimos WhatsApp inmediatamente para evitar bloqueos de pop-up
     window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
 
-    // Añadimos el ID a los notificados para que desaparezca la alerta visual
-    setNotificados(prev => [...prev, fiado.id]);
+    // 2. Avisamos al backend que se envió, para que sume 1 día y cuente el aviso
+    try {
+      // Nota: Si usas la ruta sugerida arriba en tu backend
+      await axios.put(`/fiados/avisar/${fiado.id}`);
+      
+      toast.success('Aviso registrado. Se postergó la alerta para mañana.', { icon: '📅' });
+      
+      // 3. Actualizamos la pantalla al instante (sin recargar)
+      setFiados(prev => prev.map(f => {
+        if (f.id === fiado.id) {
+          const manana = new Date();
+          manana.setDate(manana.getDate() + 1);
+          return { ...f, fechaLimite: manana.toISOString(), recordatorios: (f.recordatorios || 0) + 1 };
+        }
+        return f;
+      }));
+    } catch (error) {
+      console.error('Error al registrar aviso en BD:', error);
+      toast.error('Se abrió WhatsApp, pero no se pudo registrar en el sistema.');
+    }
   };
 
   const handleActualizarFecha = async (e) => {
@@ -112,12 +102,7 @@ export default function Fiados() {
       await axios.put(`/fiados/plazo/${modalPlazo.id}`, { nuevaFecha: fechaLocalString });
       toast.success('Día de aviso actualizado correctamente', { icon: '📅' });
       
-      // Actualizamos visualmente la lista
       setFiados(prev => prev.map(f => f.id === modalPlazo.id ? { ...f, fechaLimite: fechaLocalString } : f));
-      
-      // Si estaba en la lista de notificados ocultos, lo sacamos para que vuelva a evaluar la alerta futura
-      setNotificados(prev => prev.filter(id => id !== modalPlazo.id));
-      
       setModalPlazo(null);
     } catch (error) {
       console.error(error);
@@ -132,7 +117,7 @@ export default function Fiados() {
   return (
     <div className="flex flex-col gap-6 text-slate-900 pb-20 lg:pb-0 font-sans min-h-[calc(100vh-6rem)] relative">
       
-      {/* HEADER LIMPIO */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-5 border border-slate-200 rounded-2xl shadow-sm relative overflow-hidden">
         <div className="absolute -top-10 -right-10 w-32 h-32 bg-verde-pastel/10 rounded-full blur-2xl pointer-events-none"></div>
         
@@ -174,8 +159,7 @@ export default function Fiados() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {fiadosFiltrados.map((fiado) => {
-                  // Evaluamos si debe mostrar alerta (Fecha cumplida Y no ha sido notificado en esta sesión)
-                  const requiereAtencion = esFechaCumplida(fiado.fechaLimite) && !notificados.includes(fiado.id);
+                  const requiereAtencion = esFechaCumplida(fiado.fechaLimite);
 
                   return (
                     <motion.div 
@@ -183,7 +167,6 @@ export default function Fiados() {
                       initial={{ opacity: 0, scale: 0.95 }} 
                       animate={{ opacity: 1, scale: 1 }} 
                       exit={{ opacity: 0, scale: 0.95 }}
-                      // Inyectamos estilos condicionales agresivos si requiere atención
                       className={`bg-white rounded-2xl transition-all flex flex-col overflow-hidden relative ${
                         requiereAtencion 
                           ? 'border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
@@ -194,7 +177,7 @@ export default function Fiados() {
                       
                       <div className="p-5 flex-1">
                         
-                        {/* Etiqueta de aviso */}
+                        {/* Etiqueta de aviso principal */}
                         {requiereAtencion && (
                           <div className="mb-3 bg-red-100 text-red-700 text-[10px] font-black uppercase tracking-widest py-1.5 px-3 rounded-md flex items-center justify-center gap-1.5 animate-pulse text-center">
                             <FaExclamationTriangle size={12} className="shrink-0" /> 
@@ -207,9 +190,18 @@ export default function Fiados() {
                             <h3 className="font-extrabold text-slate-800 flex items-center gap-2 uppercase tracking-wide text-sm">
                               <FaUser className="text-slate-400" /> {fiado.cliente.nombre}
                             </h3>
+                            
                             <p className="text-[11px] text-slate-400 font-mono mt-1 flex items-center gap-1">
                               <FaCalendarAlt /> Fió el: {new Date(fiado.createdAt).toLocaleDateString('es-PE')}
                             </p>
+                            
+                            {/* Insignia visual: Si ya se avisó X veces */}
+                            {fiado.recordatorios > 0 && (
+                              <span className="text-[9px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 mt-1.5 inline-flex items-center gap-1 uppercase tracking-wider">
+                                <FaBell size={8} /> Avisado: {fiado.recordatorios} {fiado.recordatorios === 1 ? 'vez' : 'veces'}
+                              </span>
+                            )}
+
                             <button 
                               onClick={() => {
                                 setModalPlazo(fiado);
@@ -217,7 +209,7 @@ export default function Fiados() {
                                 const localDateString = new Date(fechaBD.getTime() - (fechaBD.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
                                 setNuevaFecha(localDateString);
                               }}
-                              className={`text-[11px] font-bold mt-1.5 px-2 py-1 rounded-md border flex items-center gap-1 transition-colors group ${
+                              className={`text-[11px] font-bold mt-2 px-2 py-1 rounded-md border flex items-center gap-1 transition-colors group ${
                                 requiereAtencion 
                                   ? 'text-red-700 bg-red-50 border-red-200 hover:bg-red-100' 
                                   : 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100'
@@ -228,6 +220,7 @@ export default function Fiados() {
                               <span className={`opacity-0 group-hover:opacity-100 transition-opacity ml-1 ${requiereAtencion ? 'text-red-800' : 'text-amber-700'}`}>✏️ Editar</span>
                             </button>
                           </div>
+                          
                           <div className="text-right">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Deuda</span>
                             <span className="text-xl font-black text-red-500 tracking-tighter">S/ {fiado.monto.toFixed(2)}</span>
@@ -249,7 +242,6 @@ export default function Fiados() {
                         </div>
                       </div>
 
-                      {/* BOTONES 50/50 PERFECTAMENTE ALINEADOS */}
                       <div className="p-4 bg-slate-50 border-t border-slate-200 flex gap-3">
                         <button 
                           onClick={() => handleWhatsApp(fiado)}
@@ -259,7 +251,7 @@ export default function Fiados() {
                         </button>
                         
                         <button 
-                          onClick={() => handleLiquidarConfirmado(fiado.id, fiado.cliente.nombre, fiado.monto)}
+                          onClick={() => setModalCobro(fiado)}
                           disabled={procesandoId === fiado.id}
                           className="flex-1 bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3 px-2 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 text-xs uppercase tracking-wide disabled:opacity-50"
                         >
@@ -317,6 +309,47 @@ export default function Fiados() {
                   Guardar Cambios
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL DE CONFIRMACIÓN DE COBRO */}
+      <AnimatePresence>
+        {modalCobro && (
+          <div className="fixed inset-0 bg-neutral-950/80 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-8 text-center"
+            >
+              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                <FaExclamationTriangle className="text-red-500 text-3xl" />
+              </div>
+              
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2">
+                ¿Liquidar deuda?
+              </h3>
+              <p className="text-slate-500 font-medium text-sm leading-relaxed mb-8 px-2">
+                Estás a punto de marcar como <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">PAGADA</span> la deuda de <strong className="text-slate-800">S/ {modalCobro.monto.toFixed(2)}</strong> del vecino <strong className="text-slate-800">{modalCobro.cliente.nombre}</strong>. Esta acción no se puede deshacer.
+              </p>
+              
+              <div className="flex gap-3 mt-auto">
+                <button 
+                  onClick={() => setModalCobro(null)}
+                  className="flex-1 py-3.5 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all text-sm"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleLiquidar}
+                  disabled={procesandoId === modalCobro.id}
+                  className="flex-1 py-3.5 px-4 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-all shadow-md shadow-red-500/20 text-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {procesandoId === modalCobro.id ? 'Cobrando...' : 'Confirmar'}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

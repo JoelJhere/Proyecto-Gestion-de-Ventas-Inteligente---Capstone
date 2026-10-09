@@ -1,5 +1,5 @@
 import express from 'express';
-import { obtenerFiadosPendientes, liquidarFiado, actualizarPlazo } from '../controllers/fiado.controller.js';
+import { obtenerFiadosPendientes, liquidarFiado, actualizarPlazo, registrarAvisoWhatsApp } from '../controllers/fiado.controller.js';
 import { verificarToken } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -8,5 +8,6 @@ const router = express.Router();
 router.get('/', verificarToken, obtenerFiadosPendientes);
 router.put('/pagar/:id', verificarToken, liquidarFiado);
 router.put('/plazo/:id', verificarToken, actualizarPlazo);
+router.put('/avisar/:id', verificarToken, registrarAvisoWhatsApp);
 
 export default router;
