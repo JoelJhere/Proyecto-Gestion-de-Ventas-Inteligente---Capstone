@@ -107,8 +107,8 @@ export default function Historial() {
   };
 
   const handleExportarExcel = async () => {
-    // Mostramos un toast de carga porque si hay 5,000 ventas tomará un par de segundos
-    const toastId = toast.loading('Generando reporte Excel, por favor espera...');
+    // Mostramos un toast de carga porque si hay miles de ventas tomará un segundo
+    const toastId = toast.loading('Generando reporte Excel...');
     
     try {
       const token = localStorage.getItem('token');
@@ -121,7 +121,6 @@ export default function Historial() {
         fFin = fechas.fin;
       }
 
-      // Hacemos una petición especial pidiendo hasta 10,000 registros para asegurarnos de traer todo el reporte
       const res = await axios.get('/historial', {
         headers: { Authorization: `Bearer ${token}` },
         params: {
@@ -140,26 +139,42 @@ export default function Historial() {
         return;
       }
 
-      // Mapeamos los datos para que las cabeceras en el Excel sean legibles y limpias
+      // 1. Mapear datos (Corrigiendo el problema de los NULLs en documentos antiguos)
       const dataExcel = ventasExportar.map(venta => ({
         'Fecha': new Date(venta.createdAt).toLocaleDateString('es-PE'),
         'Hora': new Date(venta.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
         'Tipo de Comprobante': venta.tipoComprobante === 'SIN_COMPROBANTE' ? 'TICKET SIMPLE' : venta.tipoComprobante,
         'N° Comprobante': venta.numeroComprobante || 'TICKET INTERNO',
         'Nombre del Cliente': venta.clienteNombre || 'Cliente Varios',
-        'Documento': venta.clienteDocumento !== '00000000' ? venta.clienteDocumento : 'Anónimo',
+        'Documento': (venta.clienteDocumento && venta.clienteDocumento !== '00000000') ? venta.clienteDocumento : 'Anónimo',
         'Atendido por': venta.vendedor?.nombre || 'Desconocido',
         'Subtotal (S/)': parseFloat(venta.subtotal),
         'IGV (S/)': parseFloat(venta.igv),
         'Total (S/)': parseFloat(venta.total)
       }));
 
-      // Magia de la librería: Convertimos el JSON a una hoja de cálculo
+      // 2. Convertir JSON a Hoja de cálculo
       const hoja = XLSX.utils.json_to_sheet(dataExcel);
+
+      // --- 3. MEJORA VISUAL: AUTO-AJUSTE DEL ANCHO DE COLUMNAS ---
+      const anchosDeColumna = [
+        { wch: 12 }, // A: Fecha
+        { wch: 10 }, // B: Hora
+        { wch: 20 }, // C: Tipo de Comprobante
+        { wch: 20 }, // D: N° Comprobante
+        { wch: 35 }, // E: Nombre del Cliente (Más ancho para razones sociales largas)
+        { wch: 15 }, // F: Documento
+        { wch: 20 }, // G: Atendido por
+        { wch: 15 }, // H: Subtotal (S/)
+        { wch: 12 }, // I: IGV (S/)
+        { wch: 15 }  // J: Total (S/)
+      ];
+      hoja['!cols'] = anchosDeColumna; // Se inyecta la configuración de ancho a la hoja
+
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, 'Historial');
 
-      // Descargamos el archivo con un nombre dinámico
+      // Descargamos el archivo
       const nombreArchivo = `Historial_Ventas_${filtroActivo}_${new Date().getTime()}.xlsx`;
       XLSX.writeFile(libro, nombreArchivo);
 
