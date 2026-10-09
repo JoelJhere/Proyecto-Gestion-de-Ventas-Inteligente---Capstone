@@ -656,10 +656,18 @@ export default function Ventas() {
                     )}
                     {ventaGenerada.metodoEnvio === 'NINGUNO' && (
                       <button 
-                        onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
+                        onClick={() => {
+                          if (ventaGenerada.enlacePdf) {
+                            // Si es Boleta/Factura, abrimos el PDF de Nubefact
+                            window.open(ventaGenerada.enlacePdf, '_blank');
+                          } else {
+                            // Si es Ticket Simple o Fiado, abrimos nuestro propio generador de tickets
+                            window.open(`/ticket/${ventaGenerada.id}`, '_blank', 'width=400,height=600');
+                          }
+                        }}
                         className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
                       >
-                        <FaPrint size={16} /> Ver e Imprimir {ventaGenerada.tipo}
+                        <FaPrint size={16} /> Ver e Imprimir {ventaGenerada.tipo === 'TICKET' ? 'TICKET' : ventaGenerada.tipo}
                       </button>
                     )}
                   </>

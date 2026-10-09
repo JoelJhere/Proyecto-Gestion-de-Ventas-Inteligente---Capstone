@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, FaHistory, FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice } from 'react-icons/fa';
+import { FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, FaHistory, FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice, FaTimes } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
 export default function Historial() {
@@ -19,6 +19,10 @@ export default function Historial() {
   const [paginaActual, setPaginaActual] = useState(1);
   const [hayMas, setHayMas] = useState(false);
   const limiteCarga = 25;
+
+  // Estados para Modales de Vista Previa
+  const [modalDetalles, setModalDetalles] = useState(null);
+  const [modalPdf, setModalPdf] = useState(null);
 
   // Función para calcular las fechas según el botón rápido seleccionado
   const calcularFechasFiltro = useCallback((tipo) => {
@@ -355,17 +359,24 @@ export default function Historial() {
                     </td>
                     <td className="p-4 text-center whitespace-nowrap">
                       <div className="flex justify-center items-center gap-2">
+                        {/* Botón Ojito (Detalles) */}
                         <button 
-                          onClick={() => toast.success('Modal de Detalles programado para FASE 4', { icon: '👁️' })}
+                          onClick={() => setModalDetalles(venta)}
                           className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-lg transition-colors border border-slate-200" title="Ver Detalles de Productos"
                         >
                           <FaEye size={16} />
                         </button>
                         
+                        {/* Botón Comprobante (PDF o Ticket) */}
                         <button 
-                          onClick={() => toast.success('Vista Previa PDF programada para FASE 4', { icon: '📄' })}
-                          disabled={!venta.enlacePdf}
-                          className="bg-red-50 hover:bg-red-100 text-red-500 p-2 rounded-lg transition-colors border border-red-100 disabled:opacity-40 disabled:cursor-not-allowed" title="Ver Comprobante PDF"
+                          onClick={() => {
+                            if (venta.enlacePdf) {
+                              setModalPdf(venta.enlacePdf);
+                            } else {
+                              window.open(`/ticket/${venta.id}`, '_blank', 'width=400,height=600');
+                            }
+                          }}
+                          className="bg-red-50 hover:bg-red-100 text-red-500 p-2 rounded-lg transition-colors border border-red-100" title="Ver Comprobante"
                         >
                           <FaFilePdf size={16} />
                         </button>
@@ -394,6 +405,96 @@ export default function Historial() {
           </div>
         )}
       </div>
+
+      {/* MODAL 1: DETALLES DE LOS PRODUCTOS (EL OJITO) */}
+      <AnimatePresence>
+        {modalDetalles && (
+          <div className="fixed inset-0 bg-neutral-950/80 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="bg-neutral-950 p-5 flex justify-between items-center text-white border-b-4 border-verde-pastel">
+                <div>
+                  <h3 className="font-extrabold text-lg flex items-center gap-2 uppercase tracking-wide">
+                    <FaShoppingBag className="text-verde-pastel" /> Productos Vendidos
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono mt-1">
+                    OP: {modalDetalles.numeroComprobante || `#000${modalDetalles.id}`}
+                  </p>
+                </div>
+                <button onClick={() => setModalDetalles(null)} className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all">
+                  <FaTimes size={18} />
+                </button>
+              </div>
+              
+              <div className="p-0 bg-slate-50 max-h-[60vh] overflow-y-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead className="bg-slate-100 sticky top-0 border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4 font-bold text-slate-500 text-xs tracking-wider">CANT</th>
+                      <th className="py-3 px-4 font-bold text-slate-500 text-xs tracking-wider">PRODUCTO</th>
+                      <th className="py-3 px-4 font-bold text-slate-500 text-xs tracking-wider text-right">SUBTOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {modalDetalles.detalles.map((item) => (
+                      <tr key={item.id} className="bg-white hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-4 font-black text-slate-700">{item.cantidad}</td>
+                        <td className="py-3 px-4">
+                          <p className="font-bold text-slate-800">{item.producto.nombre}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">Cód: {item.producto.codigo}</p>
+                        </td>
+                        <td className="py-3 px-4 text-right font-black text-emerald-600 whitespace-nowrap">
+                          S/ {item.subtotal.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="bg-white p-5 border-t border-slate-200 flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total de esta venta</span>
+                <span className="text-2xl font-black text-slate-900 tracking-tighter">S/ {modalDetalles.total.toFixed(2)}</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 2: VISTA PREVIA DEL PDF (FACTURA/BOLETA SUNAT) */}
+      <AnimatePresence>
+        {modalPdf && (
+          <div className="fixed inset-0 bg-neutral-950/90 z-[90] flex flex-col items-center justify-center p-4 backdrop-blur-md">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-4xl h-[85vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col border border-neutral-800"
+            >
+              <div className="bg-neutral-950 p-4 flex justify-between items-center border-b border-neutral-800 shrink-0">
+                <h3 className="text-white font-bold flex items-center gap-2 text-sm uppercase tracking-widest">
+                  <FaFilePdf className="text-red-500 text-lg" /> Visor de Comprobante Electrónico
+                </h3>
+                <div className="flex gap-2">
+                  <a href={modalPdf} target="_blank" rel="noreferrer" className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors">
+                    Abrir en otra pestaña
+                  </a>
+                  <button onClick={() => setModalPdf(null)} className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
+                    <FaTimes size={14} /> Cerrar
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 bg-neutral-800 w-full">
+                <iframe src={modalPdf} title="Comprobante PDF" className="w-full h-full border-none" />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

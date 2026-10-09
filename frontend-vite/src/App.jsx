@@ -12,6 +12,7 @@ import { BusinessProvider } from './context/BusinessContext';
 import Configuracion from './pages/Configuracion';
 import Fiados from './pages/Fiados';
 import Historial from './pages/Historial';
+import Ticket from './pages/Ticket';
 
 // --- CONFIGURACIÓN GLOBAL DE AXIOS ---
 
@@ -101,7 +102,13 @@ function App() {
           <Route path="/ia-panel" element={<IAPlaceholder />} />
           <Route path="/configuracion" element={<Configuracion />} />
         </Route>
-        
+
+        <Route path="/ticket/:id" element={
+          <ProtectedRoute>
+            <Ticket />
+          </ProtectedRoute>
+        } />
+
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

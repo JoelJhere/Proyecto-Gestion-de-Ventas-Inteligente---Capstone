@@ -271,3 +271,22 @@ export const crearVenta = async (req, res) => {
     res.status(400).json({ message: error.message || 'Error interno al procesar' });
   }
 };
+
+export const obtenerVentaPorId = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const venta = await prisma.venta.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        detalles: { include: { producto: true } },
+        vendedor: { select: { nombre: true } }
+      }
+    });
+
+    if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
+    res.json(venta);
+  } catch (error) {
+    console.error("Error al obtener venta:", error);
+    res.status(500).json({ message: 'Error interno al cargar el ticket' });
+  }
+};
