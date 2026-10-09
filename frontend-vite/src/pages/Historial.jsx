@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, FaHistory, FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice } from 'react-icons/fa';
+import * as XLSX from 'xlsx';
 
 export default function Historial() {
   const [ventas, setVentas] = useState([]);
@@ -105,6 +106,71 @@ export default function Historial() {
     }
   };
 
+  const handleExportarExcel = async () => {
+    // Mostramos un toast de carga porque si hay 5,000 ventas tomará un par de segundos
+    const toastId = toast.loading('Generando reporte Excel, por favor espera...');
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      let fInicio = fechaInicio;
+      let fFin = fechaFin;
+      if (filtroActivo !== 'CUSTOM') {
+        const fechas = calcularFechasFiltro(filtroActivo);
+        fInicio = fechas.inicio;
+        fFin = fechas.fin;
+      }
+
+      // Hacemos una petición especial pidiendo hasta 10,000 registros para asegurarnos de traer todo el reporte
+      const res = await axios.get('/historial', {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          pagina: 1,
+          limite: 10000, 
+          busqueda,
+          fechaInicio: fInicio,
+          fechaFin: fFin
+        }
+      });
+
+      const ventasExportar = res.data.datos;
+
+      if (ventasExportar.length === 0) {
+        toast.error('No hay datos para exportar con estos filtros.', { id: toastId });
+        return;
+      }
+
+      // Mapeamos los datos para que las cabeceras en el Excel sean legibles y limpias
+      const dataExcel = ventasExportar.map(venta => ({
+        'Fecha': new Date(venta.createdAt).toLocaleDateString('es-PE'),
+        'Hora': new Date(venta.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+        'Tipo de Comprobante': venta.tipoComprobante === 'SIN_COMPROBANTE' ? 'TICKET SIMPLE' : venta.tipoComprobante,
+        'N° Comprobante': venta.numeroComprobante || 'TICKET INTERNO',
+        'Nombre del Cliente': venta.clienteNombre || 'Cliente Varios',
+        'Documento': venta.clienteDocumento !== '00000000' ? venta.clienteDocumento : 'Anónimo',
+        'Atendido por': venta.vendedor?.nombre || 'Desconocido',
+        'Subtotal (S/)': parseFloat(venta.subtotal),
+        'IGV (S/)': parseFloat(venta.igv),
+        'Total (S/)': parseFloat(venta.total)
+      }));
+
+      // Magia de la librería: Convertimos el JSON a una hoja de cálculo
+      const hoja = XLSX.utils.json_to_sheet(dataExcel);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, 'Historial');
+
+      // Descargamos el archivo con un nombre dinámico
+      const nombreArchivo = `Historial_Ventas_${filtroActivo}_${new Date().getTime()}.xlsx`;
+      XLSX.writeFile(libro, nombreArchivo);
+
+      toast.success('¡Excel exportado con éxito!', { id: toastId });
+
+    } catch (error) {
+      console.error('Error al exportar Excel:', error);
+      toast.error('Ocurrió un error al generar el archivo Excel.', { id: toastId });
+    }
+  };
+
   // Iconos de comprobantes
   const IconoComprobante = ({ tipo }) => {
     if (tipo === 'FACTURA') return <FaFileInvoice className="text-blue-500" title="Factura" />;
@@ -186,10 +252,10 @@ export default function Historial() {
             ))}
           </div>
 
-          {/* Botón Excel (Fase 3) */}
+          {/* Botón Excel */}
           <button 
-            onClick={() => toast.success('Módulo Excel programado para la FASE 3', { icon: '📊' })}
-            className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wide shrink-0"
+            onClick={handleExportarExcel}
+            className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wide shrink-0 shadow-sm hover:shadow"
           >
             <FaFileExcel size={16} /> Exportar
           </button>
@@ -241,26 +307,36 @@ export default function Historial() {
                 ventas.map((venta) => (
                   <tr key={venta.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                     <td className="p-4 whitespace-nowrap">
-                      <p className="font-bold text-slate-800">{new Date(venta.createdAt).toLocaleDateString('es-PE')}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">{new Date(venta.createdAt).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'})}</p>
+                      <p className="font-bold text-slate-800 text-sm">
+                        {new Date(venta.createdAt).toLocaleDateString('es-PE')}
+                      </p>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        {new Date(venta.createdAt).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'})}
+                      </p>
                     </td>
                     <td className="p-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <IconoComprobante tipo={venta.tipoComprobante} />
                         <div>
-                          <p className="font-bold text-slate-800">{venta.tipoComprobante}</p>
-                          <p className="text-[10px] text-slate-400 font-mono">{venta.numeroComprobante || 'TICKET INTERNO'}</p>
+                          <p className="font-bold text-slate-800 text-sm">
+                            {venta.tipoComprobante === 'SIN_COMPROBANTE' ? 'TICKET SIMPLE' : venta.tipoComprobante}
+                          </p>
+                          <p className="text-xs text-slate-500 font-mono mt-0.5">
+                            {venta.numeroComprobante || 'TICKET INTERNO'}
+                          </p>
                         </div>
                       </div>
                     </td>
                     <td className="p-4 max-w-[200px] truncate">
-                      <p className="font-bold text-slate-800 truncate" title={venta.clienteNombre}>{venta.clienteNombre}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">
-                        {venta.clienteDocumento !== "00000000" ? `Doc: ${venta.clienteDocumento}` : 'Cliente Anónimo'}
+                      <p className="font-bold text-slate-800 text-sm truncate" title={venta.clienteNombre}>
+                        {venta.clienteNombre || 'Cliente Varios'}
+                      </p>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">
+                        {venta.clienteDocumento && venta.clienteDocumento !== "00000000" ? `Doc: ${venta.clienteDocumento}` : 'Cliente Anónimo'}
                       </p>
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
-                      <p className="font-black text-emerald-600">S/ {venta.total.toFixed(2)}</p>
+                      <p className="font-black text-emerald-600 text-base">S/ {venta.total.toFixed(2)}</p>
                     </td>
                     <td className="p-4 text-center whitespace-nowrap">
                       <div className="flex justify-center items-center gap-2">
@@ -268,7 +344,7 @@ export default function Historial() {
                           onClick={() => toast.success('Modal de Detalles programado para FASE 4', { icon: '👁️' })}
                           className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-lg transition-colors border border-slate-200" title="Ver Detalles de Productos"
                         >
-                          <FaEye size={14} />
+                          <FaEye size={16} />
                         </button>
                         
                         <button 
@@ -276,7 +352,7 @@ export default function Historial() {
                           disabled={!venta.enlacePdf}
                           className="bg-red-50 hover:bg-red-100 text-red-500 p-2 rounded-lg transition-colors border border-red-100 disabled:opacity-40 disabled:cursor-not-allowed" title="Ver Comprobante PDF"
                         >
-                          <FaFilePdf size={14} />
+                          <FaFilePdf size={16} />
                         </button>
                       </div>
                     </td>
