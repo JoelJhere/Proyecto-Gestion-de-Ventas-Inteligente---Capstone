@@ -44,22 +44,50 @@ export default function Fiados() {
     return limite <= hoy; 
   };
 
-  // Nueva función con mensaje de confirmación
-  const handleLiquidarConfirmado = async (id, nombreVecino, monto) => {
-    const confirmar = window.confirm(`¿Estás seguro de liquidar y marcar como PAGADA la deuda de S/ ${monto.toFixed(2)} de ${nombreVecino}?`);
-    
-    if (!confirmar) return; // Si cancela, no hace nada
-
-    setProcesandoId(id);
-    try {
-      await axios.put(`/fiados/pagar/${id}`);
-      toast.success(`Deuda de ${nombreVecino} liquidada con éxito.`, { icon: '💰' });
-      setFiados(prev => prev.filter(f => f.id !== id));
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Error al procesar el pago.');
-    } finally {
-      setProcesandoId(null);
-    }
+  // Función con mensaje de confirmación
+  const handleLiquidarConfirmado = (id, nombreVecino, monto) => {
+    // Lanzamos un toast personalizado que no se cierra automáticamente
+    toast((t) => (
+      <div className="flex flex-col gap-3 p-1">
+        <p className="text-sm font-bold text-slate-800 text-center">
+          ¿Estás seguro de liquidar y marcar como <span className="text-verde-pastel bg-neutral-950 px-1.5 py-0.5 rounded">PAGADA</span> la deuda de S/ {monto.toFixed(2)} de {nombreVecino}?
+        </p>
+        <div className="flex justify-center gap-3 mt-2">
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id); // Cerramos el toast de confirmación
+              setProcesandoId(id);
+              try {
+                await axios.put(`/fiados/pagar/${id}`);
+                toast.success(`Deuda de ${nombreVecino} liquidada con éxito.`, { icon: '💰' });
+                setFiados(prev => prev.filter(f => f.id !== id));
+              } catch (error) {
+                toast.error(error.response?.data?.message || 'Error al procesar el pago.');
+              } finally {
+                setProcesandoId(null);
+              }
+            }}
+            className="flex-1 bg-neutral-950 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-neutral-800 transition-colors shadow-sm"
+          >
+            Sí, Cobrar
+          </button>
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="flex-1 bg-slate-100 text-slate-600 border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: Infinity, // Se queda abierto hasta que el usuario decida
+      position: 'top-center',
+      style: {
+        border: '1px solid #e2e8f0',
+        padding: '16px',
+        maxWidth: '350px'
+      }
+    });
   };
 
   // Función para enviar WhatsApp y quitar la alerta visual
