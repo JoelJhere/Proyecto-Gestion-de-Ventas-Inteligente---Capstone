@@ -100,7 +100,10 @@ model Venta {
   vendedorId       Int
   vendedor         User           @relation(fields: [vendedorId], references: [id])
   tipoComprobante  TipoDocumento  // Enum: BOLETA, FACTURA, TICKET_SIMPLE
-  numeroComprobante String?       // Ej: B001-000045
+  numeroComprobante String?       
+  clienteNombre     String?        @default("Cliente Varios")
+  clienteDocumento  String?        
+  enlacePdf         String?       
   subtotal         Float
   igv              Float
   total            Float

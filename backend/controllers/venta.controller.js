@@ -146,6 +146,10 @@ export const crearVenta = async (req, res) => {
         clienteIdDb = clienteDB.id;
       }
 
+      // Validamos los datos para guardarlos en nuestra BD local
+      const nombreFinal = (cliente && cliente.nombre && cliente.nombre.trim() !== '') ? cliente.nombre : "CLIENTES VARIOS";
+      const documentoFinal = (cliente && cliente.documento && cliente.documento.trim() !== '') ? cliente.documento : "00000000";
+
       const venta = await tx.venta.create({
         data: {
           vendedorId: parseInt(vendedorId),
@@ -154,6 +158,9 @@ export const crearVenta = async (req, res) => {
           subtotal: parseFloat(subtotal),
           igv: parseFloat(igv),
           total: parseFloat(total),
+          clienteNombre: nombreFinal,
+          clienteDocumento: documentoFinal,
+          enlacePdf: linkPdf
         }
       });
 
