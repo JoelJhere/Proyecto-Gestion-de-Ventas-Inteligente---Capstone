@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export const obtenerHistorialVentas = async (req, res) => {
+  const negocioId = req.user.negocioId;
+
   try {
     // 1. Recibir parámetros de la URL
     const { 
@@ -17,8 +19,10 @@ export const obtenerHistorialVentas = async (req, res) => {
     const take = parseInt(limite);
     const skip = (page - 1) * take;
 
-    // 2. Construir la consulta dinámica (Filtros)
-    const whereClause = {};
+    // 2. Construir la consulta dinámica (SIEMPRE FILTRADA POR EL NEGOCIO ACTUAL)
+    const whereClause = {
+      negocioId: negocioId // <-- CLAVE SAAS QUE FALTABA
+    };
 
     // A. Filtro por Rango de Fechas
     if (fechaInicio || fechaFin) {
@@ -27,7 +31,6 @@ export const obtenerHistorialVentas = async (req, res) => {
         whereClause.createdAt.gte = new Date(`${fechaInicio}T00:00:00.000Z`);
       }
       if (fechaFin) {
-        // Aseguramos cubrir hasta el último segundo del día final
         const dateFin = new Date(`${fechaFin}T23:59:59.999Z`);
         whereClause.createdAt.lte = dateFin; 
       }
@@ -44,15 +47,15 @@ export const obtenerHistorialVentas = async (req, res) => {
 
     // 3. Consultar la Base de Datos (Paginado)
     const [totalVentas, ventas] = await prisma.$transaction([
-      prisma.venta.count({ where: whereClause }), // Cuenta cuántas hay en total
+      prisma.venta.count({ where: whereClause }),
       prisma.venta.findMany({
         where: whereClause,
         skip,
         take,
-        orderBy: { createdAt: 'desc' }, // Las más recientes primero
+        orderBy: { createdAt: 'desc' },
         include: {
           vendedor: {
-            select: { nombre: true } // Traemos quién la vendió
+            select: { nombre: true }
           },
           detalles: {
             include: {
@@ -61,7 +64,6 @@ export const obtenerHistorialVentas = async (req, res) => {
               }
             }
           },
-          // Si fue fiado, traemos info extra opcional
           cuentaPorCobrar: {
             select: { estado: true }
           }
@@ -70,7 +72,6 @@ export const obtenerHistorialVentas = async (req, res) => {
     ]);
 
     // 4. Calcular métricas para las "Tarjetas de Resumen (Top)"
-    // Hacemos una suma rápida del total vendido en el filtro actual
     const agregaciones = await prisma.venta.aggregate({
       where: whereClause,
       _sum: { total: true },

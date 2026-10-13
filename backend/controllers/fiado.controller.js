@@ -2,22 +2,27 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// 1. Obtener la lista de vecinos que deben (Fiados Pendientes)
+// 1. Obtener la lista de vecinos que deben (SOLO DE LA BODEGA ACTUAL)
 export const obtenerFiadosPendientes = async (req, res) => {
+  const negocioId = req.user.negocioId;
+
   try {
     const fiados = await prisma.cuentaPorCobrar.findMany({
-      where: { estado: 'PENDIENTE' },
+      where: { 
+        estado: 'PENDIENTE',
+        cliente: { negocioId: negocioId } // Filtro SaaS a través del cliente
+      },
       include: {
-        cliente: true, // Trae el nombre y WhatsApp del vecino
+        cliente: true,
         venta: {
           include: { 
             detalles: { 
-              include: { producto: true } // Trae qué productos se llevó
+              include: { producto: true } 
             } 
           }
         }
       },
-      orderBy: { createdAt: 'desc' } // Los más recientes primero
+      orderBy: { createdAt: 'desc' }
     });
 
     res.status(200).json(fiados);
@@ -30,8 +35,17 @@ export const obtenerFiadosPendientes = async (req, res) => {
 // 2. Liquidar (Pagar) la deuda del vecino
 export const liquidarFiado = async (req, res) => {
   const { id } = req.params;
+  const negocioId = req.user.negocioId;
 
   try {
+    const fiadoExistente = await prisma.cuentaPorCobrar.findFirst({
+      where: { id: parseInt(id), cliente: { negocioId: negocioId } }
+    });
+
+    if (!fiadoExistente) {
+      return res.status(404).json({ message: 'Fiado no encontrado en tu negocio.' });
+    }
+
     const fiadoPagado = await prisma.cuentaPorCobrar.update({
       where: { id: parseInt(id) },
       data: {
@@ -53,13 +67,22 @@ export const liquidarFiado = async (req, res) => {
 // 3. Actualizar la fecha límite del recordatorio (Edición manual)
 export const actualizarPlazo = async (req, res) => {
   const { id } = req.params;
-  const { nuevaFecha } = req.body; // Esperamos un formato YYYY-MM-DD
+  const negocioId = req.user.negocioId;
+  const { nuevaFecha } = req.body;
 
   try {
+    const fiadoExistente = await prisma.cuentaPorCobrar.findFirst({
+      where: { id: parseInt(id), cliente: { negocioId: negocioId } }
+    });
+
+    if (!fiadoExistente) {
+      return res.status(404).json({ message: 'Fiado no encontrado en tu negocio.' });
+    }
+
     const fiadoActualizado = await prisma.cuentaPorCobrar.update({
       where: { id: parseInt(id) },
       data: {
-        fechaLimite: new Date(nuevaFecha) // Actualizamos la fecha en la BD
+        fechaLimite: new Date(nuevaFecha)
       }
     });
 
@@ -73,20 +96,20 @@ export const actualizarPlazo = async (req, res) => {
   }
 };
 
-// 4. NUEVO: Registrar envío de WhatsApp (Pospone 1 día y cuenta el aviso)
+// 4. Registrar envío de WhatsApp (Pospone 1 día y cuenta el aviso)
 export const registrarAvisoWhatsApp = async (req, res) => {
   const { id } = req.params;
+  const negocioId = req.user.negocioId;
   
   try {
-    const fiado = await prisma.cuentaPorCobrar.findUnique({ 
-      where: { id: parseInt(id) } 
+    const fiado = await prisma.cuentaPorCobrar.findFirst({ 
+      where: { id: parseInt(id), cliente: { negocioId: negocioId } } 
     });
 
     if (!fiado) {
-      return res.status(404).json({ message: 'Fiado no encontrado' });
+      return res.status(404).json({ message: 'Fiado no encontrado en tu negocio' });
     }
     
-    // Sumamos 1 día a la fecha actual para el próximo recordatorio
     const manana = new Date();
     manana.setDate(manana.getDate() + 1);
 

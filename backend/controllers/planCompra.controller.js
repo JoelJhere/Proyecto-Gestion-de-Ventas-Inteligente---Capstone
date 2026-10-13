@@ -2,10 +2,13 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// 1. Obtener todos los planes de compra
+// 1. Obtener todos los planes de compra (SOLO DE LA BODEGA ACTUAL)
 export const obtenerPlanes = async (req, res) => {
+  const negocioId = req.user.negocioId;
+
   try {
     const planes = await prisma.planCompra.findMany({
+      where: { negocioId: negocioId }, // Filtro SaaS
       include: {
         proveedor: true,
         detalles: {
@@ -22,14 +25,15 @@ export const obtenerPlanes = async (req, res) => {
 
 // 2. Crear un nuevo Plan de Compra (Estado: PENDIENTE)
 export const crearPlan = async (req, res) => {
+  const negocioId = req.user.negocioId;
   const { proveedorId, fechaEsperada, detalles } = req.body; 
 
   try {
-    // Calculamos el total proyectado de la nota
     const totalEsperado = detalles.reduce((sum, item) => sum + (item.cantidadEsperada * item.precioCompra), 0);
 
     const nuevoPlan = await prisma.planCompra.create({
       data: {
+        negocioId: negocioId, // Amarramos el plan al negocio del dueño
         proveedorId: parseInt(proveedorId),
         fechaEsperada: fechaEsperada ? new Date(fechaEsperada) : null,
         totalEsperado,
@@ -50,16 +54,19 @@ export const crearPlan = async (req, res) => {
   }
 };
 
-// 3. RECIBIR LA MERCADERÍA (La función mágica que suma el stock)
+// 3. RECIBIR LA MERCADERÍA (Validando propiedad de la bodega)
 export const recibirPlan = async (req, res) => {
   const { id } = req.params;
+  const negocioId = req.user.negocioId;
   const { detallesRecibidos } = req.body; 
 
   try {
     const resultado = await prisma.$transaction(async (tx) => {
-      // A. Verificamos que el plan exista y no haya sido recibido antes
-      const plan = await tx.planCompra.findUnique({ where: { id: parseInt(id) } });
-      if (!plan) throw new Error('Plan no encontrado');
+      // A. Verificamos que el plan exista, sea de esta bodega y no haya sido recibido
+      const plan = await tx.planCompra.findFirst({ 
+        where: { id: parseInt(id), negocioId: negocioId } 
+      });
+      if (!plan) throw new Error('Plan no encontrado en tu negocio');
       if (plan.estado === 'RECIBIDO') throw new Error('Este pedido ya fue ingresado al sistema anteriormente');
 
       let totalReal = 0;
@@ -69,10 +76,8 @@ export const recibirPlan = async (req, res) => {
         const cantidadIngresada = parseInt(item.cantidadRecibida);
         const costoUnitario = parseFloat(item.precioCompra);
 
-        // Sumamos al costo total real de la factura
         totalReal += (cantidadIngresada * costoUnitario);
 
-        // Actualizamos la fila del detalle en la nota de compra
         await tx.detallePlanCompra.update({
           where: { id: parseInt(item.detalleId) },
           data: { cantidadRecibida: cantidadIngresada }
@@ -80,7 +85,6 @@ export const recibirPlan = async (req, res) => {
 
         // C. SI LLEGÓ MERCADERÍA, ACTUALIZAMOS EL STOCK Y EL HISTORIAL
         if (cantidadIngresada > 0) {
-          // Sumar inventario Y actualizar el nuevo costo de compra
           await tx.producto.update({
             where: { id: parseInt(item.productoId) },
             data: { 
@@ -89,7 +93,6 @@ export const recibirPlan = async (req, res) => {
             }
           });
 
-          // Registrar el movimiento para que la IA lo sepa
           await tx.movimientoInventario.create({
             data: {
               productoId: parseInt(item.productoId),
