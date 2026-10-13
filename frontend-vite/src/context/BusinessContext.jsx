@@ -12,11 +12,21 @@ export const BusinessProvider = ({ children }) => {
   useEffect(() => {
     const cargarConfiguracion = async () => {
       const token = localStorage.getItem('token');
-      if (!token) return; 
+      const userStr = localStorage.getItem('user');
+      
+      if (!token || !userStr) return; 
+      
+      const user = JSON.parse(userStr);
+
+      // REGLA SAAS: Si es el creador (SUPER_ADMIN), no buscamos configuración de bodega
+      if (user.rol === 'SUPER_ADMIN') {
+        setBusinessConfig({ nombre: 'Panel Maestro SaaS', ruc: '' });
+        return;
+      }
 
       try {
-        const url = `https://proyecto-gestion-de-ventas-inteligente.onrender.com/api/configuracion`;
-        const res = await axios.get(url, {
+        // Usamos solo la ruta relativa porque Axios ya tiene la baseURL en App.jsx
+        const res = await axios.get('/configuracion', {
           headers: { Authorization: `Bearer ${token}` }
         });
         
