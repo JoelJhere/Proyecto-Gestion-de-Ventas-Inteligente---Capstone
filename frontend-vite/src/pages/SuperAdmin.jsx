@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FaServer, FaStore, FaUsers, FaChartLine, FaClock, FaSignOutAlt, FaMapMarkerAlt, FaPhoneAlt } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -7,7 +6,6 @@ import toast from 'react-hot-toast';
 export default function SuperAdmin() {
   const [negocios, setNegocios] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const cargarNegocios = async () => {
@@ -32,7 +30,7 @@ export default function SuperAdmin() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('pos_config');
-    navigate('/login');
+    window.location.href = '/login';
   };
 
   // Función para calcular la antigüedad

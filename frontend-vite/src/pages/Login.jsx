@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FaUserShield, FaLock, FaSpinner, FaStore, FaIdCard, FaUserTie } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { useBusiness } from '../context/BusinessContext';
 
 // --- COMPONENTES VISUALES ---
   const InputField = ({ icon: Icon, type, value, onChange, placeholder, disabled, required = true }) => (
@@ -26,8 +25,6 @@ export default function Login() {
   // Validar si el usuario fue redirigido por caducidad de token
   const queryParams = new URLSearchParams(location.search);
   const sesionExpirada = queryParams.get('motivo') === 'expirado';
-
-  const { businessConfig } = useBusiness();
 
   // Estados Generales
   const [isLoading, setIsLoading] = useState(false);
@@ -164,20 +161,18 @@ export default function Login() {
       <AnimatePresence mode="wait">
         {!isRegistering ? (
           
-          /* ========================================= */
           /* ============= VISTA DE LOGIN ============ */
-          /* ========================================= */
           <motion.div 
             key="login"
             initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }} transition={{ duration: 0.3 }}
             className="bg-neutral-950/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.8)] w-full max-w-md z-10 border border-neutral-800 hover:border-verde-pastel/30 transition-colors duration-500 mt-12"
           >
-            <div className="text-center mb-10">
-              <h1 className="text-4xl font-extrabold text-white mb-3 tracking-tight flex items-center justify-center gap-3">
-                <div className="w-4 h-4 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.5)]"></div>
-                {businessConfig.nombre || 'Bodega NOVA'}
+            <div class="text-center mb-10">
+              <h1 class="text-4xl font-extrabold text-white mb-3 tracking-tight flex items-center justify-center gap-3">
+                <div class="w-4 h-4 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.5)]"></div>
+                VendaIA
               </h1>
-              <p className="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Sistema Inteligente POS</p>
+              <p class="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Gestión Inteligente Multi-Negocio</p>
             </div>
 
             {sesionExpirada && (
@@ -210,9 +205,7 @@ export default function Login() {
 
         ) : (
 
-          /* ========================================= */
           /* ========== VISTA DE REGISTRO SAAS ======= */
-          /* ========================================= */
           <motion.div 
             key="registro"
             initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
@@ -10,14 +10,14 @@ export default function Layout() {
   const [hayAlertasFiados, setHayAlertasFiados] = useState(false); 
   
   const location = useLocation();
-  const navigate = useNavigate();
   const { businessConfig } = useBusiness();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    localStorage.removeItem('pos_config');
+    window.location.href = '/login';
   };
 
   const menuItems = [
