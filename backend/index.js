@@ -37,7 +37,7 @@ app.use('/api/ventas', ventaRoutes);
 app.use('/api/externa', apiRoutes);
 app.use('/api/fiados', fiadoRoutes);
 app.use('/api/historial', historialRoutes);
-app.use('/api/superadmin', superadminRoutes);
+app.use('/api/master', superadminRoutes);
 app.get('/api/status', (req, res) => {
   res.json({ mensaje: 'Servidor del POS Abarrotes AJ funcionando correctamente' });
 });
