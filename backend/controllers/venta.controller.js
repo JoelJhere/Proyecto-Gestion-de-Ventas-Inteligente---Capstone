@@ -4,12 +4,20 @@ import axios from 'axios';
 const prisma = new PrismaClient();
 
 export const crearVenta = async (req, res) => {
-  // AÑADIDO: Recibimos la variable 'esFiado' desde el frontend
   const { carrito, tipoComprobante, subtotal, igv, total, cliente, metodoEnvio, esFiado } = req.body;
   const vendedorId = req.user.id; 
+  const negocioId = req.user.negocioId;
 
-  const configNegocioFinal = await prisma.businessConfig.findFirst();
-  const nombreParaFrontend = configNegocioFinal?.nombre || 'nuestro local';
+  // 1. OBTENEMOS LA CONFIGURACIÓN DEL NEGOCIO ESPECÍFICO
+  const configNegocio = await prisma.negocio.findUnique({
+    where: { id: negocioId }
+  });
+  
+  if (!configNegocio) {
+    return res.status(404).json({ message: 'Error crítico: No se encontró la configuración de tu bodega.' });
+  }
+
+  const nombreParaFrontend = configNegocio.nombre || 'nuestro local';
 
   if (!carrito || carrito.length === 0) {
     return res.status(400).json({ message: 'El carrito está vacío' });
@@ -21,16 +29,21 @@ export const crearVenta = async (req, res) => {
   }
 
   try {
-    // Si es fiado, forzamos internamente a que sea un ticket simple
     let tipoDocDB = 'SIN_COMPROBANTE';
     if (!esFiado) {
       if (tipoComprobante === 'BOLETA') tipoDocDB = 'BOLETA';
       if (tipoComprobante === 'FACTURA') tipoDocDB = 'FACTURA';
     }
 
-    // 1. VALIDACIÓN PREVIA DE STOCK
+    // 2. VALIDACIÓN PREVIA DE STOCK (Asegurando que el producto pertenece al negocio)
     for (const item of carrito) {
-      const productoDB = await prisma.producto.findUnique({ where: { id: item.id } });
+      const productoDB = await prisma.producto.findUnique({ 
+        where: { id: item.id } 
+      });
+      // Doble check: verificar que el producto exista y pertenezca al negocio actual
+      if (!productoDB || productoDB.negocioId !== negocioId) {
+          return res.status(400).json({ message: `Producto inválido o no pertenece a tu inventario: ${item.nombre}` });
+      }
       if (productoDB.stock < item.cantidad) {
         return res.status(400).json({ message: `Stock insuficiente para: ${item.nombre}` });
       }
@@ -40,17 +53,19 @@ export const crearVenta = async (req, res) => {
     let linkXml = null;
     let correlativoFinal = esFiado ? `FIADO-${Date.now()}` : `${tipoDocDB.charAt(0)}-${Date.now()}`;
 
-    // 2. INTEGRACIÓN CON NUBEFACT (SOLO SI NO ES FIADO Y NO ES TICKET)
+    // 3. INTEGRACIÓN CON NUBEFACT (SOLO SI NO ES FIADO Y NO ES TICKET)
     if (tipoComprobante !== 'TICKET' && !esFiado) {
       
-      const configNegocio = await prisma.businessConfig.findFirst();
-      
-      if (!configNegocio || !configNegocio.nubefactRuta || !configNegocio.nubefactToken) {
-        return res.status(400).json({ message: 'El negocio no tiene configuradas las credenciales de facturación (Ruta y Token API).' });
+      if (!configNegocio.nubefactRuta || !configNegocio.nubefactToken) {
+        return res.status(400).json({ message: 'Tu bodega no tiene configuradas las credenciales de facturación electrónica (API Nubefact).' });
       }
 
+      // Buscar el último comprobante DE ESTE NEGOCIO para el correlativo
       const ultimaVenta = await prisma.venta.findFirst({
-        where: { tipoComprobante: tipoDocDB },
+        where: { 
+          tipoComprobante: tipoDocDB,
+          negocioId: negocioId // Filtrar por negocio
+        },
         orderBy: { id: 'desc' }
       });
       
@@ -129,29 +144,39 @@ export const crearVenta = async (req, res) => {
       }
     }
 
-    // 3. GUARDAR EN NUESTRA BASE DE DATOS (Transacción)
+    // 4. GUARDAR EN NUESTRA BASE DE DATOS LOCAL (Transacción)
     const nuevaVenta = await prisma.$transaction(async (tx) => {
       
       let clienteIdDb = null;
       if (esFiado) {
+        // Buscar cliente asegurándonos que sea de esta bodega
         let clienteDB = await tx.cliente.findFirst({
-          where: { nombre: cliente.nombre, telefono: cliente.telefono }
+          where: { 
+            nombre: cliente.nombre, 
+            telefono: cliente.telefono,
+            negocioId: negocioId
+          }
         });
         
         if (!clienteDB) {
           clienteDB = await tx.cliente.create({
-            data: { nombre: cliente.nombre, telefono: cliente.telefono }
+            data: { 
+              nombre: cliente.nombre, 
+              telefono: cliente.telefono,
+              negocioId: negocioId // Relacionar el nuevo cliente a la bodega
+            }
           });
         }
         clienteIdDb = clienteDB.id;
       }
 
-      // Validamos los datos para guardarlos en nuestra BD local
       const nombreFinal = (cliente && cliente.nombre && cliente.nombre.trim() !== '') ? cliente.nombre : "CLIENTES VARIOS";
       const documentoFinal = (cliente && cliente.documento && cliente.documento.trim() !== '') ? cliente.documento : "00000000";
 
+      // Crear Venta asignada al Negocio
       const venta = await tx.venta.create({
         data: {
+          negocioId: negocioId, // ¡CLAVE SAAS!
           vendedorId: parseInt(vendedorId),
           tipoComprobante: tipoDocDB,
           numeroComprobante: correlativoFinal,
@@ -208,11 +233,9 @@ export const crearVenta = async (req, res) => {
       return venta;
     });
 
-    // --- 4. ENVÍO DE COMPROBANTE POR CORREO (API DE BREVO) ---
+    // 5. ENVÍO DE COMPROBANTE POR CORREO (API DE BREVO)
     if (!esFiado && metodoEnvio === 'CORREO' && cliente.correo && linkPdf) {
       try {
-        const configNegocio = await prisma.businessConfig.findFirst();
-        const nombreNegocio = configNegocio?.nombre || 'Bodega NOVA';
         const remitenteOficial = process.env.EMAIL_USER; 
 
         const htmlTemplate = `
@@ -222,7 +245,7 @@ export const crearVenta = async (req, res) => {
             </div>
             <div style="padding: 30px; background-color: #ffffff; color: #334155;">
               <p style="font-size: 16px;">Hola <strong>${cliente.nombre || 'Cliente'}</strong>,</p>
-              <p style="font-size: 16px;">Adjuntamos el enlace para que puedas visualizar y descargar tu comprobante electrónico de manera segura.</p>
+              <p style="font-size: 16px;">Adjuntamos el enlace para que puedas visualizar y descargar tu comprobante electrónico de manera segura emitido por <strong>${nombreParaFrontend}</strong>.</p>
               
               <div style="background-color: #f8fafc; border-left: 4px solid #d4af37; padding: 15px; margin: 25px 0;">
                 <p style="margin: 0; font-size: 14px; color: #64748b;">Total pagado:</p>
@@ -239,13 +262,12 @@ export const crearVenta = async (req, res) => {
         `;
 
         const payloadBrevo = {
-          sender: { name: nombreNegocio, email: remitenteOficial },
+          sender: { name: nombreParaFrontend, email: remitenteOficial },
           to: [{ email: cliente.correo, name: cliente.nombre || 'Cliente' }],
-          subject: `Tu comprobante electrónico de ${nombreNegocio} ya está listo`,
+          subject: `Tu comprobante electrónico de ${nombreParaFrontend} ya está listo`,
           htmlContent: htmlTemplate
         };
 
-        // Enviar la petición HTTP a Brevo (no bloqueada por Render)
         axios.post('https://api.brevo.com/v3/smtp/email', payloadBrevo, {
           headers: {
             'accept': 'application/json',
@@ -274,6 +296,8 @@ export const crearVenta = async (req, res) => {
 
 export const obtenerVentaPorId = async (req, res) => {
   const { id } = req.params;
+  const negocioId = req.user.negocioId;
+
   try {
     const venta = await prisma.venta.findUnique({
       where: { id: parseInt(id) },
@@ -283,7 +307,11 @@ export const obtenerVentaPorId = async (req, res) => {
       }
     });
 
-    if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
+    // Validar que la venta exista y pertenezca a la bodega correcta
+    if (!venta || venta.negocioId !== negocioId) {
+       return res.status(404).json({ message: 'Venta no encontrada o no pertenece a su bodega.' });
+    }
+
     res.json(venta);
   } catch (error) {
     console.error("Error al obtener venta:", error);
