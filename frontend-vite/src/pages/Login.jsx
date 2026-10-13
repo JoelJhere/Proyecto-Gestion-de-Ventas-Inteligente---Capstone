@@ -79,7 +79,14 @@ export default function Login() {
       setIntentosFallidos(0);
       toast.success('¡Sesión iniciada correctamente!', { style: toastStyle, iconTheme: { primary: '#a7f3d0', secondary: '#000' } });
       
-      setTimeout(() => navigate('/ventas'), 1000);
+      // REDIRECCIÓN INTELIGENTE BASADA EN EL ROL
+      setTimeout(() => {
+        if (res.data.user.rol === 'SUPER_ADMIN') {
+          navigate('/master');
+        } else {
+          navigate('/ventas');
+        }
+      }, 1000);
       
     } catch (err) {
       console.error("Fallo de autenticación interno:", err);
