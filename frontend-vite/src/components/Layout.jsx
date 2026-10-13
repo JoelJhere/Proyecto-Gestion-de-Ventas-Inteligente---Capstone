@@ -10,7 +10,6 @@ export default function Layout() {
   const [hayAlertasFiados, setHayAlertasFiados] = useState(false); 
   
   const location = useLocation();
-  // EXTRAEMOS setBusinessConfig PARA PODER ACTUALIZARLO DESDE AQUÍ
   const { businessConfig, setBusinessConfig } = useBusiness();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -40,7 +39,7 @@ export default function Layout() {
     if (mainRef.current) mainRef.current.scrollTo(0, 0);
   }, [location.pathname]);
 
-  // NUEVO: FORZAR CARGA DE CONFIGURACIÓN AL ENTRAR SI ESTÁ VACÍA
+  // FORZAR CARGA DE CONFIGURACIÓN AL ENTRAR SI ESTÁ VACÍA
   useEffect(() => {
     const fetchConfigSeguridad = async () => {
       if (!businessConfig || !businessConfig.nombre) {

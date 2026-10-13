@@ -13,6 +13,7 @@ import apiRoutes from './routes/api.routes.js';
 import fiadoRoutes from './routes/fiado.routes.js';
 import historialRoutes from './routes/historial.routes.js';
 import superadminRoutes from './routes/superadmin.routes.js';
+import usuarioRoutes from './routes/usuario.routes.js';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -38,6 +39,7 @@ app.use('/api/externa', apiRoutes);
 app.use('/api/fiados', fiadoRoutes);
 app.use('/api/historial', historialRoutes);
 app.use('/api/master', superadminRoutes);
+app.use('/api/usuarios', usuarioRoutes);
 app.get('/api/status', (req, res) => {
   res.json({ mensaje: 'Servidor del POS Abarrotes AJ funcionando correctamente' });
 });
