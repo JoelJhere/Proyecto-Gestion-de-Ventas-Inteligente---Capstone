@@ -176,7 +176,7 @@ export const crearVenta = async (req, res) => {
       // Crear Venta asignada al Negocio
       const venta = await tx.venta.create({
         data: {
-          negocioId: negocioId, // ¡CLAVE SAAS!
+          negocioId: negocioId,
           vendedorId: parseInt(vendedorId),
           tipoComprobante: tipoDocDB,
           numeroComprobante: correlativoFinal,
