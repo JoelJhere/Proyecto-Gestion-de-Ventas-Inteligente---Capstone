@@ -16,7 +16,6 @@ export default function Layout() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    localStorage.removeItem('pos_config');
     window.location.href = '/login';
   };
 
