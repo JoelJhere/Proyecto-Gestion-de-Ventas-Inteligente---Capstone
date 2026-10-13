@@ -43,12 +43,26 @@ export default function Ventas() {
   const subtotalBase = tipoComprobante !== 'TICKET' ? (totalPagado / factorIgv) : totalPagado;
   const montoIgv = tipoComprobante !== 'TICKET' ? (totalPagado - subtotalBase) : 0;
 
-  // Cargar Catálogo (Solo productos con stock y activos)
+  // Cargar Catálogo y limpiar productos del carrito que no pertenezcan a esta bodega
   const cargarCatalogo = async () => {
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get('/productos', { headers: { Authorization: `Bearer ${token}` } });
-      setProductos(res.data.filter(p => p.estado === true && p.stock > 0));
+      const disponibles = res.data.filter(p => p.estado === true && p.stock > 0);
+      setProductos(disponibles);
+
+      // Seguridad Multi-Bodega: filtramos el carrito en caché para que solo queden productos de esta tienda
+      setCarrito(prevCarrito => 
+        prevCarrito
+          .filter(item => disponibles.some(p => p.id === item.id))
+          .map(item => {
+            const prodActual = disponibles.find(p => p.id === item.id);
+            return {
+              ...prodActual,
+              cantidad: Math.min(item.cantidad, prodActual.stock)
+            };
+          })
+      );
     } catch (error) {
       console.error("Error al cargar productos", error);
       toast.error("No se pudo cargar el inventario.");
@@ -164,10 +178,8 @@ export default function Ventas() {
 
       let nombreEncontrado = '';
       if (tipoConsulta === 'ruc') {
-        // Soporte para la nueva API (business_name) o la antigua (razonSocial)
         nombreEncontrado = res.data.business_name || res.data.razonSocial || res.data.razon_social;
       } else {
-        // NUEVA ESTRUCTURA DE DECOLECTA USANDO full_name
         nombreEncontrado = res.data.full_name || `${res.data.first_name} ${res.data.first_last_name}`;
       }
 
@@ -187,12 +199,13 @@ export default function Ventas() {
   const handleProcesarVenta = async (esFiado = false) => {
     if (carrito.length === 0) return toast.error('El carrito está vacío.');
 
-    // Validación exclusiva para Fiados
     if (esFiado) {
       if (!cliente.nombre.trim()) return toast.error('Ingrese el nombre del vecino para fiarle.');
-      if (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9')) return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');    }
+      if (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9')) {
+        return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');
+      }
+    }
 
-    // Validaciones exclusivas para SUNAT (Boletas y Facturas)
     if (tipoComprobante === 'FACTURA') {
       if (!cliente.documento || cliente.documento.length !== 11) return toast.error('Ingrese un RUC válido de 11 dígitos.');
       if (!cliente.nombre.trim()) return toast.error('Ingrese la Razón Social.');
@@ -201,16 +214,24 @@ export default function Ventas() {
       if (!cliente.nombre.trim()) return toast.error('Ingrese el Nombre del cliente.');
     }
 
-    // Validaciones de Método de Envío solo si no es Venta Rápida
-    if (tipoComprobante !== 'TICKET') {
+    if (tipoComprobante !== 'TICKET' && !esFiado) {
       if (metodoEnvio === 'CORREO' && !cliente.correo.trim()) return toast.error('Ingrese el correo electrónico para enviar el comprobante.');
-      if (metodoEnvio === 'WHATSAPP' && (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9'))) return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');    }
+      if (metodoEnvio === 'WHATSAPP' && (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9'))) {
+        return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');
+      }
+    }
 
     setIsProcessing(true);
     try {
       const token = localStorage.getItem('token');
       const payload = {
-        carrito: carrito.map(item => ({ id: item.id, cantidad: item.cantidad, precioVenta: item.precioVenta, nombre: item.nombre })),
+        carrito: carrito.map(item => ({ 
+          id: item.id, 
+          codigo: item.codigo, // <-- Enviamos el código real a Nubefact
+          cantidad: item.cantidad, 
+          precioVenta: item.precioVenta, 
+          nombre: item.nombre 
+        })),
         tipoComprobante,
         subtotal: subtotalBase,
         igv: montoIgv,
@@ -226,7 +247,6 @@ export default function Ventas() {
 
       toast.success('¡Venta registrada con éxito!', { icon: '✅' });
       
-      // Guardamos info para el Modal. Si es TICKET, forzamos datos limpios.
       setVentaGenerada({
         id: res.data.venta.id,
         tipo: tipoComprobante,
@@ -390,7 +410,6 @@ export default function Ventas() {
                 className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Simple
               </button>
-              {/* BOTÓN FIAR MOVIDO AQUÍ */}
               <button onClick={() => setTipoComprobante('FIADO')} 
                 className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FIADO' ? 'bg-[#d4af37] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 Fiar
@@ -409,7 +428,6 @@ export default function Ventas() {
           {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
             <div className="space-y-4 animate-fade-in">
               
-              {/* 1. DNI/RUC (SE OCULTA SI ES FIADO) */}
               {tipoComprobante !== 'FIADO' && (
                 <div>
                   <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
@@ -432,7 +450,6 @@ export default function Ventas() {
                 </div>
               )}
               
-              {/* 2. CAMPO NOMBRE (CAMBIA DE TEXTO SI ES FIADO) */}
               <div>
                 <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
                   <FaUser/> {tipoComprobante === 'FIADO' ? 'Nombre de Referencia *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre Completo *')}
@@ -445,7 +462,6 @@ export default function Ventas() {
                   className={`w-full p-2.5 border rounded-lg outline-none text-sm transition-colors ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-400 animate-pulse' : 'bg-white border-slate-300 focus:border-dorado focus:ring-1 focus:ring-dorado text-slate-900'}`} />
               </div>
 
-              {/* 3. CAMPO WHATSAPP EXCLUSIVO PARA FIADOS */}
               {tipoComprobante === 'FIADO' && (
                 <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
                   <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
@@ -462,7 +478,6 @@ export default function Ventas() {
                 </motion.div>
               )}
 
-              {/* 4. MEDIO DE ENVÍO OPCIONAL (SE OCULTA TOTALMENTE SI ES FIADO) */}
               {tipoComprobante !== 'FIADO' && (
                 <div className="pt-3 border-t border-slate-200 mt-4">
                   <label className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide block">
@@ -533,14 +548,13 @@ export default function Ventas() {
             <span className="text-3xl font-black text-neutral-950 tracking-tighter">S/ {totalPagado.toFixed(2)}</span>
           </div>
 
-          {/* BOTÓN DINÁMICO (VENTA O FIADO) */}
           <button 
             onClick={() => tipoComprobante === 'FIADO' ? handleProcesarVenta(true) : handleProcesarVenta(false)}
             disabled={carrito.length === 0 || isProcessing} 
             className={`w-full font-extrabold py-4 px-6 rounded-xl transition-all shadow-[0_4px_15px_rgba(0,0,0,0.1)] flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wide text-sm ${
               tipoComprobante === 'FIADO' 
-                ? 'bg-gradient-to-r from-amber-500 to-[#d4af37] hover:from-amber-400 hover:to-yellow-500 text-white' // Botón Dorado
-                : 'bg-verde-pastel hover:bg-emerald-400 text-neutral-950' // Botón Verde
+                ? 'bg-gradient-to-r from-amber-500 to-[#d4af37] hover:from-amber-400 hover:to-yellow-500 text-white'
+                : 'bg-verde-pastel hover:bg-emerald-400 text-neutral-950'
             }`}
           >
             {isProcessing ? (
@@ -620,70 +634,57 @@ export default function Ventas() {
 
               <div className="p-5 bg-white border-t border-slate-100 flex flex-col gap-3">
                 
-                {/* BOTONES DE ENVÍO/IMPRESIÓN (SOLO APARECEN PARA BOLETAS Y FACTURAS) */}
-                {ventaGenerada.tipo !== 'TICKET' && (
-                  <>
-                    {ventaGenerada.metodoEnvio === 'WHATSAPP' && (
-                      <button 
-                        onClick={() => {
-                          // 1. Lógica inteligente para Personas vs Empresas
-                          let saludo = `Hola *${ventaGenerada.cliente}*`;
-                          if (ventaGenerada.tipo === 'FACTURA' && ventaGenerada.documentoCliente) {
-                            if (String(ventaGenerada.documentoCliente).startsWith('20')) {
-                              saludo = `Hola equipo de *${ventaGenerada.cliente}*`;
-                            }
-                          }
+                {/* BOTONES DE ENVÍO/IMPRESIÓN */}
+                {ventaGenerada.metodoEnvio === 'WHATSAPP' && ventaGenerada.tipo !== 'TICKET' && (
+                  <button 
+                    onClick={() => {
+                      let saludo = `Hola *${ventaGenerada.cliente}*`;
+                      if (ventaGenerada.tipo === 'FACTURA' && ventaGenerada.documentoCliente) {
+                        if (String(ventaGenerada.documentoCliente).startsWith('20')) {
+                          saludo = `Hola equipo de *${ventaGenerada.cliente}*`;
+                        }
+                      }
 
-                          // 2. Armamos el mensaje final totalmente limpio de emojis
-                          const textoMensaje = `${saludo},\nGracias por su compra en *${ventaGenerada.nombreNegocio}*.\n\nAquí tiene el enlace directo para descargar su comprobante electrónico:\n${ventaGenerada.enlacePdf}\n\n¡Gracias por su preferencia!`;
+                      const textoMensaje = `${saludo},\nGracias por su compra en *${ventaGenerada.nombreNegocio}*.\n\nAquí tiene el enlace directo para descargar su comprobante electrónico:\n${ventaGenerada.enlacePdf}\n\n¡Gracias por su preferencia!`;
+                      const numeroLimpio = ventaGenerada.contactoEnvio.replace(/[^0-9]/g, '');
+                      const numeroFinal = numeroLimpio.startsWith('51') ? numeroLimpio : `51${numeroLimpio}`;
 
-                          // 3. Limpiamos y aseguramos el código de país
-                          const numeroLimpio = ventaGenerada.contactoEnvio.replace(/[^0-9]/g, '');
-                          const numeroFinal = numeroLimpio.startsWith('51') ? numeroLimpio : `51${numeroLimpio}`;
+                      window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(textoMensaje)}`, '_blank');
+                    }}
+                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                  >
+                    <FaWhatsapp size={18} /> Enviar {ventaGenerada.tipo} por WhatsApp
+                  </button>
+                )}
 
-                          // 4. Abrimos WhatsApp
-                          window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(textoMensaje)}`, '_blank');
-                        }}
-                        className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
-                      >
-                        <FaWhatsapp size={18} /> Enviar {ventaGenerada.tipo} por WhatsApp
-                      </button>
-                    )}
-                    {ventaGenerada.metodoEnvio === 'CORREO' && (
-                      <button 
-                        onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
-                      >
-                        <FaEnvelope size={16} /> Ver PDF / Correo Enviado
-                      </button>
-                    )}
-                    {ventaGenerada.metodoEnvio === 'NINGUNO' && (
-                      <button 
-                        onClick={() => {
-                          if (ventaGenerada.enlacePdf) {
-                            // Si es Boleta/Factura, abrimos el PDF de Nubefact
-                            window.open(ventaGenerada.enlacePdf, '_blank');
-                          } else {
-                            // Si es Ticket Simple o Fiado, abrimos nuestro propio generador de tickets
-                            window.open(`/ticket/${ventaGenerada.id}`, '_blank', 'width=400,height=600');
-                          }
-                        }}
-                        className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
-                      >
-                        <FaPrint size={16} /> Ver e Imprimir {ventaGenerada.tipo === 'TICKET' ? 'TICKET' : ventaGenerada.tipo}
-                      </button>
-                    )}
-                  </>
+                {ventaGenerada.metodoEnvio === 'CORREO' && ventaGenerada.tipo !== 'TICKET' && (
+                  <button 
+                    onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                  >
+                    <FaEnvelope size={16} /> Ver PDF / Correo Enviado
+                  </button>
+                )}
+
+                {ventaGenerada.metodoEnvio === 'NINGUNO' && (
+                  <button 
+                    onClick={() => {
+                      if (ventaGenerada.enlacePdf) {
+                        window.open(ventaGenerada.enlacePdf, '_blank');
+                      } else {
+                        window.open(`/ticket/${ventaGenerada.id}`, '_blank', 'width=400,height=600');
+                      }
+                    }}
+                    className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                  >
+                    <FaPrint size={16} /> Ver e Imprimir {ventaGenerada.tipo === 'TICKET' ? 'TICKET' : ventaGenerada.tipo}
+                  </button>
                 )}
                 
                 {/* BOTÓN PRINCIPAL SIEMPRE VISIBLE */}
                 <button 
                   onClick={() => setVentaGenerada(null)}
-                  className={`w-full font-bold py-3.5 px-4 rounded-xl transition-all flex justify-center items-center text-sm ${
-                    ventaGenerada.tipo === 'TICKET' 
-                      ? 'bg-verde-pastel text-emerald-950 hover:bg-emerald-300' 
-                      : 'bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700'
-                  }`}
+                  className="w-full font-bold py-3.5 px-4 rounded-xl transition-all flex justify-center items-center text-sm bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
                 >
                   {ventaGenerada.tipo === 'TICKET' ? 'Siguiente Cliente' : 'Siguiente Venta'}
                 </button>

@@ -40,9 +40,8 @@ export const crearVenta = async (req, res) => {
       const productoDB = await prisma.producto.findUnique({ 
         where: { id: item.id } 
       });
-      // Doble check: verificar que el producto exista y pertenezca al negocio actual
       if (!productoDB || productoDB.negocioId !== negocioId) {
-          return res.status(400).json({ message: `Producto inválido o no pertenece a tu inventario: ${item.nombre}` });
+        return res.status(400).json({ message: `Producto inválido o no pertenece a tu inventario: ${item.nombre}` });
       }
       if (productoDB.stock < item.cantidad) {
         return res.status(400).json({ message: `Stock insuficiente para: ${item.nombre}` });
@@ -53,18 +52,20 @@ export const crearVenta = async (req, res) => {
     let linkXml = null;
     let correlativoFinal = esFiado ? `FIADO-${Date.now()}` : `${tipoDocDB.charAt(0)}-${Date.now()}`;
 
-    // 3. INTEGRACIÓN CON NUBEFACT (SOLO SI NO ES FIADO Y NO ES TICKET)
+    // 3. INTEGRACIÓN CON NUBEFACT (CON AUTO-SINCRONIZACIÓN DE CORRELATIVO)
     if (tipoComprobante !== 'TICKET' && !esFiado) {
       
-      if (!configNegocio.nubefactRuta || !configNegocio.nubefactToken) {
+      const rutaNubefact = configNegocio.nubefactRuta?.trim();
+      const tokenNubefact = configNegocio.nubefactToken?.trim();
+
+      if (!rutaNubefact || !tokenNubefact) {
         return res.status(400).json({ message: 'Tu bodega no tiene configuradas las credenciales de facturación electrónica (API Nubefact).' });
       }
 
-      // Buscar el último comprobante DE ESTE NEGOCIO para el correlativo
       const ultimaVenta = await prisma.venta.findFirst({
         where: { 
           tipoComprobante: tipoDocDB,
-          negocioId: negocioId // Filtrar por negocio
+          negocioId: negocioId
         },
         orderBy: { id: 'desc' }
       });
@@ -79,7 +80,6 @@ export const crearVenta = async (req, res) => {
       }
       
       const serieDoc = tipoComprobante === 'FACTURA' ? 'F001' : 'B001';
-      correlativoFinal = `${serieDoc}-${String(numeroCorrelativo).padStart(6, '0')}`;
 
       let tipoDocIdentidad = "-"; 
       if (tipoComprobante === 'FACTURA') tipoDocIdentidad = "6"; 
@@ -91,56 +91,82 @@ export const crearVenta = async (req, res) => {
         const precioUnitarioConIgv = parseFloat(item.precioVenta);
         const valorUnitarioSinIgv = precioUnitarioConIgv / factorIgv;
         const cantidad = parseInt(item.cantidad);
+        const subtotalItem = valorUnitarioSinIgv * cantidad;
+        const totalItem = precioUnitarioConIgv * cantidad;
+        const igvItem = totalItem - subtotalItem;
         
         return {
           "unidad_de_medida": "NIU",
           "codigo": item.codigo || item.id.toString(),
           "descripcion": item.nombre,
           "cantidad": cantidad,
-          "valor_unitario": valorUnitarioSinIgv,
-          "precio_unitario": precioUnitarioConIgv,
-          "subtotal": valorUnitarioSinIgv * cantidad,
+          "valor_unitario": Number(valorUnitarioSinIgv.toFixed(6)),
+          "precio_unitario": Number(precioUnitarioConIgv.toFixed(2)),
+          "subtotal": Number(subtotalItem.toFixed(2)),
           "tipo_de_igv": "1", 
-          "igv": (precioUnitarioConIgv * cantidad) - (valorUnitarioSinIgv * cantidad),
-          "total": precioUnitarioConIgv * cantidad,
+          "igv": Number(igvItem.toFixed(2)),
+          "total": Number(totalItem.toFixed(2)),
           "anticipo_regularizacion": "false"
         };
       });
 
-      const nubefactJSON = {
-        "operacion": "generar_comprobante",
-        "tipo_de_comprobante": tipoComprobante === 'FACTURA' ? "1" : "2",
-        "serie": serieDoc,
-        "numero": numeroCorrelativo,
-        "sunat_transaction": "1", 
-        "cliente_tipo_de_documento": tipoDocIdentidad,
-        "cliente_numero_de_documento": cliente.documento || "00000000",
-        "cliente_denominacion": cliente.nombre || "CLIENTE VARIOS",
-        "cliente_email": "", 
-        "fecha_de_emision": new Date().toISOString().split('T')[0],
-        "moneda": "1", 
-        "porcentaje_de_igv": configNegocio.impuestoPorcentaje,
-        "total_gravada": parseFloat(subtotal),
-        "total_igv": parseFloat(igv),
-        "total": parseFloat(total),
-        "enviar_automaticamente_a_la_sunat": "true",
-        "enviar_automaticamente_al_cliente": "false",
-        "items": itemsNubefact
-      };
+      // Fecha actual en zona horaria de Perú (evita que a las 7pm cambie al día siguiente)
+      const fechaPeru = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
 
-      try {
-        const responseNube = await axios.post(
-          configNegocio.nubefactRuta, 
-          nubefactJSON, 
-          { headers: { 'Authorization': `Bearer ${configNegocio.nubefactToken}` } }
-        );
+      // Bucle inteligente: si el correlativo ya existe en Nubefact, avanza al siguiente disponible
+      let emitidoConExito = false;
+      let intentos = 0;
 
-        linkPdf = responseNube.data.enlace_del_pdf;
-        linkXml = responseNube.data.enlace_del_xml;
-        
-      } catch (nubeError) {
-        console.error("Error desde Nubefact:", nubeError.response?.data?.errors || nubeError.message);
-        throw new Error(`SUNAT/Nubefact rechazó el comprobante: ${nubeError.response?.data?.errors || 'Error de conexión'}`);
+      while (!emitidoConExito && intentos < 50) {
+        correlativoFinal = `${serieDoc}-${String(numeroCorrelativo).padStart(6, '0')}`;
+
+        const nubefactJSON = {
+          "operacion": "generar_comprobante",
+          "tipo_de_comprobante": tipoComprobante === 'FACTURA' ? "1" : "2",
+          "serie": serieDoc,
+          "numero": numeroCorrelativo,
+          "sunat_transaction": "1", 
+          "cliente_tipo_de_documento": tipoDocIdentidad,
+          "cliente_numero_de_documento": cliente.documento || "00000000",
+          "cliente_denominacion": cliente.nombre || "CLIENTE VARIOS",
+          "cliente_email": "", 
+          "fecha_de_emision": fechaPeru,
+          "moneda": "1", 
+          "porcentaje_de_igv": configNegocio.impuestoPorcentaje,
+          "total_gravada": Number(parseFloat(subtotal).toFixed(2)),
+          "total_igv": Number(parseFloat(igv).toFixed(2)),
+          "total": Number(parseFloat(total).toFixed(2)),
+          "enviar_automaticamente_a_la_sunat": "true",
+          "enviar_automaticamente_al_cliente": "false",
+          "items": itemsNubefact
+        };
+
+        try {
+          const responseNube = await axios.post(
+            rutaNubefact, 
+            nubefactJSON, 
+            { headers: { 'Authorization': `Bearer ${tokenNubefact}` } }
+          );
+
+          linkPdf = responseNube.data.enlace_del_pdf;
+          linkXml = responseNube.data.enlace_del_xml;
+          emitidoConExito = true;
+
+        } catch (nubeError) {
+          const mensajeError = String(nubeError.response?.data?.errors || nubeError.message);
+          
+          if (mensajeError.toLowerCase().includes('ya existe')) {
+            numeroCorrelativo++;
+            intentos++;
+          } else {
+            console.error("Error desde Nubefact:", mensajeError);
+            throw new Error(`SUNAT/Nubefact rechazó el comprobante: ${mensajeError}`);
+          }
+        }
+      }
+
+      if (!emitidoConExito) {
+        throw new Error('No se pudo sincronizar el número correlativo con Nubefact tras varios intentos.');
       }
     }
 
@@ -149,7 +175,6 @@ export const crearVenta = async (req, res) => {
       
       let clienteIdDb = null;
       if (esFiado) {
-        // Buscar cliente asegurándonos que sea de esta bodega
         let clienteDB = await tx.cliente.findFirst({
           where: { 
             nombre: cliente.nombre, 
@@ -163,7 +188,7 @@ export const crearVenta = async (req, res) => {
             data: { 
               nombre: cliente.nombre, 
               telefono: cliente.telefono,
-              negocioId: negocioId // Relacionar el nuevo cliente a la bodega
+              negocioId: negocioId
             }
           });
         }
@@ -173,7 +198,6 @@ export const crearVenta = async (req, res) => {
       const nombreFinal = (cliente && cliente.nombre && cliente.nombre.trim() !== '') ? cliente.nombre : "CLIENTES VARIOS";
       const documentoFinal = (cliente && cliente.documento && cliente.documento.trim() !== '') ? cliente.documento : "00000000";
 
-      // Crear Venta asignada al Negocio
       const venta = await tx.venta.create({
         data: {
           negocioId: negocioId,
@@ -307,9 +331,8 @@ export const obtenerVentaPorId = async (req, res) => {
       }
     });
 
-    // Validar que la venta exista y pertenezca a la bodega correcta
     if (!venta || venta.negocioId !== negocioId) {
-       return res.status(404).json({ message: 'Venta no encontrada o no pertenece a su bodega.' });
+      return res.status(404).json({ message: 'Venta no encontrada o no pertenece a su bodega.' });
     }
 
     res.json(venta);
