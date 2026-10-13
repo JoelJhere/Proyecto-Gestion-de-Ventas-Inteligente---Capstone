@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar } from 'react-icons/fa';
+import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar, FaStore } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
 import axios from 'axios'; 
 
@@ -10,12 +10,15 @@ export default function Layout() {
   const [hayAlertasFiados, setHayAlertasFiados] = useState(false); 
   
   const location = useLocation();
-  const { businessConfig } = useBusiness();
+  // EXTRAEMOS setBusinessConfig PARA PODER ACTUALIZARLO DESDE AQUÍ
+  const { businessConfig, setBusinessConfig } = useBusiness();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('pos_config');
+    // Cierre forzado para destruir la memoria (SaaS Seguro)
     window.location.href = '/login';
   };
 
@@ -36,6 +39,29 @@ export default function Layout() {
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTo(0, 0);
   }, [location.pathname]);
+
+  // NUEVO: FORZAR CARGA DE CONFIGURACIÓN AL ENTRAR SI ESTÁ VACÍA
+  useEffect(() => {
+    const fetchConfigSeguridad = async () => {
+      if (!businessConfig || !businessConfig.nombre) {
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) return;
+          const res = await axios.get('/configuracion', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.data) {
+            setBusinessConfig(res.data);
+            localStorage.setItem('pos_config', JSON.stringify(res.data));
+          }
+        } catch (error) {
+          console.error("Error forzando carga de configuración en Layout:", error);
+        }
+      }
+    };
+    fetchConfigSeguridad();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Lógica para detectar si hay Fiados que necesitan enviarse por WhatsApp hoy
   useEffect(() => {
@@ -79,13 +105,15 @@ export default function Layout() {
         <div className="py-6 flex flex-col items-center justify-center px-4 border-b border-neutral-800/50 text-center gap-3 relative">
           <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-neutral-400 hover:text-white"><FaTimes size={20} /></button>
           
-          {businessConfig.logo ? (
+          {businessConfig?.logo ? (
             <img src={businessConfig.logo} alt="Logo" className="w-14 h-14 rounded-xl object-cover bg-white shadow-sm" />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.4)]"></div>
+            <div className="w-8 h-8 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.4)] flex items-center justify-center">
+              <FaStore className="text-neutral-950 text-xs" />
+            </div>
           )}
           <h2 className="text-xl font-extrabold text-white tracking-tight leading-tight break-words w-full">
-            {businessConfig.nombre}
+            {businessConfig?.nombre || 'Cargando...'}
           </h2>
         </div>
 
@@ -158,13 +186,13 @@ export default function Layout() {
           <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-800 p-2 focus:outline-none shrink-0"><FaBars size={22} /></button>
           
           <div className="flex items-center gap-2 max-w-[65%] justify-center">
-            {businessConfig.logo ? (
+            {businessConfig?.logo ? (
               <img src={businessConfig.logo} alt="Logo" className="w-8 h-8 rounded-md object-cover border border-slate-200 shrink-0" />
             ) : (
               <div className="w-2 h-2 rounded-full bg-verde-pastel shrink-0"></div>
             )}
             <span className="font-extrabold text-slate-950 tracking-tight leading-tight text-sm text-left break-words line-clamp-2">
-              {businessConfig.nombre}
+              {businessConfig?.nombre || 'Cargando...'}
             </span>
           </div>
           
