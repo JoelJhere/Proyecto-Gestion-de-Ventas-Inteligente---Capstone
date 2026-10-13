@@ -71,8 +71,7 @@ export const login = async (req, res) => {
     // 2. Reglas de negocio (Cuenta Activa)
     if (!user.estado) return res.status(403).json({ message: 'Tu cuenta ha sido desactivada por el administrador de tu bodega.' });
     
-    // Regla SaaS: Si la bodega entera fue suspendida (ej. por falta de pago), nadie entra.
-    // (Omitimos esta regla solo para el SUPER_ADMIN, ya que él no pertenece a ninguna bodega)
+    // Regla SaaS: Si la bodega entera fue suspendida (por falta de pago), nadie entra.
     if (user.rol !== 'SUPER_ADMIN' && user.negocio && !user.negocio.estado) {
       return res.status(403).json({ message: 'El acceso a este negocio ha sido suspendido temporalmente. Contacte a soporte.' });
     }
@@ -86,7 +85,7 @@ export const login = async (req, res) => {
       { 
         id: user.id, 
         rol: user.rol,
-        negocioId: user.negocioId // ¡CRÍTICO! Esto le dirá a todos los demás controladores qué datos mostrar
+        negocioId: user.negocioId 
       }, 
       process.env.JWT_SECRET || 'secreto_super_seguro_aj', 
       { expiresIn: '12h' }

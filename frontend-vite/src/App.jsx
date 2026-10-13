@@ -13,6 +13,7 @@ import Configuracion from './pages/Configuracion';
 import Fiados from './pages/Fiados';
 import Historial from './pages/Historial';
 import Ticket from './pages/Ticket';
+import SuperAdmin from './pages/SuperAdmin';
 
 // --- CONFIGURACIÓN GLOBAL DE AXIOS ---
 
@@ -90,6 +91,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/master" element={<ProtectedRoute><SuperAdmin /></ProtectedRoute>} />
         
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/" element={<Navigate to="/ventas" replace />} />
