@@ -1,9 +1,12 @@
 import express from 'express';
-import { login } from '../controllers/auth.controller.js';
+import { login, registrarNegocio } from '../controllers/auth.controller.js';
 
 const router = express.Router();
 
-// Ruta final será: POST /api/auth/login
+// Ruta para iniciar sesión
 router.post('/login', login);
+
+// Ruta pública para que nuevos clientes creen su bodega
+router.post('/registro-saas', registrarNegocio);
 
 export default router;
