@@ -37,7 +37,8 @@ export const registrarNegocio = async (req, res) => {
           email: email,
           password: hashedPassword,
           rol: 'ADMIN', // El dueño creador siempre es ADMIN
-          negocioId: nuevoNegocio.id
+          negocioId: nuevoNegocio.id,
+          terminosAceptados: true // El dueño acepta los términos al crear su negocio
         }
       });
 
@@ -100,6 +101,7 @@ export const login = async (req, res) => {
         email: user.email,
         rol: user.rol,
         negocioId: user.negocioId,
+        terminosAceptados: user.terminosAceptados,
         nombreNegocio: user.negocio ? user.negocio.nombre : 'Panel Central' // Si es SUPER_ADMIN dice Panel Central
       }
     });

@@ -143,3 +143,20 @@ export const eliminarUsuario = async (req, res) => {
     res.status(500).json({ message: 'Error al procesar la solicitud.' });
   }
 };
+
+// 5. Aceptar Términos y Condiciones (Primer inicio de sesión del empleado)
+export const aceptarTerminos = async (req, res) => {
+  const usuarioId = req.user.id;
+
+  try {
+    await prisma.user.update({
+      where: { id: parseInt(usuarioId) },
+      data: { terminosAceptados: true }
+    });
+
+    res.json({ message: 'Términos y condiciones aceptados correctamente.' });
+  } catch (error) {
+    console.error("Error al aceptar términos:", error);
+    res.status(500).json({ message: 'Error al registrar la aceptación.' });
+  }
+};
