@@ -51,6 +51,7 @@ model User {
   password  String
   rol       Role     @default(AYUDANTE)
   estado    Boolean  @default(true) 
+  terminosAceptados Boolean  @default(false)
   
   // Relación con el negocio (Opcional porque el SUPER_ADMIN no tiene bodega)
   negocioId Int?
