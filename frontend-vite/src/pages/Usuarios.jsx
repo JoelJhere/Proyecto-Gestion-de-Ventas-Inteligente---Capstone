@@ -137,7 +137,7 @@ export default function Usuarios() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-950 mb-1 tracking-tight flex items-center gap-3">
-            <FaUsers className="text-verde-pastel drop-shadow-md" /> Equipo de Trabajo
+            <FaUsers className="text-verde-pastel drop-shadow-md" /> Usuarios
           </h1>
           <p className="text-slate-500 text-sm font-medium">Gestiona los accesos de tus ayudantes y administradores.</p>
         </div>
@@ -245,7 +245,7 @@ export default function Usuarios() {
                         <button 
                           onClick={() => prepararToggleEstado(u)} 
                           className={`p-2 rounded-lg transition-colors ${u.estado ? 'text-red-500 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'}`} 
-                          title={u.estado ? 'Suspender acceso' : 'Reactivar acceso'}
+                          title={u.estado ? 'Suspender empleado' : 'Reactivar acceso'}
                         >
                           {u.estado ? <FaTimes /> : <FaCheck />}
                         </button>
@@ -314,7 +314,7 @@ export default function Usuarios() {
             >
               <div className="flex justify-between items-center p-4 sm:p-6 bg-slate-950 border-t-4 border-verde-pastel shrink-0">
                 <h2 className="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2">
-                  {modoEdicion ? 'Editar Empleado' : 'Nuevo Empleado'}
+                  {modoEdicion ? 'Editar' : 'Nuevo Empleado'}
                 </h2>
                 <button 
                   type="button" 
