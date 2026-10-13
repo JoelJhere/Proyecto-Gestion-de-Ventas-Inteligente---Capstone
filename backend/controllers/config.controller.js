@@ -2,50 +2,47 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// 1. Obtener la configuración del negocio
+// 1. Obtener la configuración del negocio (SaaS)
 export const obtenerConfiguracion = async (req, res) => {
   try {
-    let config = await prisma.businessConfig.findFirst();
+    // req.user.negocioId viene del token gracias a nuestro auth.middleware.js
+    const negocioId = req.user.negocioId;
+
+    if (!negocioId) {
+      return res.status(400).json({ message: 'Usuario no asociado a ningún negocio.' });
+    }
+
+    const config = await prisma.negocio.findUnique({
+      where: { id: negocioId }
+    });
 
     if (!config) {
-      config = await prisma.businessConfig.create({
-        data: {
-          razonSocial: 'Mi Empresa S.A.C.',
-          nombre: 'Mi Negocio',
-          ruc: '',
-          direccionFiscal: '',
-          ciudad: '',
-          departamento: '',
-          telefono: '',
-          email: '',
-          mensajeTicket: '¡Gracias por su preferencia!',
-          impuestoPorcentaje: 18.0
-        }
-      });
+      return res.status(404).json({ message: 'Negocio no encontrado.' });
     }
 
     res.json(config);
   } catch (error) {
-    res.status(500).json({ message: 'Error al obtener la configuración', error: error.message });
+    console.error("Error al obtener configuración:", error);
+    res.status(500).json({ message: 'Error al obtener la configuración' });
   }
 };
 
-// 2. Actualizar la configuración
+// 2. Actualizar la configuración del negocio (SaaS)
 export const actualizarConfiguracion = async (req, res) => {
+  const negocioId = req.user.negocioId;
+
+  if (!negocioId) {
+    return res.status(400).json({ message: 'Usuario no asociado a ningún negocio.' });
+  }
+
   const { 
     razonSocial, nombre, ruc, direccionFiscal, ciudad, departamento, 
     telefono, email, mensajeTicket, impuestoPorcentaje, logo, nubefactRuta, nubefactToken
   } = req.body;
 
   try {
-    const configExistente = await prisma.businessConfig.findFirst();
-
-    if (!configExistente) {
-      return res.status(404).json({ message: 'No se encontró la configuración base' });
-    }
-
-    const configActualizada = await prisma.businessConfig.update({
-      where: { id: configExistente.id },
+    const configActualizada = await prisma.negocio.update({
+      where: { id: negocioId },
       data: {
         razonSocial,
         nombre,
@@ -65,6 +62,7 @@ export const actualizarConfiguracion = async (req, res) => {
 
     res.json({ message: 'Configuración actualizada con éxito', config: configActualizada });
   } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar configuración', error: error.message });
+    console.error("Error al actualizar configuración:", error);
+    res.status(500).json({ message: 'Error al actualizar configuración' });
   }
 };
