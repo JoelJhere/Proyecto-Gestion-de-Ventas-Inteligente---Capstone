@@ -172,7 +172,7 @@ export default function Login() {
                 <div class="w-4 h-4 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.5)]"></div>
                 VendaIA
               </h1>
-              <p class="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Gestión Inteligente Multi-Negocio</p>
+              <p class="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Sistema de Ventas y Gestión Inteligente para Bodegas</p>
             </div>
 
             {sesionExpirada && (
