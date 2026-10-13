@@ -14,6 +14,7 @@ import Fiados from './pages/Fiados';
 import Historial from './pages/Historial';
 import Ticket from './pages/Ticket';
 import SuperAdmin from './pages/SuperAdmin';
+import Usuarios from './pages/Usuarios';
 
 // --- CONFIGURACIÓN GLOBAL DE AXIOS ---
 
@@ -103,6 +104,7 @@ function App() {
           <Route path="/historial" element={<Historial />} />
           <Route path="/ia-panel" element={<IAPlaceholder />} />
           <Route path="/configuracion" element={<Configuracion />} />
+          <Route path="/usuarios" element={<Usuarios />} />
         </Route>
 
         <Route path="/ticket/:id" element={

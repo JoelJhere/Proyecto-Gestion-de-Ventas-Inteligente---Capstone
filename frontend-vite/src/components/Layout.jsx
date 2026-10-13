@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar, FaStore } from 'react-icons/fa';
+import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar, FaStore, FaUsers } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
 import axios from 'axios'; 
 
@@ -30,6 +30,7 @@ export default function Layout() {
     { path: '/historial', icon: FaHistory, label: 'Historial' },
     { path: '/ia-panel', icon: FaRobot, label: 'Asistente IA' },
     { path: '/configuracion', icon: FaCog, label: 'Configuración' },
+    { path: '/usuarios', icon: FaUsers, label: 'Usuarios' },
   ];
 
   const handleNavigation = () => setIsMobileMenuOpen(false);
