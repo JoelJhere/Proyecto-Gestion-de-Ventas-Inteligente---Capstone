@@ -57,7 +57,7 @@ export default function Layout() {
     { path: '/productos', icon: FaBoxOpen, label: 'Productos' },
     { path: '/proveedores', icon: FaTruck, label: 'Proveedores' },
     { path: '/compras', icon: FaClipboardList, label: 'Plan de Compras' },
-    { path: '/historial', icon: FaHistory, label: 'Historial' },
+    { path: '/historial', icon: FaHistory, label: 'Historial y Finanzas' },
     { path: '/ia-panel', icon: FaRobot, label: 'Asistente IA' },
     { path: '/configuracion', icon: FaCog, label: 'Configuración', soloAdmin: true },
     { path: '/usuarios', icon: FaUsers, label: 'Usuarios', soloAdmin: true },
