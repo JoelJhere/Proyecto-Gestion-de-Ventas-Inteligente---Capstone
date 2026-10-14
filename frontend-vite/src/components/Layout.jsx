@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar, FaStore, FaUsers } from 'react-icons/fa';
+import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar, FaStore, FaUsers, FaFileContract } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
-import axios from 'axios'; 
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import TerminosModal from './TerminosModal';
 
 export default function Layout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -11,7 +13,13 @@ export default function Layout() {
   
   const location = useLocation();
   const { businessConfig, setBusinessConfig } = useBusiness();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
+
+  // Estados para el Modal de Términos y Condiciones
+  const [mostrarModalObligatorio, setMostrarModalObligatorio] = useState(
+    () => user.rol !== 'SUPER_ADMIN' && user.terminosAceptados === false
+  );
+  const [mostrarModalLectura, setMostrarModalLectura] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -22,6 +30,25 @@ export default function Layout() {
     localStorage.removeItem('pos_tipo_comprobante');
     // Cierre forzado para destruir la memoria (SaaS Seguro)
     window.location.href = '/login';
+  };
+
+  // Cuando un empleado nuevo acepta los términos por primera vez
+  const handleAceptarTerminosObligatorios = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put('/usuarios/aceptar-terminos', {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const usuarioActualizado = { ...user, terminosAceptados: true };
+      localStorage.setItem('user', JSON.stringify(usuarioActualizado));
+      setUser(usuarioActualizado);
+      setMostrarModalObligatorio(false);
+      toast.success('Términos y condiciones aceptados.');
+    } catch (error) {
+      console.error("Error al aceptar términos:", error);
+      toast.error('No se pudo guardar la aceptación. Intenta nuevamente.');
+    }
   };
 
   const todosLosItems = [
@@ -107,38 +134,38 @@ export default function Layout() {
       {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-neutral-950 border-r border-neutral-900 flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
-        {/* LOGO EN SIDEBAR (Espaciado optimizado) */}
-        <div className="py-4 flex flex-col items-center justify-center px-4 border-b border-neutral-800/50 text-center gap-2 relative shrink-0">
+        {/* LOGO EN SIDEBAR */}
+        <div className="py-3.5 flex flex-col items-center justify-center px-4 border-b border-neutral-800/50 text-center gap-1.5 relative shrink-0">
           <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-neutral-400 hover:text-white"><FaTimes size={20} /></button>
           
           {businessConfig?.logo ? (
-            <img src={businessConfig.logo} alt="Logo" className="w-12 h-12 rounded-xl object-cover bg-white shadow-sm" />
+            <img src={businessConfig.logo} alt="Logo" className="w-11 h-11 rounded-xl object-cover bg-white shadow-sm" />
           ) : (
             <div className="w-8 h-8 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.4)] flex items-center justify-center">
               <FaStore className="text-neutral-950 text-xs" />
             </div>
           )}
-          <h2 className="text-lg font-extrabold text-white tracking-tight leading-tight break-words w-full">
+          <h2 className="text-base font-extrabold text-white tracking-tight leading-tight break-words w-full">
             {businessConfig?.nombre || 'Cargando...'}
           </h2>
         </div>
 
-        {/* USUARIO (Espaciado optimizado) */}
-        <div className="px-5 py-3.5 border-b border-neutral-800/50 bg-neutral-900/30 shrink-0">
-          <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-2 font-bold">Cajero Activo</p>
+        {/* USUARIO */}
+        <div className="px-5 py-3 border-b border-neutral-800/50 bg-neutral-900/30 shrink-0">
+          <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-1.5 font-bold">Cajero Activo</p>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-verde-pastel/10 border border-verde-pastel/20 flex items-center justify-center shrink-0">
-              <span className="text-verde-pastel font-bold text-base">{user?.nombre?.charAt(0) || 'U'}</span>
+            <div className="w-8 h-8 rounded-lg bg-verde-pastel/10 border border-verde-pastel/20 flex items-center justify-center shrink-0">
+              <span className="text-verde-pastel font-bold text-sm">{user?.nombre?.charAt(0) || 'U'}</span>
             </div>
             <div className="min-w-0">
               <p className="font-bold text-sm truncate text-white">{user.nombre}</p>
-              <p className="text-[11px] text-neutral-400 font-medium uppercase tracking-wider">{user.rol}</p>
+              <p className="text-[10px] text-neutral-400 font-medium uppercase tracking-wider">{user.rol}</p>
             </div>
           </div>
         </div>
 
         {/* NAVEGACIÓN (Sin barra de scroll visible y con altura compacta) */}
-        <nav className="flex-1 px-4 py-3 space-y-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <nav className="flex-1 px-4 py-2.5 space-y-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {menuItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             const Icon = item.icon;
@@ -149,7 +176,7 @@ export default function Layout() {
             return (
               <Link key={item.path} to={item.path} onClick={handleNavigation}>
                 <motion.div whileTap={{ scale: 0.98 }}
-                  className={`flex flex-col px-4 py-2.5 rounded-lg transition-all duration-200 relative ${
+                  className={`flex flex-col px-4 py-2 rounded-lg transition-all duration-200 relative ${
                     isActive 
                       ? 'bg-verde-pastel/10 border-l-4 border-verde-pastel shadow-lg shadow-verde-pastel/5' 
                       : 'hover:bg-neutral-900'
@@ -157,7 +184,7 @@ export default function Layout() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="relative">
-                      <Icon className={`text-lg ${isActive ? 'text-verde-pastel' : 'text-neutral-500'} ${showAlerta && !isActive ? 'text-red-400 animate-pulse' : ''}`} />
+                      <Icon className={`text-base ${isActive ? 'text-verde-pastel' : 'text-neutral-500'} ${showAlerta && !isActive ? 'text-red-400 animate-pulse' : ''}`} />
                       
                       {showAlerta && (
                         <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
@@ -177,9 +204,24 @@ export default function Layout() {
           })}
         </nav>
 
-        {/* LOGOUT */}
-        <div className="p-3 border-t border-neutral-800/50 shrink-0">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2.5 text-rosado-pastel/90 hover:text-rosado-pastel hover:bg-rosado-pastel/10 rounded-lg transition-colors text-sm font-semibold">
+        {/* PIE DEL MENÚ: TÉRMINOS Y CONDICIONES + CERRAR SESIÓN */}
+        <div className="p-3 border-t border-neutral-800/50 space-y-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setMostrarModalLectura(true)}
+            className="w-full flex items-center gap-3 px-4 py-2 text-neutral-400 hover:text-verde-pastel hover:bg-neutral-900 rounded-lg transition-colors text-xs font-medium cursor-pointer"
+          >
+            <FaFileContract className="text-verde-pastel/80 shrink-0" size={14} />
+            <span className="underline underline-offset-4 decoration-neutral-700 hover:decoration-verde-pastel">
+              Términos y Condiciones
+            </span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={handleLogout} 
+            className="w-full flex items-center gap-3 px-4 py-2 text-rosado-pastel/90 hover:text-rosado-pastel hover:bg-rosado-pastel/10 rounded-lg transition-colors text-sm font-semibold"
+          >
             <FaSignOutAlt /> Cerrar Sesión
           </button>
         </div>
@@ -208,6 +250,21 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* 1. MODAL OBLIGATORIO (Solo salta en el primer inicio de sesión de un empleado nuevo) */}
+      <TerminosModal
+        isOpen={mostrarModalObligatorio}
+        modoObligatorio={true}
+        onAccept={handleAceptarTerminosObligatorios}
+        onDecline={handleLogout}
+      />
+
+      {/* 2. MODAL DE LECTURA (Cuando hacen clic en "Términos y Condiciones" en el menú lateral) */}
+      <TerminosModal
+        isOpen={mostrarModalLectura}
+        modoObligatorio={false}
+        onClose={() => setMostrarModalLectura(false)}
+      />
     </div>
   );
 }

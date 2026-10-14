@@ -4,19 +4,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FaUserShield, FaLock, FaSpinner, FaStore, FaIdCard, FaUserTie } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import TerminosModal from '../components/TerminosModal';
 
 // --- COMPONENTES VISUALES ---
-  const InputField = ({ icon: Icon, type, value, onChange, placeholder, disabled, required = true }) => (
-    <div className="relative group">
-      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-        <Icon className="text-neutral-500 group-focus-within:text-verde-pastel transition-colors duration-300" />
-      </div>
-      <input
-        type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} required={required}
-        className="w-full pl-11 pr-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl focus:ring-1 focus:ring-verde-pastel focus:border-verde-pastel outline-none transition-all text-white placeholder-neutral-600 shadow-inner text-sm font-medium disabled:opacity-50"
-      />
+const InputField = ({ icon: Icon, type, value, onChange, placeholder, disabled, required = true }) => (
+  <div className="relative group">
+    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+      <Icon className="text-neutral-500 group-focus-within:text-verde-pastel transition-colors duration-300" />
     </div>
-  );
+    <input
+      type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} required={required}
+      className="w-full pl-11 pr-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl focus:ring-1 focus:ring-verde-pastel focus:border-verde-pastel outline-none transition-all text-white placeholder-neutral-600 shadow-inner text-sm font-medium disabled:opacity-50"
+    />
+  </div>
+);
 
 export default function Login() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export default function Login() {
 
   // Estados Generales
   const [isLoading, setIsLoading] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false); // Alterna entre Login y Registro
+  const [isRegistering, setIsRegistering] = useState(false);
   const [intentosFallidos, setIntentosFallidos] = useState(0);
   const [tiempoBloqueo, setTiempoBloqueo] = useState(0);
 
@@ -42,6 +43,8 @@ export default function Login() {
   const [regNombreDuenio, setRegNombreDuenio] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [aceptoTerminos, setAceptoTerminos] = useState(false);
+  const [isTerminosOpen, setIsTerminosOpen] = useState(false);
 
   // Sistema de cuenta regresiva para bloqueos de seguridad
   useEffect(() => {
@@ -66,6 +69,10 @@ export default function Login() {
     e.preventDefault();
     if (isLoading || tiempoBloqueo > 0) return;
 
+    if (!email.trim() || !password.trim()) {
+      return toast.error('Ingresa tu correo y contraseña.', { style: toastStyle });
+    }
+
     setIsLoading(true);
     try {
       const res = await axios.post('/auth/login', { email, password });
@@ -76,7 +83,6 @@ export default function Login() {
       setIntentosFallidos(0);
       toast.success('¡Sesión iniciada correctamente!', { style: toastStyle, iconTheme: { primary: '#a7f3d0', secondary: '#000' } });
       
-      // REDIRECCIÓN INTELIGENTE BASADA EN EL ROL
       setTimeout(() => {
         if (res.data.user.rol === 'SUPER_ADMIN') {
           navigate('/master');
@@ -107,9 +113,20 @@ export default function Login() {
     e.preventDefault();
     if (isLoading) return;
 
-    // Mini validación de RUC
+    if (!regNombreNegocio.trim() || !regNombreDuenio.trim() || !regEmail.trim() || !regPassword.trim()) {
+      return toast.error('Completa todos los campos obligatorios.', { style: toastStyle });
+    }
+
     if (regRuc && regRuc.length !== 11) {
       return toast.error('El RUC debe tener exactamente 11 dígitos.', { style: toastStyle });
+    }
+
+    if (regPassword.length < 6) {
+      return toast.error('La contraseña debe tener al menos 6 caracteres.', { style: toastStyle });
+    }
+
+    if (!aceptoTerminos) {
+      return toast.error('Debes aceptar los Términos y Condiciones para registrar tu bodega.', { style: toastStyle });
     }
 
     setIsLoading(true);
@@ -142,17 +159,19 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-[#092b1a] via-neutral-950 to-black relative overflow-hidden font-sans px-4 py-8">
       
-      {/* Selector superior para cambiar entre Login y Registro */}
+      {/* Selector superior para cambiar entre Login y Registro (Unificado en Verde Pastel) */}
       <div className="absolute top-8 w-full max-w-xs mx-auto flex bg-neutral-900/50 p-1 rounded-full border border-neutral-800 backdrop-blur-md z-20">
         <button 
+          type="button"
           onClick={() => setIsRegistering(false)}
-          className={`flex-1 py-2 text-xs font-bold rounded-full transition-all ${!isRegistering ? 'bg-verde-pastel text-black shadow-md' : 'text-neutral-400 hover:text-white'}`}
+          className={`flex-1 py-2 text-xs font-bold rounded-full transition-all ${!isRegistering ? 'bg-verde-pastel text-neutral-950 shadow-md' : 'text-neutral-400 hover:text-white'}`}
         >
           Iniciar Sesión
         </button>
         <button 
+          type="button"
           onClick={() => setIsRegistering(true)}
-          className={`flex-1 py-2 text-xs font-bold rounded-full transition-all ${isRegistering ? 'bg-dorado text-black shadow-md' : 'text-neutral-400 hover:text-white'}`}
+          className={`flex-1 py-2 text-xs font-bold rounded-full transition-all ${isRegistering ? 'bg-verde-pastel text-neutral-950 shadow-md' : 'text-neutral-400 hover:text-white'}`}
         >
           Crear Bodega
         </button>
@@ -167,12 +186,12 @@ export default function Login() {
             initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }} transition={{ duration: 0.3 }}
             className="bg-neutral-950/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.8)] w-full max-w-md z-10 border border-neutral-800 hover:border-verde-pastel/30 transition-colors duration-500 mt-12"
           >
-            <div class="text-center mb-10">
-              <h1 class="text-4xl font-extrabold text-white mb-3 tracking-tight flex items-center justify-center gap-3">
-                <div class="w-4 h-4 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.5)]"></div>
+            <div className="text-center mb-10">
+              <h1 className="text-4xl font-extrabold text-white mb-3 tracking-tight flex items-center justify-center gap-3">
+                <div className="w-4 h-4 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.5)]"></div>
                 VendaIA
               </h1>
-              <p class="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Sistema de Ventas y Gestión Inteligente para Bodegas</p>
+              <p className="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Sistema de Ventas y Gestión Inteligente para Bodegas</p>
             </div>
 
             {sesionExpirada && (
@@ -182,7 +201,7 @@ export default function Login() {
               </motion.div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} noValidate className="space-y-6">
               <div>
                 <label className="block text-[10px] font-bold text-neutral-500 mb-2 uppercase tracking-widest">Correo Electrónico</label>
                 <InputField icon={FaUserShield} type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={tiempoBloqueo > 0 || isLoading} placeholder="admin@mibodega.com" />
@@ -205,20 +224,20 @@ export default function Login() {
 
         ) : (
 
-          /* ========== VISTA DE REGISTRO SAAS ======= */
+          /* ========== VISTA DE REGISTRO SAAS (CON ESTILO VERDE PASTEL) ======= */
           <motion.div 
             key="registro"
             initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}
-            className="bg-neutral-950/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.8)] w-full max-w-lg z-10 border border-neutral-800 hover:border-dorado/30 transition-colors duration-500 mt-12"
+            className="bg-neutral-950/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.8)] w-full max-w-lg z-10 border border-neutral-800 hover:border-verde-pastel/30 transition-colors duration-500 mt-12"
           >
             <div className="text-center mb-8">
               <h2 className="text-2xl font-extrabold text-white mb-2 tracking-tight flex items-center justify-center gap-2">
-                <FaStore className="text-dorado" /> Registra tu Bodega
+                <FaStore className="text-verde-pastel" /> Registra tu Bodega
               </h2>
               <p className="text-neutral-500 font-medium text-xs">Crea tu cuenta de administrador en segundos y comienza a vender hoy mismo.</p>
             </div>
 
-            <form onSubmit={handleRegistro} className="space-y-4">
+            <form onSubmit={handleRegistro} noValidate className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-neutral-500 mb-1.5 uppercase">Nombre de Bodega *</label>
@@ -226,7 +245,7 @@ export default function Login() {
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-neutral-500 mb-1.5 uppercase">RUC (Opcional)</label>
-                  <InputField icon={FaIdCard} type="text" value={regRuc} onChange={e => setRegRuc(e.target.value.replace(/\D/g, ''))} disabled={isLoading} placeholder="11 dígitos" required={false} />
+                  <InputField icon={FaIdCard} type="text" value={regRuc} onChange={e => setRegRuc(e.target.value.replace(/\D/g, '').slice(0, 11))} disabled={isLoading} placeholder="11 dígitos" required={false} />
                 </div>
               </div>
 
@@ -245,17 +264,30 @@ export default function Login() {
                 <InputField icon={FaLock} type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} disabled={isLoading} placeholder="Mínimo 6 caracteres" />
               </div>
 
-              {/* TÉRMINOS Y CONDICIONES (Punto 2 requerido) */}
+              {/* TÉRMINOS Y CONDICIONES INTERACTIVOS */}
               <div className="py-2 flex items-start gap-3">
-                <input type="checkbox" required className="mt-1 w-4 h-4 rounded border-neutral-700 bg-neutral-900 accent-dorado cursor-pointer" />
-                <p className="text-xs text-neutral-400 leading-tight">
-                  Al registrarte, aceptas nuestros <a href="#" className="text-dorado hover:underline font-bold">Términos y Condiciones</a> y la Política de Privacidad de datos del sistema POS.
+                <input 
+                  type="checkbox" 
+                  checked={aceptoTerminos}
+                  onChange={(e) => setAceptoTerminos(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-neutral-700 bg-neutral-900 accent-verde-pastel cursor-pointer shrink-0" 
+                />
+                <p className="text-xs text-neutral-400 leading-relaxed">
+                  Al registrarte, aceptas nuestros{' '}
+                  <button
+                    type="button"
+                    onClick={() => setIsTerminosOpen(true)}
+                    className="text-verde-pastel hover:text-[#86e6bb] font-bold underline underline-offset-4 decoration-verde-pastel/60 hover:decoration-verde-pastel cursor-pointer transition-colors"
+                  >
+                    Términos y Condiciones y la Política de Privacidad
+                  </button>{' '}
+                  de datos del sistema POS.
                 </p>
               </div>
 
               <div className="pt-2">
                 <button type="submit" disabled={isLoading}
-                  className="w-full bg-dorado hover:bg-yellow-400 text-neutral-950 font-extrabold text-base py-4 px-4 rounded-xl transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:bg-neutral-700 disabled:text-neutral-400"
+                  className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-neutral-950 font-extrabold text-base py-4 px-4 rounded-xl transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:bg-neutral-700 disabled:text-neutral-400"
                 >
                   {isLoading ? <><FaSpinner className="animate-spin" /> Creando cuenta...</> : 'Crear Bodega e Iniciar Sesión'}
                 </button>
@@ -264,6 +296,16 @@ export default function Login() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* VENTANA FLOTANTE DE TÉRMINOS Y CONDICIONES (DESDE EL REGISTRO) */}
+      <TerminosModal 
+        isOpen={isTerminosOpen}
+        modoObligatorio={false}
+        onClose={() => {
+          setAceptoTerminos(true); // Si los abre y presiona "Entendido", marcamos el check por comodidad
+          setIsTerminosOpen(false);
+        }}
+      />
     </div>
   );
 }
