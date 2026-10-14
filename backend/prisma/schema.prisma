@@ -25,6 +25,9 @@ model Negocio {
   mensajeTicket      String?  @default("¡Gracias por su preferencia!")
   impuestoPorcentaje Float    @default(18.0) 
   logo               String?
+
+  // Capital actual de la bodega en tiempo real
+  saldoCaja          Float    @default(0.0)
   
   // Credenciales SUNAT
   nubefactRuta       String?  @default("")
@@ -37,6 +40,7 @@ model Negocio {
   ventas             Venta[]
   clientes           Cliente[]
   planesCompra       PlanCompra[]
+  movimientosCaja    MovimientoCaja[]
   
   estado             Boolean  @default(true) // Permite al SUPER_ADMIN suspender un negocio
   createdAt          DateTime @default(now())
@@ -129,6 +133,7 @@ model Venta {
   vendedor          User            @relation(fields: [vendedorId], references: [id])
   
   tipoComprobante   TipoDocumento  
+  metodoPago        MetodoPago       @default(EFECTIVO)
   numeroComprobante String?        
   clienteNombre     String?         @default("Cliente Varios")
   clienteDocumento  String?         
@@ -217,6 +222,22 @@ model CuentaPorCobrar {
   recordatorios Int         @default(0)
 }
 
+// --- 10. HISTORIAL FINANCIERO ---
+model MovimientoCaja {
+  id              Int                @id @default(autoincrement())
+  negocioId       Int
+  negocio         Negocio            @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  
+  tipo            TipoMovimientoCaja // INGRESO o EGRESO
+  categoria       String             // 'CAPITAL_INICIAL', 'VENTA', 'COBRO_FIADO', 'COMPRA_PROVEEDOR', 'GASTO_PERSONAL'
+  monto           Float              // Cuánto entró o salió
+  saldoResultante Float              // Cómo quedó la caja después de este movimiento (Clave para graficar la curva)
+  metodoPago      MetodoPago         @default(EFECTIVO)
+  descripcion     String
+  
+  createdAt       DateTime           @default(now())
+}
+
 // --- ENUMS ---
 enum Role {
   SUPER_ADMIN
@@ -240,4 +261,16 @@ enum TipoDocumento {
   BOLETA
   FACTURA
   SIN_COMPROBANTE
+}
+
+enum MetodoPago {
+  EFECTIVO
+  YAPE_PLIN
+  TRANSFERENCIA
+  FIADO
+}
+
+enum TipoMovimientoCaja {
+  INGRESO
+  EGRESO
 }
