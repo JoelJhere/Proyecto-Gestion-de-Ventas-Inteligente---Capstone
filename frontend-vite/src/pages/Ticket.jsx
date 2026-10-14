@@ -23,10 +23,16 @@ export default function Ticket() {
     cargarTicket();
   }, [id]);
 
+  const formatearMetodoPago = (metodo) => {
+    if (metodo === 'YAPE_PLIN') return 'YAPE / PLIN';
+    if (metodo === 'TRANSFERENCIA') return 'TRANSFERENCIA';
+    if (metodo === 'FIADO') return 'CRÉDITO (FIADO)';
+    return 'EFECTIVO';
+  };
+
   if (!venta) return <div className="p-10 text-center font-mono">Cargando ticket...</div>;
 
   return (
-    // Agregamos un contenedor gris de fondo para que el ticket blanco resalte en el centro
     <div className="bg-gray-100 min-h-screen py-8 print:p-0 print:bg-white flex flex-col items-center">
       
       {/* Botón de impresión manual (Se oculta al imprimir con 'print:hidden') */}
@@ -57,6 +63,7 @@ export default function Ticket() {
           <p><strong>N° Op:</strong> {venta.numeroComprobante || `#000${venta.id}`}</p>
           <p><strong>Fecha:</strong> {new Date(venta.createdAt).toLocaleDateString('es-PE')} {new Date(venta.createdAt).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'})}</p>
           <p><strong>Cajero:</strong> {venta.vendedor?.nombre}</p>
+          <p><strong>Pago:</strong> {formatearMetodoPago(venta.metodoPago)}</p>
           <p className="mt-1"><strong>Cliente:</strong> {venta.clienteNombre || 'Cliente Varios'}</p>
           {venta.clienteDocumento && venta.clienteDocumento !== '00000000' && (
             <p><strong>Doc:</strong> {venta.clienteDocumento}</p>
