@@ -54,17 +54,18 @@ export const crearPlan = async (req, res) => {
   }
 };
 
-// 3. RECIBIR LA MERCADERÍA (Validando propiedad de la bodega)
+// 3. RECIBIR LA MERCADERÍA (Suma stock y descuenta el pago del capital de la bodega)
 export const recibirPlan = async (req, res) => {
   const { id } = req.params;
   const negocioId = req.user.negocioId;
-  const { detallesRecibidos } = req.body; 
+  const { detallesRecibidos, metodoPago = 'EFECTIVO' } = req.body; 
 
   try {
     const resultado = await prisma.$transaction(async (tx) => {
       // A. Verificamos que el plan exista, sea de esta bodega y no haya sido recibido
       const plan = await tx.planCompra.findFirst({ 
-        where: { id: parseInt(id), negocioId: negocioId } 
+        where: { id: parseInt(id), negocioId: negocioId },
+        include: { proveedor: true }
       });
       if (!plan) throw new Error('Plan no encontrado en tu negocio');
       if (plan.estado === 'RECIBIDO') throw new Error('Este pedido ya fue ingresado al sistema anteriormente');
@@ -115,10 +116,32 @@ export const recibirPlan = async (req, res) => {
         include: { proveedor: true, detalles: true }
       });
 
+      // E. DESCONTAMOS EL PAGO AL PROVEEDOR DEL CAPITAL DE LA BODEGA
+      if (totalReal > 0) {
+        const metodoValido = ['EFECTIVO', 'YAPE_PLIN', 'TRANSFERENCIA'].includes(metodoPago) ? metodoPago : 'EFECTIVO';
+
+        const negocioActualizado = await tx.negocio.update({
+          where: { id: negocioId },
+          data: { saldoCaja: { decrement: totalReal } }
+        });
+
+        await tx.movimientoCaja.create({
+          data: {
+            negocioId: negocioId,
+            tipo: 'EGRESO',
+            categoria: 'COMPRA_PROVEEDOR',
+            monto: totalReal,
+            saldoResultante: negocioActualizado.saldoCaja,
+            metodoPago: metodoValido,
+            descripcion: `Pago Plan de Compra #${plan.id} (${plan.proveedor?.nombre || 'Proveedor'})`
+          }
+        });
+      }
+
       return planActualizado;
     });
 
-    res.json({ message: 'Mercadería recibida y stock actualizado', plan: resultado });
+    res.json({ message: 'Mercadería recibida, stock y caja actualizados', plan: resultado });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

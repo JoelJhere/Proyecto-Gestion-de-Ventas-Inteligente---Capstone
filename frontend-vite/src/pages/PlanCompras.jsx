@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaPlus, FaCheck, FaTimes, FaClipboardList, FaTruck, FaCalendarAlt, FaTrash, FaSearch, FaInfoCircle, FaExclamationTriangle } from 'react-icons/fa';
+import { FaPlus, FaCheck, FaTimes, FaClipboardList, FaTruck, FaCalendarAlt, FaTrash, FaSearch, FaInfoCircle, FaExclamationTriangle, FaMoneyBillWave, FaMobileAlt, FaUniversity } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -14,6 +14,7 @@ export default function PlanCompras() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [receivingPlan, setReceivingPlan] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(false);
+  const [metodoPagoCompra, setMetodoPagoCompra] = useState('EFECTIVO');
 
   // Estados para los Buscadores Inteligentes
   const [busquedaProv, setBusquedaProv] = useState('');
@@ -81,9 +82,6 @@ export default function PlanCompras() {
     setFormData({ ...formData, proveedorId: prov.id });
     setBusquedaProv(prov.nombre);
     setShowProvDropdown(false);
-    
-    // Opcional: Si cambiamos de proveedor, podríamos limpiar el producto temporal si no le pertenece,
-    // pero para no ser tan restrictivos, solo limpiamos la búsqueda de producto.
     setBusquedaProd('');
   };
 
@@ -161,6 +159,7 @@ export default function PlanCompras() {
   // --- LÓGICA DE RECEPCIÓN ---
   const abrirModalRecibir = (plan) => {
     setReceivingPlan(plan);
+    setMetodoPagoCompra('EFECTIVO');
     setDetallesRecibidos(
       plan.detalles.map(d => ({
         detalleId: d.id,
@@ -182,10 +181,19 @@ export default function PlanCompras() {
     }));
   };
 
+  // Total en tiempo real de lo que realmente llegó
+  const totalRealCalculado = detallesRecibidos.reduce(
+    (sum, item) => sum + (parseInt(item.cantidadRecibida || 0) * parseFloat(item.precioCompra || 0)),
+    0
+  );
+
   const confirmarRecepcion = async () => {
     try {
-      await axios.put(`/planes-compra/${receivingPlan.id}/recibir`, { detallesRecibidos });
-      toast.success("¡Pedido recibido! Inventario actualizado correctamente.");
+      await axios.put(`/planes-compra/${receivingPlan.id}/recibir`, { 
+        detallesRecibidos,
+        metodoPago: metodoPagoCompra
+      });
+      toast.success("¡Pedido recibido! Inventario y caja actualizados.");
       setConfirmDialog(false);
       setReceivingPlan(null);
       cargarDatos();
@@ -317,7 +325,8 @@ export default function PlanCompras() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8 flex flex-col max-h-[90vh]">
               <div className="flex justify-between items-center p-4 sm:p-6 bg-neutral-950 border-t-4 border-verde-pastel shrink-0">
                 <h2 className="text-lg sm:text-xl font-extrabold text-white">Nuevo Plan</h2>
-                <button onClick={cerrarModalCrear} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>              </div>
+                <button onClick={cerrarModalCrear} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>
+              </div>
               <form onSubmit={handleCrearPlan} className="flex flex-col flex-1 min-h-0">
                 <div className="p-6 overflow-y-auto space-y-6 flex-1">
                   
@@ -337,7 +346,6 @@ export default function PlanCompras() {
                             const valor = e.target.value;
                             setBusquedaProv(valor); 
                             setShowProvDropdown(true);
-                            // Si borras el texto, desvinculamos el proveedor para liberar los productos
                             if (valor === '') {
                               setFormData(prev => ({ ...prev, proveedorId: '' }));
                             }
@@ -450,7 +458,8 @@ export default function PlanCompras() {
                 </div>
 
                 <div className="p-5 border-t border-slate-100 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
-                    <button type="button" onClick={cerrarModalCrear} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none flex justify-center items-center gap-2">
+                  <button type="button" onClick={cerrarModalCrear} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
+                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none flex justify-center items-center gap-2">
                     <FaCheck /> Confirmar
                   </button>
                 </div>
@@ -460,7 +469,7 @@ export default function PlanCompras() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: RECIBIR PEDIDO */}
+      {/* MODAL 2: RECIBIR PEDIDO (CON MÉTODO DE PAGO Y DESCUENTO DE CAJA) */}
       <AnimatePresence>
         {receivingPlan && (
           <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
@@ -473,36 +482,90 @@ export default function PlanCompras() {
                 <button onClick={() => setReceivingPlan(null)} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>
               </div>
 
-              <div className="p-6 overflow-y-auto space-y-3 flex-1 bg-slate-50">
-                <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl mb-4 flex items-start gap-3">
+              <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50">
+                <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-start gap-3">
                   <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-blue-800 font-medium leading-relaxed">
-                    Compara la cantidad que esperabas con lo que realmente llegó. Si faltó mercancía, ajusta el número en la casilla "Llegaron".
+                    Compara la cantidad que esperabas con lo que realmente llegó. El total calculado se descontará automáticamente del capital de la bodega.
                   </p>
                 </div>
 
-                {detallesRecibidos.map((item) => (
-                  <div key={item.detalleId} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
-                    <div>
-                      <h4 className="text-slate-800 text-sm font-extrabold">{item.nombre}</h4>
-                      <p className="text-xs text-slate-500 mt-1 font-medium">Esperado: <span className="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded ml-1">{item.cantidadEsperada} unidades</span> <span className="ml-2">(S/ {item.precioCompra.toFixed(2)} c/u)</span></p>
-                    </div>
+                <div className="space-y-3">
+                  {detallesRecibidos.map((item) => (
+                    <div key={item.detalleId} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
+                      <div>
+                        <h4 className="text-slate-800 text-sm font-extrabold">{item.nombre}</h4>
+                        <p className="text-xs text-slate-500 mt-1 font-medium">Esperado: <span className="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded ml-1">{item.cantidadEsperada} unidades</span> <span className="ml-2">(S/ {item.precioCompra.toFixed(2)} c/u)</span></p>
+                      </div>
 
-                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end bg-slate-50 p-2 rounded-lg border border-slate-100">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Llegaron:</span>
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="number" 
-                          min="0"
-                          value={item.cantidadRecibida} 
-                          onChange={(e) => actualizarCantidadRecibida(item.detalleId, e.target.value)}
-                          className="w-20 p-2 bg-white border border-slate-300 rounded-lg text-center text-emerald-700 font-extrabold outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm shadow-inner transition-all" 
-                        />
-                        <span className="text-xs font-bold text-slate-400">un.</span>
+                      <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Llegaron:</span>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="number" 
+                            min="0"
+                            value={item.cantidadRecibida} 
+                            onChange={(e) => actualizarCantidadRecibida(item.detalleId, e.target.value)}
+                            className="w-20 p-2 bg-white border border-slate-300 rounded-lg text-center text-emerald-700 font-extrabold outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm shadow-inner transition-all" 
+                          />
+                          <span className="text-xs font-bold text-slate-400">un.</span>
+                        </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+
+                {/* RESUMEN DE PAGO AL PROVEEDOR Y MÉTODO */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 mt-4">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Total Real a Pagar al Proveedor:</span>
+                    <span className="text-xl font-black text-red-500">S/ {totalRealCalculado.toFixed(2)}</span>
                   </div>
-                ))}
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      ¿Con qué dinero de la bodega se pagó este pedido?
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMetodoPagoCompra('EFECTIVO')}
+                        className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex items-center justify-center gap-1.5 ${
+                          metodoPagoCompra === 'EFECTIVO'
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        <FaMoneyBillWave size={14} className={metodoPagoCompra === 'EFECTIVO' ? 'text-emerald-600' : 'text-slate-400'} />
+                        Efectivo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMetodoPagoCompra('YAPE_PLIN')}
+                        className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex items-center justify-center gap-1.5 ${
+                          metodoPagoCompra === 'YAPE_PLIN'
+                            ? 'bg-purple-50 border-purple-500 text-purple-800 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        <FaMobileAlt size={14} className={metodoPagoCompra === 'YAPE_PLIN' ? 'text-purple-600' : 'text-slate-400'} />
+                        Yape / Plin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMetodoPagoCompra('TRANSFERENCIA')}
+                        className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex items-center justify-center gap-1.5 ${
+                          metodoPagoCompra === 'TRANSFERENCIA'
+                            ? 'bg-blue-50 border-blue-500 text-blue-800 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        <FaUniversity size={14} className={metodoPagoCompra === 'TRANSFERENCIA' ? 'text-blue-600' : 'text-slate-400'} />
+                        Transferencia
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col sm:flex-row justify-end gap-3">
@@ -530,7 +593,7 @@ export default function PlanCompras() {
                   ¿Confirmar recepción?
                 </h3>
                 <p className="text-sm text-slate-500">
-                  Esto sumará automáticamente el stock ingresado a tu inventario general y no se puede deshacer.
+                  Se sumará el stock al inventario y se descontarán <strong className="text-slate-800">S/ {totalRealCalculado.toFixed(2)}</strong> ({metodoPagoCompra === 'YAPE_PLIN' ? 'Yape/Plin' : metodoPagoCompra}) del capital de la bodega.
                 </p>
               </div>
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">

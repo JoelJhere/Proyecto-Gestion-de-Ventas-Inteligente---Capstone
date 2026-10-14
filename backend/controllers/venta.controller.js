@@ -4,8 +4,7 @@ import axios from 'axios';
 const prisma = new PrismaClient();
 
 export const crearVenta = async (req, res) => {
-  const { carrito, tipoComprobante, subtotal, igv, total, cliente, metodoEnvio, esFiado } = req.body;
-  const vendedorId = req.user.id; 
+  const { carrito, tipoComprobante, metodoPago, subtotal, igv, total, cliente, metodoEnvio, esFiado } = req.body;  const vendedorId = req.user.id; 
   const negocioId = req.user.negocioId;
 
   // 1. OBTENEMOS LA CONFIGURACIÓN DEL NEGOCIO ESPECÍFICO
@@ -198,11 +197,14 @@ export const crearVenta = async (req, res) => {
       const nombreFinal = (cliente && cliente.nombre && cliente.nombre.trim() !== '') ? cliente.nombre : "CLIENTES VARIOS";
       const documentoFinal = (cliente && cliente.documento && cliente.documento.trim() !== '') ? cliente.documento : "00000000";
 
+      const metodoPagoDB = esFiado ? 'FIADO' : (metodoPago || 'EFECTIVO');
+
       const venta = await tx.venta.create({
         data: {
           negocioId: negocioId,
           vendedorId: parseInt(vendedorId),
           tipoComprobante: tipoDocDB,
+          metodoPago: metodoPagoDB,
           numeroComprobante: correlativoFinal,
           subtotal: parseFloat(subtotal),
           igv: parseFloat(igv),
@@ -250,6 +252,26 @@ export const crearVenta = async (req, res) => {
             tipo: 'VENTA',
             cantidad: item.cantidad,
             motivo: esFiado ? `Fiado POS ${correlativoFinal}` : `Venta POS ${correlativoFinal}`
+          }
+        });
+      }
+
+      // ACTUALIZAR SALDO DE CAJA Y REGISTRAR MOVIMIENTO (Solo si no es fiado) 
+      if (!esFiado) {
+        const negocioActualizado = await tx.negocio.update({
+          where: { id: negocioId },
+          data: { saldoCaja: { increment: parseFloat(total) } }
+        });
+
+        await tx.movimientoCaja.create({
+          data: {
+            negocioId: negocioId,
+            tipo: 'INGRESO',
+            categoria: 'VENTA',
+            monto: parseFloat(total),
+            saldoResultante: negocioActualizado.saldoCaja,
+            metodoPago: metodoPagoDB,
+            descripcion: `Venta ${correlativoFinal} (${nombreFinal})`
           }
         });
       }

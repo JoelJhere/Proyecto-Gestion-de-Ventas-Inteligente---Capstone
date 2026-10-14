@@ -3,12 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
-import { 
-  FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, FaHistory, 
-  FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice, FaTimes, 
-  FaExternalLinkAlt, FaWallet, FaArrowUp, FaArrowDown, FaPlus, FaMinus, 
-  FaMoneyBillWave, FaMobileAlt, FaUniversity 
-} from 'react-icons/fa';
+import { FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, FaHistory, FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice, FaTimes, FaExternalLinkAlt, FaWallet, FaArrowUp, FaArrowDown, FaPlus, FaMinus, FaMoneyBillWave, FaMobileAlt, FaUniversity } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
 
 export default function Historial() {

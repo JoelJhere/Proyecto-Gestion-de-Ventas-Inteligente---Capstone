@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { FaSearch, FaUser, FaWhatsapp, FaMoneyBillWave, FaCalendarAlt, FaCheckCircle, FaShoppingBag, FaFileInvoiceDollar, FaTimes, FaBell, FaExclamationTriangle } from 'react-icons/fa';
-import { useBusiness } from '../context/BusinessContext'; // <--- IMPORTANTE: Añadimos el contexto
+import { FaSearch, FaUser, FaWhatsapp, FaMoneyBillWave, FaCalendarAlt, FaCheckCircle, FaShoppingBag, FaFileInvoiceDollar, FaTimes, FaBell, FaExclamationTriangle, FaMobileAlt, FaUniversity } from 'react-icons/fa';
+import { useBusiness } from '../context/BusinessContext';
 
 export default function Fiados() {
   const [fiados, setFiados] = useState([]);
@@ -18,6 +18,7 @@ export default function Fiados() {
   const [modalPlazo, setModalPlazo] = useState(null);
   const [nuevaFecha, setNuevaFecha] = useState('');
   const [modalCobro, setModalCobro] = useState(null);
+  const [metodoPagoCobro, setMetodoPagoCobro] = useState('EFECTIVO');
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -50,10 +51,11 @@ export default function Fiados() {
     
     setProcesandoId(modalCobro.id);
     try {
-      await axios.put(`/fiados/pagar/${modalCobro.id}`);
-      toast.success(`Deuda de ${modalCobro.cliente.nombre} liquidada con éxito.`, { icon: '💰' });
+      await axios.put(`/fiados/pagar/${modalCobro.id}`, { metodoPago: metodoPagoCobro });
+      toast.success(`Deuda de ${modalCobro.cliente.nombre} liquidada y sumada a caja.`, { icon: '💰' });
       setFiados(prev => prev.filter(f => f.id !== modalCobro.id));
       setModalCobro(null);
+      setMetodoPagoCobro('EFECTIVO');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error al procesar el pago.');
     } finally {
@@ -74,7 +76,6 @@ export default function Fiados() {
 
     // 2. Avisamos al backend que se envió, para que sume 1 día y cuente el aviso
     try {
-      // Nota: Si usas la ruta sugerida arriba en tu backend
       await axios.put(`/fiados/avisar/${fiado.id}`);
       
       toast.success('Aviso registrado. Se postergó la alerta para mañana.', { icon: '📅' });
@@ -195,7 +196,6 @@ export default function Fiados() {
                               <FaCalendarAlt /> Fió el: {new Date(fiado.createdAt).toLocaleDateString('es-PE')}
                             </p>
                             
-                            {/* Insignia visual: Si ya se avisó X veces */}
                             {fiado.recordatorios > 0 && (
                               <span className="text-[9px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 mt-1.5 inline-flex items-center gap-1 uppercase tracking-wider">
                                 <FaBell size={8} /> Avisado: {fiado.recordatorios} {fiado.recordatorios === 1 ? 'vez' : 'veces'}
@@ -251,7 +251,10 @@ export default function Fiados() {
                         </button>
                         
                         <button 
-                          onClick={() => setModalCobro(fiado)}
+                          onClick={() => {
+                            setMetodoPagoCobro('EFECTIVO');
+                            setModalCobro(fiado);
+                          }}
                           disabled={procesandoId === fiado.id}
                           className="flex-1 bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3 px-2 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 text-xs uppercase tracking-wide disabled:opacity-50"
                         >
@@ -314,7 +317,7 @@ export default function Fiados() {
         )}
       </AnimatePresence>
 
-      {/* MODAL DE CONFIRMACIÓN DE COBRO */}
+      {/* MODAL DE CONFIRMACIÓN DE COBRO (CON SELECTOR DE MÉTODO DE PAGO) */}
       <AnimatePresence>
         {modalCobro && (
           <div className="fixed inset-0 bg-neutral-950/80 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -322,18 +325,63 @@ export default function Fiados() {
               initial={{ scale: 0.9, opacity: 0, y: 20 }} 
               animate={{ scale: 1, opacity: 1, y: 0 }} 
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-8 text-center"
+              className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-6 sm:p-8 text-center"
             >
-              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                <FaExclamationTriangle className="text-red-500 text-3xl" />
+              <div className="mx-auto w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-5 shadow-inner">
+                <FaMoneyBillWave className="text-emerald-600 text-3xl" />
               </div>
               
               <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2">
                 ¿Liquidar deuda?
               </h3>
-              <p className="text-slate-500 font-medium text-sm leading-relaxed mb-8 px-2">
-                Estás a punto de marcar como <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">PAGADA</span> la deuda de <strong className="text-slate-800">S/ {modalCobro.monto.toFixed(2)}</strong> del vecino <strong className="text-slate-800">{modalCobro.cliente.nombre}</strong>. Esta acción no se puede deshacer.
+              <p className="text-slate-500 font-medium text-sm leading-relaxed mb-5 px-1">
+                Vas a registrar el pago de <strong className="text-emerald-600">S/ {modalCobro.monto.toFixed(2)}</strong> del vecino <strong className="text-slate-800">{modalCobro.cliente.nombre}</strong>.
               </p>
+
+              {/* SELECTOR DE MÉTODO DE PAGO AL COBRAR FIADO */}
+              <div className="mb-6 text-left">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">
+                  ¿Con qué método pagó el vecino?
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMetodoPagoCobro('EFECTIVO')}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
+                      metodoPagoCobro === 'EFECTIVO'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-sm'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    <FaMoneyBillWave size={14} className={metodoPagoCobro === 'EFECTIVO' ? 'text-emerald-600' : 'text-slate-400'} />
+                    Efectivo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMetodoPagoCobro('YAPE_PLIN')}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
+                      metodoPagoCobro === 'YAPE_PLIN'
+                        ? 'bg-purple-50 border-purple-500 text-purple-800 shadow-sm'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    <FaMobileAlt size={14} className={metodoPagoCobro === 'YAPE_PLIN' ? 'text-purple-600' : 'text-slate-400'} />
+                    Yape / Plin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMetodoPagoCobro('TRANSFERENCIA')}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
+                      metodoPagoCobro === 'TRANSFERENCIA'
+                        ? 'bg-blue-50 border-blue-500 text-blue-800 shadow-sm'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    <FaUniversity size={14} className={metodoPagoCobro === 'TRANSFERENCIA' ? 'text-blue-600' : 'text-slate-400'} />
+                    Transfer.
+                  </button>
+                </div>
+              </div>
               
               <div className="flex gap-3 mt-auto">
                 <button 
@@ -345,7 +393,7 @@ export default function Fiados() {
                 <button 
                   onClick={handleLiquidar}
                   disabled={procesandoId === modalCobro.id}
-                  className="flex-1 py-3.5 px-4 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-all shadow-md shadow-red-500/20 text-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 py-3.5 px-4 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold rounded-xl transition-all shadow-sm text-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {procesandoId === modalCobro.id ? 'Cobrando...' : 'Confirmar'}
                 </button>

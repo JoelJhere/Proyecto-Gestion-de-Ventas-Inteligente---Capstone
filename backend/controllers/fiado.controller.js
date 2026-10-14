@@ -32,30 +32,67 @@ export const obtenerFiadosPendientes = async (req, res) => {
   }
 };
 
-// 2. Liquidar (Pagar) la deuda del vecino
+// 2. Liquidar (Pagar) la deuda del vecino y sumar el dinero a la caja
 export const liquidarFiado = async (req, res) => {
   const { id } = req.params;
   const negocioId = req.user.negocioId;
+  const { metodoPago = 'EFECTIVO' } = req.body;
 
   try {
     const fiadoExistente = await prisma.cuentaPorCobrar.findFirst({
-      where: { id: parseInt(id), cliente: { negocioId: negocioId } }
+      where: { id: parseInt(id), cliente: { negocioId: negocioId } },
+      include: { cliente: true }
     });
 
     if (!fiadoExistente) {
       return res.status(404).json({ message: 'Fiado no encontrado en tu negocio.' });
     }
+    if (fiadoExistente.estado === 'PAGADO') {
+      return res.status(400).json({ message: 'Esta deuda ya fue pagada anteriormente.' });
+    }
 
-    const fiadoPagado = await prisma.cuentaPorCobrar.update({
-      where: { id: parseInt(id) },
-      data: {
-        estado: 'PAGADO',
-        fechaPago: new Date()
-      }
+    const metodoValido = ['EFECTIVO', 'YAPE_PLIN', 'TRANSFERENCIA'].includes(metodoPago) ? metodoPago : 'EFECTIVO';
+
+    const fiadoPagado = await prisma.$transaction(async (tx) => {
+      // A. Marcar el fiado como PAGADO
+      const pagado = await tx.cuentaPorCobrar.update({
+        where: { id: parseInt(id) },
+        data: {
+          estado: 'PAGADO',
+          fechaPago: new Date()
+        }
+      });
+
+      // B. Actualizar el método de pago en la venta original para el Historial/Excel
+      await tx.venta.update({
+        where: { id: fiadoExistente.ventaId },
+        data: { metodoPago: metodoValido }
+      });
+
+      // C. Sumar el monto cobrado al saldo de la bodega
+      const negocioActualizado = await tx.negocio.update({
+        where: { id: negocioId },
+        data: { saldoCaja: { increment: fiadoExistente.monto } }
+      });
+
+      // D. Registrar el ingreso en el Flujo de Caja (Sube la curva del gráfico)
+      await tx.movimientoCaja.create({
+        data: {
+          negocioId: negocioId,
+          tipo: 'INGRESO',
+          categoria: 'COBRO_FIADO',
+          monto: fiadoExistente.monto,
+          saldoResultante: negocioActualizado.saldoCaja,
+          metodoPago: metodoValido,
+          descripcion: `Cobro de fiado - ${fiadoExistente.cliente.nombre}`
+        }
+      });
+
+      return pagado;
     });
 
     res.status(200).json({ 
-      message: 'Cuenta liquidada correctamente. El pago ha sido registrado.', 
+      message: 'Cuenta liquidada correctamente. El pago ha sido sumado a la caja.', 
       fiado: fiadoPagado 
     });
   } catch (error) {

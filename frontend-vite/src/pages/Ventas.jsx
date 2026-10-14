@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaReceipt, FaUser, FaFileInvoice, FaIdCard, FaTimes, FaEnvelope, FaWhatsapp, FaPrint } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaReceipt, FaUser, FaFileInvoice, FaIdCard, FaTimes, FaEnvelope, FaWhatsapp, FaPrint, FaMoneyBillWave, FaMobileAlt, FaUniversity } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -18,6 +18,7 @@ export default function Ventas() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [carrito, setCarrito] = useState(() => JSON.parse(localStorage.getItem('pos_carrito')) || []);
   const [tipoComprobante, setTipoComprobante] = useState(() => localStorage.getItem('pos_tipo_comprobante') || 'TICKET');
+  const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   
   // Estados del Cliente y Envío
   const [cliente, setCliente] = useState(() => JSON.parse(localStorage.getItem('pos_cliente')) || { documento: '', nombre: '', correo: '', telefono: '' });
@@ -221,18 +222,21 @@ export default function Ventas() {
       }
     }
 
+    const metodoPagoFinal = esFiado ? 'FIADO' : metodoPago;
+
     setIsProcessing(true);
     try {
       const token = localStorage.getItem('token');
       const payload = {
         carrito: carrito.map(item => ({ 
           id: item.id, 
-          codigo: item.codigo, // <-- Enviamos el código real a Nubefact
+          codigo: item.codigo,
           cantidad: item.cantidad, 
           precioVenta: item.precioVenta, 
           nombre: item.nombre 
         })),
         tipoComprobante,
+        metodoPago: metodoPagoFinal,
         subtotal: subtotalBase,
         igv: montoIgv,
         total: totalPagado,
@@ -250,6 +254,7 @@ export default function Ventas() {
       setVentaGenerada({
         id: res.data.venta.id,
         tipo: tipoComprobante,
+        metodoPago: metodoPagoFinal,
         total: totalPagado,
         cliente: tipoComprobante === 'TICKET' ? 'Cliente Varios' : (cliente.nombre || 'Cliente Varios'),
         documentoCliente: cliente.documento,
@@ -264,6 +269,7 @@ export default function Ventas() {
       setCliente({ documento: '', nombre: '', correo: '', telefono: '' });
       setMetodoEnvio('NINGUNO');
       setTipoComprobante('TICKET');
+      setMetodoPago('EFECTIVO');
       socket.emit('sincronizar_carrito', { usuarioId: usuario.id, carrito: [] });
       cargarCatalogo();
 
@@ -402,7 +408,7 @@ export default function Ventas() {
           </h2>
         </div>
 
-        <div className="p-6 flex-1 space-y-6 bg-slate-50">
+        <div className="p-6 flex-1 space-y-5 bg-slate-50">
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Tipo de Venta</label>
             <div className="flex bg-slate-200 p-1 rounded-lg">
@@ -424,6 +430,51 @@ export default function Ventas() {
               </button>
             </div>
           </div>
+
+          {/* NUEVO: SELECTOR DE MÉTODO DE PAGO (Se oculta cuando es Fiado) */}
+          {tipoComprobante !== 'FIADO' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Método de Pago</label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMetodoPago('EFECTIVO')}
+                  className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
+                    metodoPago === 'EFECTIVO'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  <FaMoneyBillWave size={15} className={metodoPago === 'EFECTIVO' ? 'text-emerald-600' : 'text-slate-400'} />
+                  Efectivo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMetodoPago('YAPE_PLIN')}
+                  className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
+                    metodoPago === 'YAPE_PLIN'
+                      ? 'bg-purple-50 border-purple-500 text-purple-800 shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  <FaMobileAlt size={15} className={metodoPago === 'YAPE_PLIN' ? 'text-purple-600' : 'text-slate-400'} />
+                  Yape / Plin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMetodoPago('TRANSFERENCIA')}
+                  className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
+                    metodoPago === 'TRANSFERENCIA'
+                      ? 'bg-blue-50 border-blue-500 text-blue-800 shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  <FaUniversity size={15} className={metodoPago === 'TRANSFERENCIA' ? 'text-blue-600' : 'text-slate-400'} />
+                  Transferencia
+                </button>
+              </div>
+            </div>
+          )}
 
           {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
             <div className="space-y-4 animate-fade-in">
@@ -625,6 +676,12 @@ export default function Ventas() {
                 <div className="flex justify-between items-center pb-4 border-b border-slate-200 border-dashed">
                   <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Cliente</span>
                   <span className="text-slate-800 font-bold truncate max-w-[150px]">{ventaGenerada.cliente}</span>
+                </div>
+                <div className="flex justify-between items-center pb-4 border-b border-slate-200 border-dashed">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Método de Pago</span>
+                  <span className="text-slate-800 font-bold text-xs uppercase">
+                    {ventaGenerada.metodoPago === 'YAPE_PLIN' ? 'Yape / Plin' : ventaGenerada.metodoPago}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Pagado</span>
