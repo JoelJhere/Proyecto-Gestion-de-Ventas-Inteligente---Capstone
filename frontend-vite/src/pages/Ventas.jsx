@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaReceipt, FaUser, FaFileInvoice, FaIdCard, FaTimes, FaEnvelope, FaWhatsapp, FaPrint, FaMoneyBillWave, FaMobileAlt, FaUniversity } from 'react-icons/fa';
+import { 
+  FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaUser, FaFileInvoice, FaTimes, FaEnvelope, 
+  FaWhatsapp, FaPrint, FaCheckCircle, FaBarcode 
+} from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -8,6 +11,33 @@ import { io } from 'socket.io-client';
 import { useBusiness } from '../context/BusinessContext';
 
 const socket = io(`https://proyecto-gestion-de-ventas-inteligente.onrender.com`);
+
+// --- LOGOS REALES EN SVG PARA MÉTODOS DE PAGO (CERO ASPECTO DE IA) ---
+const LogoEfectivo = () => (
+  <div className="flex items-center justify-center w-8 h-6 rounded bg-emerald-700 text-white font-bold text-xs shadow-2xs shrink-0 border border-emerald-800">
+    S/
+  </div>
+);
+
+const LogosYapePlin = () => (
+  <div className="flex items-center -space-x-1.5 shrink-0">
+    {/* Logo Yape */}
+    <div className="w-6 h-6 rounded-md bg-[#742384] text-white flex items-center justify-center font-black text-[11px] shadow-2xs border border-white z-10">
+      y
+    </div>
+    {/* Logo Plin */}
+    <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-[#00A8E8] to-[#00E5FF] text-white flex items-center justify-center font-extrabold text-[9px] shadow-2xs border border-white">
+      plin
+    </div>
+  </div>
+);
+
+const LogosBancos = () => (
+  <div className="flex items-center gap-0.5 shrink-0">
+    <span className="px-1.5 py-0.5 rounded bg-[#002A8D] text-white font-black text-[9px] tracking-tighter">BCP</span>
+    <span className="px-1.5 py-0.5 rounded bg-[#009B3A] text-white font-black text-[9px] tracking-tighter">IBK</span>
+  </div>
+);
 
 export default function Ventas() {
   const { businessConfig } = useBusiness();
@@ -287,411 +317,465 @@ export default function Ventas() {
   );
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 text-slate-900 pb-20 lg:pb-0 font-sans lg:h-[calc(100vh-6rem)] relative">
+    <div className="flex flex-col gap-4 text-slate-800 pb-16 lg:pb-0 font-sans">
       
-      {/* PANEL IZQUIERDO: CARRITO Y BUSCADOR */}
-      <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm relative min-h-[500px] lg:min-h-0">
-        <div className="p-4 sm:p-5 bg-neutral-950 border-t-4 border-verde-pastel shrink-0">
-          <h2 className="text-xl font-extrabold text-white mb-4 tracking-tight flex items-center gap-2">
-            <FaShoppingCart className="text-verde-pastel" /> Nueva Venta
-          </h2>
-          
-          <div className="flex gap-3">
-            <div className="relative w-full">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <FaSearch className="text-slate-400" />
-              </div>
-              <input 
-                type="text" 
-                placeholder="Busca por nombre o código..." 
-                value={busqueda} 
-                onChange={(e) => { setBusqueda(e.target.value); setShowDropdown(true); }}
-                onFocus={() => setShowDropdown(true)}
-                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                className="w-full pl-11 pr-4 py-3 bg-white border border-slate-300 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all shadow-sm font-medium" 
-              />
-
-              <AnimatePresence>
-                {showDropdown && busqueda && (
-                  <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} 
-                    className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl z-40 max-h-60 overflow-y-auto">
-                    {productosBuscados.length === 0 ? (
-                      <div className="p-4 text-slate-500 text-sm text-center font-medium">No hay coincidencias con stock.</div>
-                    ) : (
-                      productosBuscados.map(prod => (
-                        <div key={prod.id} onMouseDown={() => { agregarAlCarrito(prod); setBusqueda(''); setShowDropdown(false); }} 
-                          className="p-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors">
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{prod.nombre}</p>
-                            <p className="text-[10px] text-slate-400 font-mono">{prod.codigo}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-emerald-700 font-extrabold text-sm">S/ {prod.precioVenta.toFixed(2)}</p>
-                            <p className="text-[10px] text-slate-500 font-medium">Stock: {prod.stock}</p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <button 
-              onClick={() => setIsScannerOpen(true)}
-              className="bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-white font-bold px-5 py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-            >
-              <FaCamera className="text-verde-pastel" /> <span className="hidden sm:inline">Escanear</span>
-            </button>
-          </div>
+      {/* CABECERA ESTILO ADMINLTE / ERP (Miga de pan y estado de terminal) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            Terminal Punto de Venta (POS)
+          </h1>
+          <p className="text-xs text-slate-500">
+            Módulo de facturación y despacho rápido • Cajero: <span className="font-semibold text-slate-700">{usuario.nombre || 'Activo'}</span>
+          </p>
         </div>
-        
-        <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
-          <AnimatePresence>
-            {carrito.length === 0 ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col items-center justify-center text-slate-400">
-                <FaReceipt className="text-6xl mb-4 text-slate-300" />
-                <p className="text-sm font-medium">La boleta está vacía. Escanea o busca productos arriba.</p>
-              </motion.div>
-            ) : (
-              carrito.map((item) => (
-                <motion.div 
-                  key={item.id}
-                  initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-                  className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-white p-4 rounded-xl mb-3 border border-slate-200 hover:border-dorado/50 shadow-sm transition-all gap-3 sm:gap-4"
-                >
-                  <div className="flex-1">
-                    <h4 className="text-slate-900 text-sm font-bold mb-2">{item.nombre}</h4>
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide">
-                      <span className="text-slate-500 font-mono bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
-                        CÓD: {item.codigo}
-                      </span>
-                      <span className="text-slate-500 font-semibold bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
-                        Unit: <strong className="text-slate-700">S/ {item.precioVenta.toFixed(2)}</strong>
-                      </span>
-                      <span className="text-slate-500 font-semibold bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
-                        Stock: <strong className={item.stock <= 5 ? "text-red-500" : "text-emerald-600"}>{item.stock}</strong>
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-row justify-between items-center w-full sm:w-auto border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 mt-1 sm:mt-0 gap-4">
-                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 shrink-0">
-                      <button onClick={() => actualizarCantidad(item.id, -1)} 
-                        className={`p-2 rounded transition-colors ${item.cantidad === 1 ? 'text-red-500 hover:bg-red-100' : 'text-slate-600 hover:bg-slate-200'}`}>
-                        {item.cantidad === 1 ? <FaTrash size={12} /> : <FaMinus size={12} />}
-                      </button>
-                      <span className="w-10 text-center text-sm font-black text-slate-800">{item.cantidad}</span>
-                      <button onClick={() => actualizarCantidad(item.id, 1)} 
-                        className="p-2 text-slate-600 hover:bg-slate-200 rounded transition-colors">
-                        <FaPlus size={12} />
-                      </button>
-                    </div>
-
-                    <div className="text-right min-w-[90px] shrink-0 sm:border-l border-slate-100 sm:pl-4">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">Subtotal</p>
-                      <p className="text-emerald-600 font-black text-lg">S/ {(item.precioVenta * item.cantidad).toFixed(2)}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </AnimatePresence>
+        <div className="flex items-center gap-2 text-xs text-slate-500 bg-white px-3 py-1.5 rounded-md border border-slate-200 shadow-2xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>SUNAT / OSE En Línea</span>
+          <span className="text-slate-300">|</span>
+          <span className="font-mono font-semibold text-slate-700">{new Date().toLocaleDateString('es-PE')}</span>
         </div>
       </div>
 
-      {/* PANEL DERECHO: FACTURACIÓN */}
-      <div className="w-full lg:w-1/3 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-fit">
-        <div className="bg-neutral-950 px-6 py-4 border-t-4 border-dorado shrink-0">
-          <h2 className="text-white font-extrabold text-lg flex items-center gap-2">
-            <FaFileInvoice className="text-dorado" /> Detalles de Facturación
-          </h2>
-        </div>
+      {/* CONTENEDOR PRINCIPAL DIVIDIDO */}
+      <div className="flex flex-col lg:flex-row gap-5 lg:h-[calc(100vh-9.5rem)]">
+        
+        {/* PANEL IZQUIERDO: CATÁLOGO Y TABLA DE DETALLE DE VENTA */}
+        <div className="flex-1 flex flex-col bg-white border border-slate-300 border-t-4 border-t-verde-pastel rounded-md shadow-xs overflow-hidden min-h-[460px] lg:min-h-0">
+          
+          {/* Barra de búsqueda sobria y limpia */}
+          <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+            <div className="flex gap-2.5">
+              <div className="relative w-full">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <FaSearch className="text-slate-400 text-sm" />
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Buscar producto por descripción o lector de código de barras..." 
+                  value={busqueda} 
+                  onChange={(e) => { setBusqueda(e.target.value); setShowDropdown(true); }}
+                  onFocus={() => setShowDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm text-slate-800 transition-all" 
+                />
 
-        <div className="p-6 flex-1 space-y-5 bg-slate-50">
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Tipo de Venta</label>
-            <div className="flex bg-slate-200 p-1 rounded-lg">
-              <button onClick={() => setTipoComprobante('TICKET')} 
-                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                Simple
-              </button>
-              <button onClick={() => setTipoComprobante('FIADO')} 
-                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FIADO' ? 'bg-[#d4af37] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                Fiar
-              </button>
-              <button onClick={() => setTipoComprobante('BOLETA')} 
-                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'BOLETA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                Boleta
-              </button>
-              <button onClick={() => setTipoComprobante('FACTURA')} 
-                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-all ${tipoComprobante === 'FACTURA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                Factura
+                <AnimatePresence>
+                  {showDropdown && busqueda && (
+                    <motion.div initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 3 }} 
+                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-300 rounded-md shadow-lg z-40 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                      {productosBuscados.length === 0 ? (
+                        <div className="p-3.5 text-slate-500 text-xs text-center">No se encontraron productos disponibles con ese criterio.</div>
+                      ) : (
+                        productosBuscados.map(prod => (
+                          <div key={prod.id} onMouseDown={() => { agregarAlCarrito(prod); setBusqueda(''); setShowDropdown(false); }} 
+                            className="px-3.5 py-2.5 hover:bg-emerald-50/60 cursor-pointer flex justify-between items-center transition-colors">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{prod.nombre}</p>
+                              <p className="text-[11px] text-slate-500 font-mono">Cód: {prod.codigo}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-emerald-700 font-bold text-sm">S/ {prod.precioVenta.toFixed(2)}</p>
+                              <p className="text-[11px] text-slate-500">Disp: {prod.stock} un.</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <button 
+                type="button"
+                onClick={() => setIsScannerOpen(true)}
+                className="bg-slate-800 hover:bg-slate-900 text-white font-semibold px-4 py-2 rounded-md text-xs transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+              >
+                <FaCamera className="text-verde-pastel text-sm" /> <span className="hidden sm:inline">Lector Cámara</span>
               </button>
             </div>
           </div>
+          
+          {/* Tabla de ítems estilo sistema comercial (AdminLTE / Bsale) */}
+          <div className="flex-1 overflow-y-auto bg-white">
+            {carrito.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                <FaBarcode className="text-5xl mb-3 text-slate-300" />
+                <p className="text-sm font-semibold text-slate-600">Detalle de venta vacío</p>
+                <p className="text-xs text-slate-400 mt-0.5">Utilice el buscador superior o el lector de código de barras para agregar ítems.</p>
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-100 border-b border-slate-200 sticky top-0 z-10">
+                  <tr className="text-[11px] font-bold text-slate-600 uppercase">
+                    <th className="py-2.5 px-4">Código</th>
+                    <th className="py-2.5 px-4">Producto / Descripción</th>
+                    <th className="py-2.5 px-3 text-right">P. Unit</th>
+                    <th className="py-2.5 px-3 text-center">Cantidad</th>
+                    <th className="py-2.5 px-4 text-right">Importe</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-sm">
+                  {carrito.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4 font-mono text-xs text-slate-500 whitespace-nowrap">
+                        {item.codigo}
+                      </td>
+                      <td className="py-3 px-4">
+                        <p className="font-semibold text-slate-800 text-sm">{item.nombre}</p>
+                        <p className="text-[11px] text-slate-500">
+                          Stock disp: <span className={item.stock <= 5 ? "text-red-600 font-semibold" : "text-emerald-700 font-semibold"}>{item.stock}</span>
+                        </p>
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono text-slate-700 whitespace-nowrap">
+                        S/ {item.precioVenta.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center justify-center">
+                          <div className="inline-flex items-center border border-slate-300 rounded-md bg-white">
+                            <button 
+                              type="button"
+                              onClick={() => actualizarCantidad(item.id, -1)} 
+                              className={`p-1.5 transition-colors ${item.cantidad === 1 ? 'text-red-600 hover:bg-red-50' : 'text-slate-600 hover:bg-slate-100'}`}
+                            >
+                              {item.cantidad === 1 ? <FaTrash size={11} /> : <FaMinus size={11} />}
+                            </button>
+                            <span className="w-8 text-center text-xs font-bold text-slate-800 border-x border-slate-200 py-1">
+                              {item.cantidad}
+                            </span>
+                            <button 
+                              type="button"
+                              onClick={() => actualizarCantidad(item.id, 1)} 
+                              className="p-1.5 text-slate-600 hover:bg-slate-100 transition-colors"
+                            >
+                              <FaPlus size={11} />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                        S/ {(item.precioVenta * item.cantidad).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
 
-          {/* NUEVO: SELECTOR DE MÉTODO DE PAGO (Se oculta cuando es Fiado) */}
-          {tipoComprobante !== 'FIADO' && (
+          {/* Pie de tabla con conteo de ítems */}
+          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-600 shrink-0">
+            <span>Ítems en lista: <strong>{carrito.length}</strong></span>
+            <span>Unidades totales: <strong>{carrito.reduce((acc, i) => acc + i.cantidad, 0)}</strong></span>
+          </div>
+        </div>
+
+        {/* PANEL DERECHO: COMPROBANTE, PAGO Y LIQUIDACIÓN */}
+        <div className="w-full lg:w-[380px] bg-white border border-slate-300 border-t-4 border-t-emerald-600 rounded-md shadow-xs flex flex-col h-fit">
+          
+          {/* Cabecera limpia estilo AdminLTE */}
+          <div className="px-5 py-3.5 bg-white border-b border-slate-200 flex justify-between items-center">
+            <h2 className="text-slate-800 font-bold text-sm flex items-center gap-2">
+              <FaFileInvoice className="text-emerald-600" /> Datos del Comprobante
+            </h2>
+            <span className="text-[11px] font-semibold text-emerald-800 bg-verde-pastel/50 px-2 py-0.5 rounded border border-emerald-200">
+              IGV {igvPorcentaje}%
+            </span>
+          </div>
+
+          <div className="p-5 space-y-4 bg-white">
+            
+            {/* 1. Selector de Tipo de Comprobante */}
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Método de Pago</label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMetodoPago('EFECTIVO')}
-                  className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
-                    metodoPago === 'EFECTIVO'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-sm'
-                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  <FaMoneyBillWave size={15} className={metodoPago === 'EFECTIVO' ? 'text-emerald-600' : 'text-slate-400'} />
-                  Efectivo
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Tipo de Operación</label>
+              <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-md border border-slate-200">
+                <button type="button" onClick={() => setTipoComprobante('TICKET')} 
+                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+                  Nota Venta
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setMetodoPago('YAPE_PLIN')}
-                  className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
-                    metodoPago === 'YAPE_PLIN'
-                      ? 'bg-purple-50 border-purple-500 text-purple-800 shadow-sm'
-                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  <FaMobileAlt size={15} className={metodoPago === 'YAPE_PLIN' ? 'text-purple-600' : 'text-slate-400'} />
-                  Yape / Plin
+                <button type="button" onClick={() => setTipoComprobante('BOLETA')} 
+                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'BOLETA' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+                  Boleta
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setMetodoPago('TRANSFERENCIA')}
-                  className={`py-2.5 px-2 rounded-xl text-xs font-extrabold border transition-all flex flex-col items-center justify-center gap-1 ${
-                    metodoPago === 'TRANSFERENCIA'
-                      ? 'bg-blue-50 border-blue-500 text-blue-800 shadow-sm'
-                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  <FaUniversity size={15} className={metodoPago === 'TRANSFERENCIA' ? 'text-blue-600' : 'text-slate-400'} />
-                  Transferencia
+                <button type="button" onClick={() => setTipoComprobante('FACTURA')} 
+                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'FACTURA' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+                  Factura
+                </button>
+                <button type="button" onClick={() => setTipoComprobante('FIADO')} 
+                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'FIADO' ? 'bg-amber-500 text-white shadow-2xs' : 'text-amber-700 hover:bg-amber-50'}`}>
+                  Crédito/Fiar
                 </button>
               </div>
             </div>
-          )}
 
-          {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
-            <div className="space-y-4 animate-fade-in">
-              
-              {tipoComprobante !== 'FIADO' && (
-                <div>
-                  <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                    <FaIdCard/> {tipoComprobante === 'FACTURA' ? 'RUC *' : 'DNI *'}
-                  </label>
-                  <div className="relative">
-                    <input type="text" required placeholder={`Ingresa el ${tipoComprobante === 'FACTURA' ? 'RUC (11 dígitos)' : 'DNI (8 dígitos)'}`}
+            {/* 2. Selector de Método de Pago con Logos Reales (Yape / Plin / Bancos) */}
+            {tipoComprobante !== 'FIADO' && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Medio de Pago Recibido</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMetodoPago('EFECTIVO')}
+                    className={`p-2 rounded-md text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-1.5 ${
+                      metodoPago === 'EFECTIVO'
+                        ? 'bg-emerald-50/70 border-emerald-600 text-emerald-950 ring-1 ring-emerald-600'
+                        : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <LogoEfectivo />
+                    <span>Efectivo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMetodoPago('YAPE_PLIN')}
+                    className={`p-2 rounded-md text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-1.5 ${
+                      metodoPago === 'YAPE_PLIN'
+                        ? 'bg-purple-50/70 border-[#742384] text-purple-950 ring-1 ring-[#742384]'
+                        : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <LogosYapePlin />
+                    <span>Yape / Plin</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMetodoPago('TRANSFERENCIA')}
+                    className={`p-2 rounded-md text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-1.5 ${
+                      metodoPago === 'TRANSFERENCIA'
+                        ? 'bg-blue-50/70 border-blue-600 text-blue-950 ring-1 ring-blue-600'
+                        : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <LogosBancos />
+                    <span>Transferencia</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Datos del Cliente / Adquiriente */}
+            {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
+              <div className="space-y-3 pt-2 border-t border-slate-200">
+                
+                {tipoComprobante !== 'FIADO' && (
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>{tipoComprobante === 'FACTURA' ? 'Número de RUC *' : 'Número de DNI *'}</span>
+                      <span className="text-[10px] text-emerald-700 font-normal">Consulta RENIEC/SUNAT</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required 
+                      placeholder={tipoComprobante === 'FACTURA' ? '11 dígitos (Ej: 20...)' : '8 dígitos'}
                       value={cliente.documento} 
                       onChange={e => {
                         const limit = tipoComprobante === 'FACTURA' ? 11 : 8;
                         const num = e.target.value.replace(/\D/g, '').slice(0, limit);
                         setCliente({...cliente, documento: num});
-                        
                         if (num.length === limit) {
                           buscarDocumento(num, tipoComprobante);
                         }
                       }}
-                      className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm font-mono" 
+                    />
                   </div>
+                )}
+                
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                    {tipoComprobante === 'FIADO' ? 'Nombre del Cliente (Vecino) *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre del Cliente *')}
+                  </label>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder={isLoadingDoc ? 'Consultando padrón oficial...' : (tipoComprobante === 'FIADO' ? 'Nombre completo o referencia' : 'Nombre o Razón Social')}
+                    value={cliente.nombre} 
+                    onChange={e => setCliente({...cliente, nombre: e.target.value})}
+                    disabled={isLoadingDoc}
+                    className={`w-full px-3 py-2 border rounded-md outline-none text-sm transition-colors ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-400' : 'bg-white border-slate-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 text-slate-900'}`} 
+                  />
                 </div>
-              )}
-              
-              <div>
-                <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                  <FaUser/> {tipoComprobante === 'FIADO' ? 'Nombre de Referencia *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre Completo *')}
-                </label>
-                <input type="text" required 
-                  placeholder={isLoadingDoc ? 'Buscando en servidor...' : (tipoComprobante === 'FIADO' ? 'Ej: Vecino de al frente, Juan...' : `Ingresa ${tipoComprobante === 'FACTURA' ? 'la razón social' : 'el nombre'}`)}
-                  value={cliente.nombre} 
-                  onChange={e => setCliente({...cliente, nombre: e.target.value})}
-                  disabled={isLoadingDoc}
-                  className={`w-full p-2.5 border rounded-lg outline-none text-sm transition-colors ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-400 animate-pulse' : 'bg-white border-slate-300 focus:border-dorado focus:ring-1 focus:ring-dorado text-slate-900'}`} />
-              </div>
 
-              {tipoComprobante === 'FIADO' && (
-                <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
-                  <label className="text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                    <FaWhatsapp className="text-emerald-500 text-base" /> WhatsApp del Vecino *
-                  </label>
-                  <input type="text" required placeholder="Ej: 987654321" 
-                    value={cliente.telefono} 
-                    onChange={e => {
-                      let num = e.target.value.replace(/\D/g, '');
-                      if (num.length > 0 && !num.startsWith('9')) return; 
-                      setCliente({...cliente, telefono: num.slice(0, 9)});
-                    }}
-                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
-                </motion.div>
-              )}
-
-              {tipoComprobante !== 'FIADO' && (
-                <div className="pt-3 border-t border-slate-200 mt-4">
-                  <label className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide block">
-                    Medio de Envío (Opcional)
-                  </label>
-                  <div className="flex bg-slate-200 p-1 rounded-lg mb-3">
-                    <button onClick={() => setMetodoEnvio('NINGUNO')} 
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                      Físico
-                    </button>
-                    <button onClick={() => setMetodoEnvio('CORREO')} 
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                      Correo
-                    </button>
-                    <button onClick={() => setMetodoEnvio('WHATSAPP')} 
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                      WhatsApp
-                    </button>
+                {tipoComprobante === 'FIADO' && (
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <FaWhatsapp className="text-emerald-600" /> Teléfono Celular (WhatsApp) *
+                    </label>
+                    <input 
+                      type="text" 
+                      required 
+                      placeholder="9 dígitos (Ej: 987654321)" 
+                      value={cliente.telefono} 
+                      onChange={e => {
+                        let num = e.target.value.replace(/\D/g, '');
+                        if (num.length > 0 && !num.startsWith('9')) return; 
+                        setCliente({...cliente, telefono: num.slice(0, 9)});
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm font-mono" 
+                    />
                   </div>
+                )}
 
-                  {metodoEnvio === 'CORREO' && (
-                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
-                      <input type="email" required placeholder="ejemplo@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
-                       className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm" />
-                    </motion.div>
-                  )}
-                  {metodoEnvio === 'WHATSAPP' && (
-                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
-                      <input type="text" required placeholder="Número de WhatsApp (Empieza con 9)" 
+                {tipoComprobante !== 'FIADO' && (
+                  <div className="pt-2">
+                    <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                      Entrega de Comprobante
+                    </label>
+                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 mb-2">
+                      <button type="button" onClick={() => setMetodoEnvio('NINGUNO')} 
+                        className={`py-1 text-xs font-semibold rounded transition-all ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'}`}>
+                        Impresión
+                      </button>
+                      <button type="button" onClick={() => setMetodoEnvio('CORREO')} 
+                        className={`py-1 text-xs font-semibold rounded transition-all ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'}`}>
+                        Correo
+                      </button>
+                      <button type="button" onClick={() => setMetodoEnvio('WHATSAPP')} 
+                        className={`py-1 text-xs font-semibold rounded transition-all ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'}`}>
+                        WhatsApp
+                      </button>
+                    </div>
+
+                    {metodoEnvio === 'CORREO' && (
+                      <input type="email" required placeholder="cliente@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 outline-none text-sm" />
+                    )}
+                    {metodoEnvio === 'WHATSAPP' && (
+                      <input type="text" required placeholder="Celular WhatsApp (9 dígitos)" 
                         value={cliente.telefono} 
                         onChange={e => {
                           let num = e.target.value.replace(/\D/g, '');
                           if (num.length > 0 && !num.startsWith('9')) return;
                           setCliente({...cliente, telefono: num.slice(0, 9)});
                         }}
-                       className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-dorado focus:ring-1 focus:ring-dorado outline-none text-sm font-mono" />
-                    </motion.div>
-                  )}
-                </div>
-              )}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 outline-none text-sm font-mono" />
+                    )}
+                  </div>
+                )}
 
-            </div>
-          )}
-
-          {tipoComprobante === 'TICKET' && (
-             <div className="p-4 border border-dashed border-slate-300 bg-slate-100 rounded-xl text-center">
-               <p className="text-slate-500 text-sm font-medium">Venta rápida sin comprobante de SUNAT. El sistema generará un ticket interno.</p>
-             </div>
-          )}
-        </div>
-
-        <div className="p-6 border-t border-slate-200 bg-white rounded-b-2xl">
-          {tipoComprobante !== 'TICKET' && (
-            <>
-              <div className="flex justify-between text-sm text-slate-500 mb-2 font-medium">
-                <span>Op. Gravadas (Base):</span>
-                <span>S/ {subtotalBase.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-sm text-slate-500 mb-4 font-medium">
-                <span>IGV ({igvPorcentaje}%):</span>
-                <span>S/ {montoIgv.toFixed(2)}</span>
+            )}
+
+            {tipoComprobante === 'TICKET' && (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-600">
+                Emisión rápida de <strong>Nota de Venta Interna</strong> para control de caja e inventario (no declarable a SUNAT).
               </div>
-            </>
-          )}
-          
-          <div className="flex justify-between items-center mb-6">
-            <span className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Total a Pagar:</span>
-            <span className="text-3xl font-black text-neutral-950 tracking-tighter">S/ {totalPagado.toFixed(2)}</span>
+            )}
           </div>
 
-          <button 
-            onClick={() => tipoComprobante === 'FIADO' ? handleProcesarVenta(true) : handleProcesarVenta(false)}
-            disabled={carrito.length === 0 || isProcessing} 
-            className={`w-full font-extrabold py-4 px-6 rounded-xl transition-all shadow-[0_4px_15px_rgba(0,0,0,0.1)] flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wide text-sm ${
-              tipoComprobante === 'FIADO' 
-                ? 'bg-gradient-to-r from-amber-500 to-[#d4af37] hover:from-amber-400 hover:to-yellow-500 text-white'
-                : 'bg-verde-pastel hover:bg-emerald-400 text-neutral-950'
-            }`}
-          >
-            {isProcessing ? (
-              <span className="animate-pulse">Procesando...</span>
-            ) : tipoComprobante === 'FIADO' ? (
-              <><FaUser size={16} /> Fiar a este Vecino</>
-            ) : (
-              <><FaShoppingCart size={16} /> Procesar Venta</>
+          {/* 4. Resumen de Importes y Botón de Cobro */}
+          <div className="p-5 border-t border-slate-200 bg-slate-50 rounded-b-md mt-auto">
+            {tipoComprobante !== 'TICKET' && (
+              <div className="space-y-1 mb-3 pb-3 border-b border-slate-200 text-xs text-slate-600">
+                <div className="flex justify-between">
+                  <span>Op. Gravada (Subtotal):</span>
+                  <span className="font-mono font-semibold">S/ {subtotalBase.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>I.G.V. ({igvPorcentaje}%):</span>
+                  <span className="font-mono font-semibold">S/ {montoIgv.toFixed(2)}</span>
+                </div>
+              </div>
             )}
-          </button>
+            
+            <div className="flex justify-between items-baseline mb-4">
+              <span className="text-xs font-bold text-slate-700 uppercase">Importe Total:</span>
+              <span className="text-2xl font-black text-slate-900 font-mono">S/ {totalPagado.toFixed(2)}</span>
+            </div>
+
+            <button 
+              type="button"
+              onClick={() => tipoComprobante === 'FIADO' ? handleProcesarVenta(true) : handleProcesarVenta(false)}
+              disabled={carrito.length === 0 || isProcessing} 
+              className={`w-full font-bold py-3 px-4 rounded-md transition-all shadow-xs flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm ${
+                tipoComprobante === 'FIADO' 
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                  : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 border border-emerald-300'
+              }`}
+            >
+              {isProcessing ? (
+                <span>Procesando operación...</span>
+              ) : tipoComprobante === 'FIADO' ? (
+                <><FaUser size={14} /> Registrar Cuenta por Cobrar (Fiado)</>
+              ) : (
+                <><FaShoppingCart size={14} /> Emitir Comprobante (S/ {totalPagado.toFixed(2)})</>
+              )}
+            </button>
+          </div>
         </div>
+
       </div>
 
       {/* MODAL DEL ESCÁNER CÁMARA */}
       <AnimatePresence>
         {isScannerOpen && (
-          <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 bg-slate-950/80 z-[60] flex flex-col items-center justify-center p-4 backdrop-blur-xs">
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} 
+              initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-sm flex flex-col items-center"
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-sm bg-white rounded-md border border-slate-300 shadow-xl overflow-hidden"
             >
-              <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-widest text-center">
-                Apunta al Código de Barras
-              </h3>
-              
-              <div 
-                id="reader-ventas" 
-                className="w-full bg-black rounded-2xl overflow-hidden border-2 border-verde-pastel shadow-[0_0_20px_rgba(167,243,208,0.3)]"
-              ></div>
-              
-              <button 
-                onClick={() => setIsScannerOpen(false)}
-                className="mt-8 bg-red-500/10 border border-red-500/50 text-red-400 hover:bg-red-500 hover:text-white font-bold py-3 px-8 rounded-xl transition-all flex items-center gap-2"
-              >
-                <FaTimes /> Cancelar Escáner
-              </button>
+              <div className="px-4 py-3 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <FaCamera className="text-verde-pastel" /> Lector de Código de Barras
+                </h3>
+                <button onClick={() => setIsScannerOpen(false)} className="text-slate-400 hover:text-white">
+                  <FaTimes />
+                </button>
+              </div>
+              <div className="p-4 bg-slate-50 flex flex-col items-center">
+                <div id="reader-ventas" className="w-full bg-black rounded overflow-hidden border border-slate-300"></div>
+                <p className="text-xs text-slate-500 mt-3 text-center">Enfoque el código de barras del empaque frente a la cámara.</p>
+              </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* --- MODAL DE VENTA EXITOSA (COMPROBANTE) --- */}
+      {/* --- MODAL DE VENTA EXITOSA (ESTILO COMPROBANTE EMPRESARIAL) --- */}
       <AnimatePresence>
         {ventaGenerada && (
-          <div className="fixed inset-0 bg-neutral-950/80 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 bg-slate-950/70 z-[80] flex items-center justify-center p-4 backdrop-blur-xs">
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col"
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              className="bg-white rounded-md w-full max-w-sm overflow-hidden shadow-xl border border-slate-300 flex flex-col"
             >
-              <div className="bg-emerald-500 p-6 flex flex-col items-center justify-center text-white text-center">
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-3 shadow-inner">
-                  <FaReceipt className="text-emerald-500 text-3xl" />
+              <div className="bg-white p-5 border-b border-slate-200 border-t-4 border-t-emerald-600 flex items-center gap-3">
+                <FaCheckCircle className="text-emerald-600 text-2xl shrink-0" />
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Operación Registrada</h2>
+                  <p className="text-xs text-slate-500">
+                    {ventaGenerada.tipo === 'TICKET' ? 'Nota de Venta Interna' : `${ventaGenerada.tipo} Electrónica`} emitida correctamente.
+                  </p>
                 </div>
-                <h2 className="text-2xl font-black tracking-tight">¡Venta Exitosa!</h2>
-                <p className="text-emerald-50 font-medium text-sm mt-1 opacity-90">
-                  {ventaGenerada.tipo === 'TICKET' ? 'Ticket Interno' : `${ventaGenerada.tipo} ELECTRÓNICA`} generada.
-                </p>
               </div>
 
-              <div className="p-6 bg-slate-50 space-y-4">
-                <div className="flex justify-between items-center pb-4 border-b border-slate-200 border-dashed">
-                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">N° Operación</span>
-                  <span className="text-slate-800 font-mono font-bold">#000{ventaGenerada.id}</span>
+              <div className="p-5 bg-slate-50 space-y-2.5 text-xs">
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
+                  <span className="text-slate-500 font-semibold">N° Operación:</span>
+                  <span className="text-slate-900 font-mono font-bold">#000{ventaGenerada.id}</span>
                 </div>
-                <div className="flex justify-between items-center pb-4 border-b border-slate-200 border-dashed">
-                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Cliente</span>
-                  <span className="text-slate-800 font-bold truncate max-w-[150px]">{ventaGenerada.cliente}</span>
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
+                  <span className="text-slate-500 font-semibold">Cliente:</span>
+                  <span className="text-slate-800 font-semibold truncate max-w-[180px]">{ventaGenerada.cliente}</span>
                 </div>
-                <div className="flex justify-between items-center pb-4 border-b border-slate-200 border-dashed">
-                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Método de Pago</span>
-                  <span className="text-slate-800 font-bold text-xs uppercase">
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
+                  <span className="text-slate-500 font-semibold">Medio de Pago:</span>
+                  <span className="text-slate-800 font-bold">
                     {ventaGenerada.metodoPago === 'YAPE_PLIN' ? 'Yape / Plin' : ventaGenerada.metodoPago}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Pagado</span>
-                  <span className="text-emerald-600 font-black text-2xl tracking-tighter">S/ {ventaGenerada.total.toFixed(2)}</span>
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-slate-700 font-bold uppercase">Total Cobrado:</span>
+                  <span className="text-emerald-700 font-black text-xl font-mono">S/ {ventaGenerada.total.toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="p-5 bg-white border-t border-slate-100 flex flex-col gap-3">
-                
-                {/* BOTONES DE ENVÍO/IMPRESIÓN */}
+              <div className="p-4 bg-white border-t border-slate-200 flex flex-col gap-2">
                 {ventaGenerada.metodoEnvio === 'WHATSAPP' && ventaGenerada.tipo !== 'TICKET' && (
                   <button 
                     onClick={() => {
@@ -708,18 +792,18 @@ export default function Ventas() {
 
                       window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(textoMensaje)}`, '_blank');
                     }}
-                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold py-2.5 px-4 rounded-md transition-colors flex justify-center items-center gap-2 text-xs"
                   >
-                    <FaWhatsapp size={18} /> Enviar {ventaGenerada.tipo} por WhatsApp
+                    <FaWhatsapp size={16} /> Enviar Comprobante por WhatsApp
                   </button>
                 )}
 
                 {ventaGenerada.metodoEnvio === 'CORREO' && ventaGenerada.tipo !== 'TICKET' && (
                   <button 
                     onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-md transition-colors flex justify-center items-center gap-2 text-xs"
                   >
-                    <FaEnvelope size={16} /> Ver PDF / Correo Enviado
+                    <FaEnvelope size={14} /> Abrir PDF / Correo Enviado
                   </button>
                 )}
 
@@ -732,18 +816,17 @@ export default function Ventas() {
                         window.open(`/ticket/${ventaGenerada.id}`, '_blank', 'width=400,height=600');
                       }
                     }}
-                    className="w-full bg-neutral-950 hover:bg-neutral-800 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm uppercase tracking-wide"
+                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-md transition-colors flex justify-center items-center gap-2 text-xs"
                   >
-                    <FaPrint size={16} /> Ver e Imprimir {ventaGenerada.tipo === 'TICKET' ? 'TICKET' : ventaGenerada.tipo}
+                    <FaPrint size={14} /> Imprimir {ventaGenerada.tipo === 'TICKET' ? 'Ticket' : ventaGenerada.tipo}
                   </button>
                 )}
                 
-                {/* BOTÓN PRINCIPAL SIEMPRE VISIBLE */}
                 <button 
                   onClick={() => setVentaGenerada(null)}
-                  className="w-full font-bold py-3.5 px-4 rounded-xl transition-all flex justify-center items-center text-sm bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
+                  className="w-full font-semibold py-2.5 px-4 rounded-md transition-colors text-xs bg-slate-100 hover:bg-slate-200 text-slate-700"
                 >
-                  {ventaGenerada.tipo === 'TICKET' ? 'Siguiente Cliente' : 'Siguiente Venta'}
+                  Nueva Operación
                 </button>
               </div>
             </motion.div>
