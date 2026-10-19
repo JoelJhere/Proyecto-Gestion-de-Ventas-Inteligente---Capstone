@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaRobot, FaPaperPlane, FaTrash, FaTimes, FaMinus, FaExclamationTriangle, FaClock, FaWallet } from 'react-icons/fa';
+import { 
+  FaRobot, FaPaperPlane, FaTrash, FaTimes, FaMinus, 
+  FaExclamationTriangle, FaClock, FaWallet 
+} from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useBusiness } from '../context/BusinessContext';
@@ -30,6 +33,8 @@ export default function AsistenteIA() {
     return guardado ? JSON.parse(guardado) : [mensajeInicial];
   });
 
+  // Referencia de los bordes de la pantalla para que la burbuja NUNCA se salga
+  const constraintsRef = useRef(null);
   // Detector para diferenciar entre ARRASTRAR la bolita y HACER CLIC
   const isDraggingRef = useRef(false);
   const chatEndRef = useRef(null);
@@ -121,11 +126,16 @@ export default function AsistenteIA() {
 
   return (
     <>
-      {/* 1. BURBUJA CIRCULAR FLOTANTE Y ARRASTRABLE */}
+      {/* JAULA INVISIBLE DE LÍMITES DE PANTALLA (Impide que la bolita salga de la ventana) */}
+      <div ref={constraintsRef} className="fixed inset-4 pointer-events-none z-[94]" />
+
+      {/* 1. BURBUJA CIRCULAR FLOTANTE Y ARRASTRABLE CON LÍMITES */}
       <AnimatePresence>
         {!isOpen && (
           <motion.div
             drag
+            dragConstraints={constraintsRef}
+            dragElastic={0.08}
             dragMomentum={false}
             onDragStart={() => { isDraggingRef.current = true; }}
             onDragEnd={() => {
