@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FaRobot, FaPaperPlane, FaTrash, FaTimes, FaMinus, 
-  FaExclamationTriangle, FaClock, FaWallet 
-} from 'react-icons/fa';
+import { FaRobot, FaPaperPlane, FaTrash, FaTimes, FaExclamationTriangle, FaClock, FaWallet } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useBusiness } from '../context/BusinessContext';
@@ -38,6 +35,28 @@ export default function AsistenteIA() {
   // Detector para diferenciar entre ARRASTRAR la bolita y HACER CLIC
   const isDraggingRef = useRef(false);
   const chatEndRef = useRef(null);
+
+  const formatearTextoIA = (texto) => {
+    if (!texto) return null;
+
+    const textoLimpio = texto
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/^\s*\*\s+/gm, '• ');
+
+    const partes = textoLimpio.split(/(\*\*.*?\*\*)/g);
+
+    return partes.map((parte, i) => {
+      if (parte.startsWith('**') && parte.endsWith('**')) {
+        const contenidoSinAsteriscos = parte.slice(2, -2);
+        return (
+          <strong key={i} className="font-extrabold text-slate-950">
+            {contenidoSinAsteriscos}
+          </strong>
+        );
+      }
+      return <span key={i}>{parte.replace(/\*\*/g, '')}</span>;
+    });
+  };
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(mensajes));
@@ -151,19 +170,16 @@ export default function AsistenteIA() {
             className="fixed bottom-6 right-6 z-[95] cursor-grab active:cursor-grabbing select-none"
           >
             <div className="relative w-16 h-16 rounded-full bg-neutral-950 border-2 border-verde-pastel shadow-[0_8px_30px_rgba(0,0,0,0.45)] flex items-center justify-center group">
-              {/* Efecto de pulso suave */}
               <span className="absolute inset-0 rounded-full bg-verde-pastel/20 animate-ping opacity-30 pointer-events-none"></span>
               
               <FaRobot className="text-verde-pastel text-2xl group-hover:rotate-12 transition-transform" />
 
-              {/* Contador de alertas de la bodega */}
               {totalAlertas > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-neutral-950 shadow-md">
                   {totalAlertas}
                 </span>
               )}
 
-              {/* Etiqueta flotante al pasar el mouse */}
               <div className="hidden md:block absolute right-20 bg-neutral-950 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-neutral-800 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
                 Asistente IA <span className="text-verde-pastel ml-1">(Arrástrame)</span>
               </div>
@@ -212,14 +228,6 @@ export default function AsistenteIA() {
                   <button
                     type="button"
                     onClick={() => setIsOpen(false)}
-                    title="Minimizar a la burbuja"
-                    className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-900 rounded-lg transition-colors"
-                  >
-                    <FaMinus size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsOpen(false)}
                     title="Cerrar"
                     className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-900 rounded-lg transition-colors"
                   >
@@ -264,10 +272,10 @@ export default function AsistenteIA() {
                     className={`max-w-[85%] px-4 py-3 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-line shadow-sm ${
                       msg.role === 'user'
                         ? 'bg-neutral-950 text-white rounded-br-xs font-medium'
-                        : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs font-medium'
+                        : 'bg-white text-slate-700 border border-slate-200 rounded-bl-xs font-medium'
                     }`}
                   >
-                    {msg.text}
+                    {msg.role === 'user' ? msg.text : formatearTextoIA(msg.text)}
                   </div>
                 </div>
               ))}
