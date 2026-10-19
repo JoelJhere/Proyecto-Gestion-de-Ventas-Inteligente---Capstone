@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FaShoppingCart, FaBoxOpen, FaHistory, FaRobot, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar, FaStore, FaUsers, FaFileContract } from 'react-icons/fa';
+import { FaShoppingCart, FaBoxOpen, FaHistory, FaCog, FaSignOutAlt, FaBars, FaTimes, FaTruck, FaClipboardList, FaFileInvoiceDollar, FaStore, FaUsers, FaFileContract } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import TerminosModal from './TerminosModal';
+import AsistenteIA from './AsistenteIA';
 
 export default function Layout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -58,7 +59,6 @@ export default function Layout() {
     { path: '/proveedores', icon: FaTruck, label: 'Proveedores' },
     { path: '/compras', icon: FaClipboardList, label: 'Plan de Compras' },
     { path: '/historial', icon: FaHistory, label: 'Historial y Finanzas' },
-    { path: '/ia-panel', icon: FaRobot, label: 'Asistente IA' },
     { path: '/configuracion', icon: FaCog, label: 'Configuración', soloAdmin: true },
     { path: '/usuarios', icon: FaUsers, label: 'Usuarios', soloAdmin: true },
   ];
@@ -265,6 +265,7 @@ export default function Layout() {
         modoObligatorio={false}
         onClose={() => setMostrarModalLectura(false)}
       />
+      <AsistenteIA />
     </div>
   );
 }
