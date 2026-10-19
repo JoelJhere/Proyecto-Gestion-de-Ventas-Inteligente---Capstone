@@ -53,7 +53,7 @@ export default function Layout() {
   };
 
   const todosLosItems = [
-    { path: '/ventas', icon: FaShoppingCart, label: 'Nueva Venta' },
+    { path: '/ventas', icon: FaShoppingCart, label: 'Punto de Venta (POS)' },
     { path: '/fiados', icon: FaFileInvoiceDollar, label: 'Fiados' },
     { path: '/productos', icon: FaBoxOpen, label: 'Productos' },
     { path: '/proveedores', icon: FaTruck, label: 'Proveedores' },

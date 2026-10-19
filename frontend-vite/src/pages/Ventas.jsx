@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaUser, FaFileInvoice, FaTimes, FaEnvelope, 
-  FaWhatsapp, FaPrint, FaCheckCircle, FaBarcode 
-} from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaUser, FaFileInvoice, FaTimes, FaEnvelope, FaWhatsapp, FaPrint, FaCheckCircle, FaBarcode } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -12,7 +9,6 @@ import { useBusiness } from '../context/BusinessContext';
 
 const socket = io(`https://proyecto-gestion-de-ventas-inteligente.onrender.com`);
 
-// --- LOGOS REALES EN SVG PARA MÉTODOS DE PAGO (CERO ASPECTO DE IA) ---
 const LogoEfectivo = () => (
   <div className="flex items-center justify-center w-8 h-6 rounded bg-emerald-700 text-white font-bold text-xs shadow-2xs shrink-0 border border-emerald-800">
     S/
@@ -323,7 +319,7 @@ export default function Ventas() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            Terminal Punto de Venta (POS)
+            Punto de Venta (POS)
           </h1>
           <p className="text-xs text-slate-500">
             Módulo de facturación y despacho rápido • Cajero: <span className="font-semibold text-slate-700">{usuario.nombre || 'Activo'}</span>
@@ -491,7 +487,7 @@ export default function Ventas() {
               <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-md border border-slate-200">
                 <button type="button" onClick={() => setTipoComprobante('TICKET')} 
                   className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
-                  Nota Venta
+                  Venta Rápida
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('BOLETA')} 
                   className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'BOLETA' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
@@ -660,7 +656,7 @@ export default function Ventas() {
 
             {tipoComprobante === 'TICKET' && (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-600">
-                Emisión rápida de <strong>Nota de Venta Interna</strong> para control de caja e inventario (no declarable a SUNAT).
+                Emisión rápida de <strong>Venta Rápida</strong> para control de caja e inventario (no declarable a SUNAT).
               </div>
             )}
           </div>
