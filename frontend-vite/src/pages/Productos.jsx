@@ -274,7 +274,7 @@ export default function Productos() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Catálogo de Productos e Inventario
+            Gestion de Productos
           </h1>
           <p className="text-sm text-slate-600 font-medium mt-1">
             Administra tus existencias, costos de compra, precios de venta y etiquetas de código de barras.
@@ -434,7 +434,7 @@ export default function Productos() {
                             type="button"
                             onClick={() => setBarcodeView(prod)} 
                             className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200/80 rounded-lg transition-colors cursor-pointer" 
-                            title="Ver e Imprimir Código de Barras"
+                            title="Ver Código"
                           >
                             <FaBarcode size={14} />
                           </button>
@@ -455,7 +455,7 @@ export default function Productos() {
                                 type="button"
                                 onClick={() => setStockProduct(prod)} 
                                 className="p-2 text-emerald-700 hover:text-emerald-800 bg-white hover:bg-verde-pastel/30 border border-slate-200/80 rounded-lg transition-colors cursor-pointer" 
-                                title="Ajustar o Abastecer Stock"
+                                title="Actualizar Stock"
                               >
                                 <FaBox size={14} />
                               </button>
@@ -556,7 +556,7 @@ export default function Productos() {
                     <FaBoxOpen size={18} />
                   </div>
                   <div>
-                    <h2 className="text-lg font-extrabold text-slate-900">Registrar Nuevo Producto</h2>
+                    <h2 className="text-lg font-extrabold text-slate-900">Nuevo Producto</h2>
                     <p className="text-xs text-slate-500 font-medium">Completa los datos para añadirlo al catálogo de tu bodega.</p>
                   </div>
                 </div>
@@ -707,7 +707,7 @@ export default function Productos() {
                   <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
                     <FaBox size={17} />
                   </div>
-                  <h2 className="text-lg font-extrabold text-slate-900">Ajustar Inventario</h2>
+                  <h2 className="text-lg font-extrabold text-slate-900">Actualizar Stock</h2>
                 </div>
                 <button type="button" onClick={() => setStockProduct(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors"><FaTimes size={18}/></button>
               </div>

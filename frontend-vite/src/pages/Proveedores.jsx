@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaPlus, FaEdit, FaTimes, FaSearch, FaTruck } from 'react-icons/fa';
+import { 
+  FaPlus, FaEdit, FaTimes, FaSearch, 
+  FaTruck, FaIdCard, FaPhoneAlt 
+} from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -35,6 +38,11 @@ export default function Proveedores() {
 
   // Función validadora para RUC/DNI y formato de teléfono peruano (fijos y móviles)
   const validarFormulario = (datos) => {
+    if (!datos.nombre || !datos.nombre.trim()) {
+      toast.error('Ingresa el nombre o razón social del proveedor.');
+      return false;
+    }
+
     const docRegex = /^(?:\d{8}|\d{11})$/;
     if (!docRegex.test(datos.ruc)) {
       toast.error('El documento debe tener exactamente 8 dígitos (DNI) o 11 dígitos (RUC).');
@@ -96,80 +104,165 @@ export default function Proveedores() {
     (prov.ruc && prov.ruc.includes(busqueda))
   );
 
+  // Métricas en vivo para las tarjetas superiores estilo Figma
+  const empresasConRuc = proveedores.filter(p => p.ruc && p.ruc.length === 11).length;
+  const conTelefono = proveedores.filter(p => p.telefono && p.telefono.trim() !== '').length;
+
   return (
-    <div className="text-slate-900 pb-20 font-sans">
+    <div className="flex flex-col gap-6 text-slate-800 pb-20 lg:pb-4 font-sans antialiased">
       
-      {/* CABECERA Y BUSCADOR */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
+      {/* CABECERA PRINCIPAL (Jerarquía limpia estilo Figma) */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-neutral-950 mb-1 tracking-tight flex items-center gap-3">
-            <FaTruck className="text-verde-pastel drop-shadow-md" /> Proveedores
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Proveedores
           </h1>
-          <p className="text-slate-500 text-sm font-medium">Gestiona los contactos que surten el negocio.</p>
+          <p className="text-sm text-slate-600 font-medium mt-1">
+            Gestiona las distribuidoras y contactos comerciales que abastecen tu bodega.
+          </p>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          <div className="relative w-full sm:w-72">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-              <FaSearch className="text-slate-400" />
+          <div className="relative w-full sm:w-80">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <FaSearch className="text-slate-400 text-sm" />
             </div>
             <input 
-              type="text" placeholder="Buscar por nombre o RUC..." 
-              value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm text-slate-800 transition-all shadow-sm font-medium" 
+              type="text" 
+              placeholder="Buscar por empresa, nombre o RUC..." 
+              value={busqueda} 
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium placeholder:text-slate-400" 
             />
           </div>
           {isAdmin && (
-            <button onClick={() => setIsCreateModalOpen(true)} className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-bold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm whitespace-nowrap">
-                <FaPlus size={14} /> Nuevo Proveedor
+            <button 
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)} 
+              className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-2xs text-sm whitespace-nowrap cursor-pointer"
+            >
+              <FaPlus size={13} /> Nuevo Proveedor
             </button>
           )}
         </div>
       </div>
+
+      {/* TARJETAS DE RESUMEN SIMÉTRICAS (Estilo Figma) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-500">Total de Proveedores</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
+              {proveedores.length}
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
+            <FaTruck size={22} />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-500">Empresas con RUC</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
+              {empresasConRuc}
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <FaIdCard size={22} />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-500">Con Teléfono Activo</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
+              {conTelefono}
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <FaPhoneAlt size={19} />
+          </div>
+        </div>
+      </div>
       
-      {/* TABLA PRINCIPAL */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      {/* TABLA PRINCIPAL CON SOMBRA FLOTANTE SUAVE */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
-              <tr className="bg-neutral-950 text-white text-xs uppercase tracking-wider font-bold border-t-4 border-verde-pastel">
-                <th className="p-4 whitespace-nowrap w-1/3">Empresa / Nombre</th>
-                <th className="p-4 whitespace-nowrap w-1/4">RUC / DNI</th>
-                <th className="p-4 whitespace-nowrap w-1/4">Teléfono de Contacto</th>
-                {isAdmin && <th className="p-4 text-center whitespace-nowrap">Acciones</th>}
+              <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                <th className="py-3.5 px-5 whitespace-nowrap w-2/5">Empresa / Razón Social</th>
+                <th className="py-3.5 px-4 whitespace-nowrap w-1/4">Documento (RUC / DNI)</th>
+                <th className="py-3.5 px-4 whitespace-nowrap w-1/4">Teléfono de Contacto</th>
+                {isAdmin && <th className="py-3.5 px-5 text-center whitespace-nowrap">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {isLoading ? (
-                // SKELETON LOADER (Animación de carga)
                 [...Array(5)].map((_, index) => (
                   <tr key={index} className="animate-pulse">
-                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-48"></div></td>
-                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
-                    <td className="p-4"><div className="h-4 bg-slate-200 rounded w-32"></div></td>
+                    <td className="py-4 px-5"><div className="h-4 bg-slate-200 rounded w-48"></div></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-28"></div></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-32"></div></td>
                     {isAdmin && (
-                      <td className="p-4 flex justify-center">
-                        <div className="h-8 w-8 bg-slate-200 rounded"></div>
+                      <td className="py-4 px-5 flex justify-center">
+                        <div className="h-8 w-8 bg-slate-200 rounded-lg"></div>
                       </td>
                     )}
                   </tr>
                 ))
               ) : proveedoresFiltrados.length === 0 ? (
-                <tr><td colSpan={isAdmin ? "4" : "3"} className="p-12 text-center text-slate-500 font-medium">{busqueda ? 'No se encontraron proveedores.' : 'No hay proveedores registrados.'}</td></tr>
+                <tr>
+                  <td colSpan={isAdmin ? "4" : "3"} className="p-12 text-center text-slate-500 font-medium text-sm">
+                    {busqueda ? 'No se encontraron proveedores con ese criterio.' : 'Aún no hay proveedores registrados en el sistema.'}
+                  </td>
+                </tr>
               ) : (
                 proveedoresFiltrados.map((prov) => (
-                <tr key={prov.id} className="hover:bg-slate-50 transition-colors">                  
-                    <td className="p-4 font-extrabold text-slate-800 align-middle">{prov.nombre}</td>
-                    <td className="p-4 text-slate-500 font-mono align-middle">{prov.ruc || '-'}</td>
-                    <td className="p-4 text-slate-600 font-medium align-middle">{prov.telefono || '-'}</td>
-                    {isAdmin && (
-                      <td className="p-4 align-middle">
-                        <div className="flex justify-center gap-2">
-                          <button onClick={() => setEditingProveedor(prov)} className="p-2 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Editar Proveedor"><FaEdit /></button>
+                  <tr key={prov.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3.5 px-5 align-middle">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-verde-pastel/40 text-emerald-900 font-bold text-sm flex items-center justify-center shrink-0">
+                          {prov.nombre.charAt(0).toUpperCase()}
                         </div>
+                        <span className="font-bold text-slate-900 text-sm">{prov.nombre}</span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 align-middle whitespace-nowrap">
+                      {prov.ruc ? (
+                        <div className="inline-flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200/80">
+                            {prov.ruc.length === 11 ? 'RUC' : 'DNI'}
+                          </span>
+                          <span className="font-mono font-semibold text-slate-700 text-xs sm:text-sm">{prov.ruc}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs">No registrado</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-700 font-semibold font-mono text-xs sm:text-sm align-middle whitespace-nowrap">
+                      {prov.telefono ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50/70 text-emerald-800 border border-emerald-200/60">
+                          <FaPhoneAlt size={11} className="text-emerald-600" /> {prov.telefono}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-sans font-normal text-xs">Sin teléfono</span>
+                      )}
+                    </td>
+                    {isAdmin && (
+                      <td className="py-3.5 px-5 align-middle text-center">
+                        <button 
+                          type="button"
+                          onClick={() => setEditingProveedor(prov)} 
+                          className="p-2 text-amber-600 hover:text-amber-700 bg-white hover:bg-amber-50 border border-slate-200/80 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center" 
+                          title="Editar Proveedor"
+                        >
+                          <FaEdit size={14} />
+                        </button>
                       </td>
                     )}
-                </tr>
+                  </tr>
                 ))
               )}
             </tbody>
@@ -180,32 +273,64 @@ export default function Proveedores() {
       {/* MODAL 1: NUEVO PROVEEDOR */}
       <AnimatePresence>
         {isCreateModalOpen && (
-          <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-              <div className="flex justify-between items-center p-4 sm:p-6 bg-neutral-950 border-t-4 border-verde-pastel shrink-0">
-                <h2 className="text-lg sm:text-xl font-extrabold text-white">Nuevo Proveedor</h2>
-                <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>
-              </div>
-              <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
-                <div className="p-6 overflow-y-auto space-y-5 flex-1">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Nombre o Razón Social *</label>
-                    <input type="text" required value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium" placeholder="Ej: Distribuidora Gloria S.A."/>
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[80] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.95 }} 
+              className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+            >
+              <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
+                    <FaTruck size={18} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">RUC / DNI *</label>
-                    {/* Filtro en tiempo real: Solo permite ingresar números y máximo 11 caracteres */}
-                    <input type="text" required value={formData.ruc} onChange={e => setFormData({...formData, ruc: e.target.value.replace(/\D/g, '').slice(0, 11)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium font-mono" placeholder="Ej: 20100152356 o 76543210"/>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Teléfono / Fijo / WhatsApp</label>
-                    {/* Filtro en tiempo real: Solo números, máximo 9 caracteres */}
-                    <input type="text" value={formData.telefono} onChange={e => setFormData({...formData, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium font-mono" placeholder="Ej: 987654321 o 076123456"/>
+                    <h2 className="text-lg font-extrabold text-slate-900">Nuevo Proveedor</h2>
+                    <p className="text-xs text-slate-500 font-medium">Ingresa los datos fiscales y de contacto del distribuidor.</p>
                   </div>
                 </div>
-                <div className="p-5 border-t border-slate-100 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
-                  <button type="button" onClick={() => setIsCreateModalOpen(false)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Guardar</button>
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-700 transition-colors p-1"><FaTimes size={18}/></button>
+              </div>
+
+              <form onSubmit={handleCreate} noValidate className="flex flex-col flex-1 min-h-0">
+                <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-white">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nombre o Razón Social *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={formData.nombre} 
+                      onChange={e => setFormData({...formData, nombre: e.target.value})} 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium" 
+                      placeholder="Ej: Distribuidora Gloria S.A."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">RUC (11 dígitos) o DNI (8 dígitos) *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={formData.ruc} 
+                      onChange={e => setFormData({...formData, ruc: e.target.value.replace(/\D/g, '').slice(0, 11)})} 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-semibold font-mono" 
+                      placeholder="Ej: 20100152356 o 76543210"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Teléfono / Fijo / WhatsApp</label>
+                    <input 
+                      type="text" 
+                      value={formData.telefono} 
+                      onChange={e => setFormData({...formData, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})} 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-semibold font-mono" 
+                      placeholder="Ej: 987654321 o 076123456"
+                    />
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex flex-col sm:flex-row justify-end gap-2.5">
+                  <button type="button" onClick={() => setIsCreateModalOpen(false)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer">Cancelar</button>
+                  <button type="submit" className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none cursor-pointer">Guardar Proveedor</button>
                 </div>
               </form>
             </motion.div>
@@ -216,30 +341,61 @@ export default function Proveedores() {
       {/* MODAL 2: EDITAR PROVEEDOR */}
       <AnimatePresence>
         {editingProveedor && (
-          <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-              <div className="flex justify-between items-center p-4 sm:p-6 bg-neutral-950 border-t-4 border-verde-pastel shrink-0">
-                <h2 className="text-lg sm:text-xl font-extrabold text-white">Editar Proveedor</h2>
-                <button onClick={() => setEditingProveedor(null)} className="text-slate-400 hover:text-white transition-colors p-1"><FaTimes size={20}/></button>
-              </div>
-              <form onSubmit={handleUpdate} className="flex flex-col flex-1 min-h-0">
-                <div className="p-6 overflow-y-auto space-y-5 flex-1">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Nombre o Razón Social *</label>
-                    <input type="text" required value={editingProveedor.nombre} onChange={e => setEditingProveedor({...editingProveedor, nombre: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium"/>
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[80] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.95 }} 
+              className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+            >
+              <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
+                    <FaEdit size={18} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">RUC / DNI *</label>
-                    <input type="text" required value={editingProveedor.ruc || ''} onChange={e => setEditingProveedor({...editingProveedor, ruc: e.target.value.replace(/\D/g, '').slice(0, 11)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium font-mono"/>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Teléfono / Fijo / WhatsApp</label>
-                    <input type="text" value={editingProveedor.telefono || ''} onChange={e => setEditingProveedor({...editingProveedor, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-slate-800 transition-all font-medium font-mono"/>
+                    <h2 className="text-lg font-extrabold text-slate-900">Editar Proveedor</h2>
+                    <p className="text-xs text-slate-500 font-medium">Modifica la razón social, RUC/DNI o teléfono de contacto.</p>
                   </div>
                 </div>
-                <div className="p-5 border-t border-slate-100 bg-slate-50 shrink-0 flex flex-col sm:flex-row justify-end gap-3">
-                  <button type="button" onClick={() => setEditingProveedor(null)} className="w-full sm:w-auto px-5 py-4 sm:py-3 rounded-xl font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors shadow-sm">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-5 py-4 sm:py-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-bold transition-all shadow-sm order-first sm:order-none">Actualizar</button>
+                <button type="button" onClick={() => setEditingProveedor(null)} className="text-slate-400 hover:text-slate-700 transition-colors p-1"><FaTimes size={18}/></button>
+              </div>
+
+              <form onSubmit={handleUpdate} noValidate className="flex flex-col flex-1 min-h-0">
+                <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-white">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nombre o Razón Social *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={editingProveedor.nombre} 
+                      onChange={e => setEditingProveedor({...editingProveedor, nombre: e.target.value})} 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">RUC (11 dígitos) o DNI (8 dígitos) *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={editingProveedor.ruc || ''} 
+                      onChange={e => setEditingProveedor({...editingProveedor, ruc: e.target.value.replace(/\D/g, '').slice(0, 11)})} 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-semibold font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Teléfono / Fijo / WhatsApp</label>
+                    <input 
+                      type="text" 
+                      value={editingProveedor.telefono || ''} 
+                      onChange={e => setEditingProveedor({...editingProveedor, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})} 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-semibold font-mono"
+                    />
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex flex-col sm:flex-row justify-end gap-2.5">
+                  <button type="button" onClick={() => setEditingProveedor(null)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer">Cancelar</button>
+                  <button type="submit" className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none cursor-pointer">Guardar Cambios</button>
                 </div>
               </form>
             </motion.div>
