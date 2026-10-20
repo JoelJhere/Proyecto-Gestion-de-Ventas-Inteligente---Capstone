@@ -319,7 +319,7 @@ export default function Ventas() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Punto de Venta (POS)
+            Punto de Venta
           </h1>
           <p className="text-sm text-slate-600 font-medium mt-1">
             Módulo de facturación y despacho rápido • Cajero: <span className="font-bold text-slate-900">{usuario.nombre || 'Activo'}</span>

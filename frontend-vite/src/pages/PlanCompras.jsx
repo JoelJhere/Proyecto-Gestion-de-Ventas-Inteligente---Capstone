@@ -624,7 +624,7 @@ export default function PlanCompras() {
                     Cancelar
                   </button>
                   <button type="submit" className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none flex justify-center items-center gap-2 cursor-pointer">
-                    <FaCheck size={13} /> Confirmar Plan
+                    <FaCheck size={13} /> Confirmar
                   </button>
                 </div>
               </form>
