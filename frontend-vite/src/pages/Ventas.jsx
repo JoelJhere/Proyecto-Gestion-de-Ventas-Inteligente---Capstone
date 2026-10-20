@@ -474,66 +474,66 @@ export default function Ventas() {
           </div>
         </div>
 
-        {/* PANEL DERECHO (5 COLUMNAS): DATOS DEL COMPROBANTE Y COBRO */}
+        {/* PANEL DERECHO: DATOS DEL COMPROBANTE Y COBRO */}
         <div className="lg:col-span-5 xl:col-span-4 flex flex-col bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
           
-          {/* Cabecera del panel derecho con ícono en recuadro pastel estilo Figma */}
-          <div className="px-6 py-4 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
-                <FaFileInvoice size={18} />
+          {/* Cabecera compacta */}
+          <div className="px-5 py-3 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
+                <FaFileInvoice size={15} />
               </div>
-              <h2 className="text-slate-900 font-bold text-lg tracking-tight">
+              <h2 className="text-slate-900 font-bold text-base tracking-tight">
                 Datos del Comprobante
               </h2>
             </div>
-            <span className="text-xs font-bold text-emerald-800 bg-verde-pastel/45 px-3 py-1 rounded-full">
+            <span className="text-xs font-bold text-emerald-800 bg-verde-pastel/45 px-2.5 py-0.5 rounded-full">
               IGV {igvPorcentaje}%
             </span>
           </div>
 
-          {/* Cuerpo desplazable para que nunca se corte en pantallas medianas */}
-          <div className="p-6 space-y-5 bg-white flex-1 overflow-y-auto">
+          {/* Cuerpo con todo visible y barra deslizante moderna, delgada y sin flechas */}
+          <div className="px-5 py-3.5 space-y-3 bg-white flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-emerald-300 [&::-webkit-scrollbar-thumb]:rounded-full">
             
-            {/* 1. Selector de Tipo de Operación */}
+            {/* 1. Selector de Tipo de Operación*/}
             <div>
-              <label className="block text-sm font-bold text-slate-800 mb-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Tipo de Operación
               </label>
-              <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200/70">
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/70 gap-1">
                 <button type="button" onClick={() => setTipoComprobante('TICKET')} 
-                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'TICKET' ? 'bg-verde-pastel text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'TICKET' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Venta Rápida
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('BOLETA')} 
-                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'BOLETA' ? 'bg-verde-pastel text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'BOLETA' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Boleta
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('FACTURA')} 
-                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'FACTURA' ? 'bg-verde-pastel text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'FACTURA' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Factura
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('FIADO')} 
-                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'FIADO' ? 'bg-amber-500 text-white shadow-xs' : 'text-amber-700 hover:bg-amber-100/60'}`}>
+                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'FIADO' ? 'bg-amber-500 text-white shadow-2xs' : 'text-amber-700 hover:bg-amber-100/60'}`}>
                   Fiado
                 </button>
               </div>
             </div>
 
-            {/* 2. Selector de Medio de Pago con tarjetas simétricas como "Acciones rápidas" de Figma */}
+            {/* 2. Selector de Medio de Pago en formato horizontal compacto */}
             {tipoComprobante !== 'FIADO' && (
               <div>
-                <label className="block text-sm font-bold text-slate-800 mb-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Medio de Pago Recibido
                 </label>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setMetodoPago('EFECTIVO')}
-                    className={`p-3 rounded-xl text-sm font-bold border transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       metodoPago === 'EFECTIVO'
-                        ? 'bg-verde-pastel/25 border-emerald-500 text-emerald-950 shadow-xs ring-2 ring-verde-pastel/50'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                        ? 'bg-verde-pastel/25 border-emerald-500 text-emerald-950 shadow-2xs ring-1 ring-emerald-500/40'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <LogoEfectivo />
@@ -543,27 +543,27 @@ export default function Ventas() {
                   <button
                     type="button"
                     onClick={() => setMetodoPago('YAPE_PLIN')}
-                    className={`p-3 rounded-xl text-sm font-bold border transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       metodoPago === 'YAPE_PLIN'
-                        ? 'bg-purple-50/80 border-[#742384] text-purple-950 shadow-xs ring-2 ring-purple-200'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                        ? 'bg-purple-50/80 border-[#742384] text-purple-950 shadow-2xs ring-1 ring-[#742384]/40'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <LogosYapePlin />
-                    <span>Yape / Plin</span>
+                    <span>Yape/Plin</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setMetodoPago('TRANSFERENCIA')}
-                    className={`p-3 rounded-xl text-sm font-bold border transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       metodoPago === 'TRANSFERENCIA'
-                        ? 'bg-blue-50/80 border-blue-600 text-blue-950 shadow-xs ring-2 ring-blue-200'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                        ? 'bg-blue-50/80 border-blue-600 text-blue-950 shadow-2xs ring-1 ring-blue-500/40'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <LogosBancos />
-                    <span>Transferencia</span>
+                    <span>Transf.</span>
                   </button>
                 </div>
               </div>
@@ -571,13 +571,13 @@ export default function Ventas() {
 
             {/* 3. Datos del Cliente */}
             {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
-              <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="space-y-2.5 pt-2 border-t border-slate-100">
                 
                 {tipoComprobante !== 'FIADO' && (
                   <div>
-                    <label className="text-sm font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
                       <span>{tipoComprobante === 'FACTURA' ? 'Número de RUC *' : 'Número de DNI *'}</span>
-                      <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md">
+                      <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded">
                         Autocompletado SUNAT
                       </span>
                     </label>
@@ -594,13 +594,13 @@ export default function Ventas() {
                           buscarDocumento(num, tipoComprobante);
                         }
                       }}
-                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
+                      className="w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/40 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
                     />
                   </div>
                 )}
                 
                 <div>
-                  <label className="text-sm font-bold text-slate-800 mb-1.5 block">
+                  <label className="text-xs font-bold text-slate-700 mb-1 block">
                     {tipoComprobante === 'FIADO' ? 'Nombre del Vecino / Cliente *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre del Cliente *')}
                   </label>
                   <input 
@@ -610,14 +610,14 @@ export default function Ventas() {
                     value={cliente.nombre} 
                     onChange={e => setCliente({...cliente, nombre: e.target.value})}
                     disabled={isLoadingDoc}
-                    className={`w-full px-3.5 py-2.5 border rounded-xl outline-none text-sm font-medium transition-all ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-slate-50/70 focus:bg-white border-slate-200 focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 text-slate-900'}`} 
+                    className={`w-full px-3 py-2 border rounded-xl outline-none text-sm font-medium transition-all ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-slate-50/70 focus:bg-white border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/40 text-slate-900'}`} 
                   />
                 </div>
 
                 {tipoComprobante === 'FIADO' && (
                   <div>
-                    <label className="text-sm font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
-                      <FaWhatsapp className="text-emerald-600 text-base" /> Celular WhatsApp *
+                    <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <FaWhatsapp className="text-emerald-600 text-sm" /> Celular WhatsApp *
                     </label>
                     <input 
                       type="text" 
@@ -629,34 +629,34 @@ export default function Ventas() {
                         if (num.length > 0 && !num.startsWith('9')) return; 
                         setCliente({...cliente, telefono: num.slice(0, 9)});
                       }}
-                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
+                      className="w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/40 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
                     />
                   </div>
                 )}
 
                 {tipoComprobante !== 'FIADO' && (
-                  <div className="pt-1">
-                    <label className="text-sm font-bold text-slate-800 mb-2 block">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1 block">
                       Entrega de Comprobante
                     </label>
-                    <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200/70 mb-2.5">
+                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/70">
                       <button type="button" onClick={() => setMetodoEnvio('NINGUNO')} 
-                        className={`py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                        className={`py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         Impresión
                       </button>
                       <button type="button" onClick={() => setMetodoEnvio('CORREO')} 
-                        className={`py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                        className={`py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         Correo
                       </button>
                       <button type="button" onClick={() => setMetodoEnvio('WHATSAPP')} 
-                        className={`py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                        className={`py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         WhatsApp
                       </button>
                     </div>
 
                     {metodoEnvio === 'CORREO' && (
                       <input type="email" required placeholder="cliente@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
-                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-medium" />
+                        className="mt-2 w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-medium" />
                     )}
                     {metodoEnvio === 'WHATSAPP' && (
                       <input type="text" required placeholder="Celular WhatsApp (9 dígitos)" 
@@ -666,7 +666,7 @@ export default function Ventas() {
                           if (num.length > 0 && !num.startsWith('9')) return;
                           setCliente({...cliente, telefono: num.slice(0, 9)});
                         }}
-                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-mono font-semibold" />
+                        className="mt-2 w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-mono font-semibold" />
                     )}
                   </div>
                 )}
@@ -675,37 +675,31 @@ export default function Ventas() {
             )}
 
             {tipoComprobante === 'TICKET' && (
-              <div className="p-4 bg-verde-pastel/20 border border-emerald-200/80 rounded-xl text-sm text-emerald-950 font-medium leading-relaxed">
+              <div className="p-3.5 bg-verde-pastel/20 border border-emerald-200/80 rounded-xl text-xs sm:text-sm text-emerald-950 font-medium leading-relaxed">
                 Emisión rápida de <strong>Venta Rápida</strong> con ticket interno para control inmediato de caja e inventario.
               </div>
             )}
           </div>
 
-          {/* 4. Pie Fijo de Resumen e Importe Total (Siempre visible sin cortarse) */}
-          <div className="p-6 border-t border-slate-200/80 bg-slate-50/70 shrink-0">
+          {/* 4. Pie Compacto de Totales y Botón de Cobro */}
+          <div className="px-5 py-3.5 border-t border-slate-200/80 bg-slate-50/70 shrink-0">
             {tipoComprobante !== 'TICKET' && (
-              <div className="space-y-1.5 mb-3 pb-3 border-b border-slate-200 text-sm text-slate-600 font-medium">
-                <div className="flex justify-between">
-                  <span>Op. Gravada (Subtotal):</span>
-                  <span className="font-mono font-bold text-slate-800">S/ {subtotalBase.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>I.G.V. ({igvPorcentaje}%):</span>
-                  <span className="font-mono font-bold text-slate-800">S/ {montoIgv.toFixed(2)}</span>
-                </div>
+              <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200/80 text-xs text-slate-600 font-medium">
+                <span>Gravada: <strong className="font-mono text-slate-800">S/ {subtotalBase.toFixed(2)}</strong></span>
+                <span>IGV ({igvPorcentaje}%): <strong className="font-mono text-slate-800">S/ {montoIgv.toFixed(2)}</strong></span>
               </div>
             )}
             
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">Importe Total:</span>
-              <span className="text-3xl font-extrabold text-slate-900 tracking-tight">S/ {totalPagado.toFixed(2)}</span>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">Importe Total:</span>
+              <span className="text-2xl font-extrabold text-slate-900 tracking-tight">S/ {totalPagado.toFixed(2)}</span>
             </div>
 
             <button 
               type="button"
               onClick={() => tipoComprobante === 'FIADO' ? handleProcesarVenta(true) : handleProcesarVenta(false)}
               disabled={carrito.length === 0 || isProcessing} 
-              className={`w-full font-extrabold py-3.5 px-5 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed text-sm cursor-pointer ${
+              className={`w-full font-extrabold py-3 px-4 rounded-xl transition-all shadow-xs flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm cursor-pointer ${
                 tipoComprobante === 'FIADO' 
                   ? 'bg-amber-500 hover:bg-amber-600 text-white'
                   : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950'
@@ -714,9 +708,9 @@ export default function Ventas() {
               {isProcessing ? (
                 <span>Procesando operación...</span>
               ) : tipoComprobante === 'FIADO' ? (
-                <><FaUser size={15} /> Registrar Fiado (S/ {totalPagado.toFixed(2)})</>
+                <><FaUser size={14} /> Registrar Fiado (S/ {totalPagado.toFixed(2)})</>
               ) : (
-                <><FaShoppingCart size={15} /> Procesar Venta (S/ {totalPagado.toFixed(2)})</>
+                <><FaShoppingCart size={14} /> Procesar Venta (S/ {totalPagado.toFixed(2)})</>
               )}
             </button>
           </div>
