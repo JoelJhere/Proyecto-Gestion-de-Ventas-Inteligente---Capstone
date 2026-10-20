@@ -54,7 +54,7 @@ export default function Layout() {
 
   const todosLosItems = [
     { path: '/ventas', icon: FaShoppingCart, label: 'Punto de Venta (POS)' },
-    { path: '/fiados', icon: FaFileInvoiceDollar, label: 'Fiados' },
+    { path: '/fiados', icon: FaFileInvoiceDollar, label: 'Control de Fiados' },
     { path: '/productos', icon: FaBoxOpen, label: 'Productos' },
     { path: '/proveedores', icon: FaTruck, label: 'Proveedores' },
     { path: '/compras', icon: FaClipboardList, label: 'Plan de Compras' },

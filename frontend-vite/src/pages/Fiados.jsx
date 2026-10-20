@@ -155,7 +155,7 @@ export default function Fiados() {
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Control de Fiados y Créditos
+            Control de Fiados
           </h1>
           <p className="text-sm text-slate-600 font-medium mt-1">
             Administra las cuentas por cobrar y recordatorios de pago de tus clientes.
