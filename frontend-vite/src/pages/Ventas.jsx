@@ -313,66 +313,69 @@ export default function Ventas() {
   );
 
   return (
-    <div className="flex flex-col gap-4 text-slate-800 pb-16 lg:pb-0 font-sans">
+    <div className="flex flex-col gap-6 text-slate-800 pb-16 lg:pb-2 font-sans antialiased">
       
-      {/* CABECERA ESTILO ADMINLTE / ERP (Miga de pan y estado de terminal) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+      {/* CABECERA PRINCIPAL (Inspirada en la jerarquía de Figma) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Punto de Venta (POS)
           </h1>
-          <p className="text-xs text-slate-500">
-            Módulo de facturación y despacho rápido • Cajero: <span className="font-semibold text-slate-700">{usuario.nombre || 'Activo'}</span>
+          <p className="text-sm text-slate-600 font-medium mt-1">
+            Módulo de facturación y despacho rápido • Cajero: <span className="font-bold text-slate-900">{usuario.nombre || 'Activo'}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500 bg-white px-3 py-1.5 rounded-md border border-slate-200 shadow-2xs">
-          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span>SUNAT / OSE En Línea</span>
+
+        <div className="flex items-center gap-3 text-sm text-slate-700 bg-white px-4 py-2.5 rounded-xl border border-slate-200/90 shadow-[0_2px_12px_rgba(15,23,42,0.05)] self-start sm:self-auto">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/15"></span>
+          <span className="font-semibold text-slate-700">SUNAT / OSE En Línea</span>
           <span className="text-slate-300">|</span>
-          <span className="font-mono font-semibold text-slate-700">{new Date().toLocaleDateString('es-PE')}</span>
+          <span className="font-mono font-bold text-slate-900">{new Date().toLocaleDateString('es-PE')}</span>
         </div>
       </div>
 
-      {/* CONTENEDOR PRINCIPAL DIVIDIDO */}
-      <div className="flex flex-col lg:flex-row gap-5 lg:h-[calc(100vh-9.5rem)]">
+      {/* CONTENEDOR SIMÉTRICO DE 2 PANELES CON SOMBRA ESTILO FIGMA */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:h-[calc(100vh-9.5rem)] items-stretch">
         
-        {/* PANEL IZQUIERDO: CATÁLOGO Y TABLA DE DETALLE DE VENTA */}
-        <div className="flex-1 flex flex-col bg-white border border-slate-300 border-t-4 border-t-verde-pastel rounded-md shadow-xs overflow-hidden min-h-[460px] lg:min-h-0">
+        {/* PANEL IZQUIERDO (7 COLUMNAS): CATÁLOGO Y TABLA DE VENTA */}
+        <div className="lg:col-span-7 xl:col-span-8 flex flex-col bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden min-h-[480px] lg:min-h-0">
           
-          {/* Barra de búsqueda sobria y limpia */}
-          <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
-            <div className="flex gap-2.5">
-              <div className="relative w-full">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <FaSearch className="text-slate-400 text-sm" />
+          {/* Barra superior de búsqueda */}
+          <div className="p-5 bg-white border-b border-slate-100 shrink-0">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <FaSearch className="text-slate-400 text-base" />
                 </div>
                 <input 
                   type="text" 
-                  placeholder="Buscar producto por descripción o lector de código de barras..." 
+                  placeholder="Buscar producto por nombre o escanear código de barras..." 
                   value={busqueda} 
                   onChange={(e) => { setBusqueda(e.target.value); setShowDropdown(true); }}
                   onFocus={() => setShowDropdown(true)}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm text-slate-800 transition-all" 
+                  className="w-full pl-11 pr-4 py-3 bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-verde-pastel/30 outline-none text-sm font-medium text-slate-800 placeholder:text-slate-400 transition-all" 
                 />
 
                 <AnimatePresence>
                   {showDropdown && busqueda && (
-                    <motion.div initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 3 }} 
-                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-300 rounded-md shadow-lg z-40 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} 
+                      className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.12)] z-40 max-h-64 overflow-y-auto divide-y divide-slate-100">
                       {productosBuscados.length === 0 ? (
-                        <div className="p-3.5 text-slate-500 text-xs text-center">No se encontraron productos disponibles con ese criterio.</div>
+                        <div className="p-4 text-slate-600 text-sm font-medium text-center">No se encontraron productos disponibles con ese criterio.</div>
                       ) : (
                         productosBuscados.map(prod => (
                           <div key={prod.id} onMouseDown={() => { agregarAlCarrito(prod); setBusqueda(''); setShowDropdown(false); }} 
-                            className="px-3.5 py-2.5 hover:bg-emerald-50/60 cursor-pointer flex justify-between items-center transition-colors">
+                            className="px-4 py-3 hover:bg-verde-pastel/20 cursor-pointer flex justify-between items-center transition-colors">
                             <div>
-                              <p className="text-sm font-semibold text-slate-800">{prod.nombre}</p>
-                              <p className="text-[11px] text-slate-500 font-mono">Cód: {prod.codigo}</p>
+                              <p className="text-sm font-bold text-slate-900">{prod.nombre}</p>
+                              <p className="text-xs text-slate-500 font-mono mt-0.5">Código: {prod.codigo}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-emerald-700 font-bold text-sm">S/ {prod.precioVenta.toFixed(2)}</p>
-                              <p className="text-[11px] text-slate-500">Disp: {prod.stock} un.</p>
+                              <p className="text-emerald-700 font-extrabold text-sm">S/ {prod.precioVenta.toFixed(2)}</p>
+                              <span className="inline-block text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md mt-0.5">
+                                Stock: {prod.stock} un.
+                              </span>
                             </div>
                           </div>
                         ))
@@ -385,71 +388,76 @@ export default function Ventas() {
               <button 
                 type="button"
                 onClick={() => setIsScannerOpen(true)}
-                className="bg-slate-800 hover:bg-slate-900 text-white font-semibold px-4 py-2 rounded-md text-xs transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+                className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-bold px-5 py-3 rounded-xl text-sm transition-all shadow-2xs flex items-center justify-center gap-2.5 whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <FaCamera className="text-verde-pastel text-sm" /> <span className="hidden sm:inline">Lector Cámara</span>
+                <FaCamera className="text-emerald-900 text-base" />
+                <span>Lector Cámara</span>
               </button>
             </div>
           </div>
           
-          {/* Tabla de ítems estilo sistema comercial (AdminLTE / Bsale) */}
+          {/* Cuerpo de la tabla de productos */}
           <div className="flex-1 overflow-y-auto bg-white">
             {carrito.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-                <FaBarcode className="text-5xl mb-3 text-slate-300" />
-                <p className="text-sm font-semibold text-slate-600">Detalle de venta vacío</p>
-                <p className="text-xs text-slate-400 mt-0.5">Utilice el buscador superior o el lector de código de barras para agregar ítems.</p>
+              <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                <div className="w-16 h-16 rounded-2xl bg-verde-pastel/30 text-emerald-700 flex items-center justify-center mb-4 shadow-2xs">
+                  <FaBarcode className="text-3xl" />
+                </div>
+                <p className="text-base font-bold text-slate-800">Detalle de venta vacío</p>
+                <p className="text-sm text-slate-500 font-medium mt-1 max-w-md">
+                  Utilice el buscador superior o el botón de cámara para agregar productos a la operación actual.
+                </p>
               </div>
             ) : (
               <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-100 border-b border-slate-200 sticky top-0 z-10">
-                  <tr className="text-[11px] font-bold text-slate-600 uppercase">
-                    <th className="py-2.5 px-4">Código</th>
-                    <th className="py-2.5 px-4">Producto / Descripción</th>
-                    <th className="py-2.5 px-3 text-right">P. Unit</th>
-                    <th className="py-2.5 px-3 text-center">Cantidad</th>
-                    <th className="py-2.5 px-4 text-right">Importe</th>
+                <thead className="bg-slate-50/90 border-b border-slate-200 sticky top-0 z-10">
+                  <tr className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    <th className="py-3.5 px-5">Código</th>
+                    <th className="py-3.5 px-4">Producto / Descripción</th>
+                    <th className="py-3.5 px-4 text-right">Precio Unit.</th>
+                    <th className="py-3.5 px-4 text-center">Cantidad</th>
+                    <th className="py-3.5 px-5 text-right">Subtotal</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-sm">
+                <tbody className="divide-y divide-slate-100 text-sm">
                   {carrito.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4 font-mono text-xs text-slate-500 whitespace-nowrap">
+                      <td className="py-3.5 px-5 font-mono text-xs font-semibold text-slate-600 whitespace-nowrap">
                         {item.codigo}
                       </td>
-                      <td className="py-3 px-4">
-                        <p className="font-semibold text-slate-800 text-sm">{item.nombre}</p>
-                        <p className="text-[11px] text-slate-500">
-                          Stock disp: <span className={item.stock <= 5 ? "text-red-600 font-semibold" : "text-emerald-700 font-semibold"}>{item.stock}</span>
+                      <td className="py-3.5 px-4">
+                        <p className="font-bold text-slate-900 text-sm">{item.nombre}</p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          Disponible: <span className={item.stock <= 5 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>{item.stock} un.</span>
                         </p>
                       </td>
-                      <td className="py-3 px-3 text-right font-mono text-slate-700 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-slate-700 whitespace-nowrap">
                         S/ {item.precioVenta.toFixed(2)}
                       </td>
-                      <td className="py-3 px-3">
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center justify-center">
-                          <div className="inline-flex items-center border border-slate-300 rounded-md bg-white">
+                          <div className="inline-flex items-center border border-slate-200 rounded-xl bg-slate-50 p-1 shadow-2xs">
                             <button 
                               type="button"
                               onClick={() => actualizarCantidad(item.id, -1)} 
-                              className={`p-1.5 transition-colors ${item.cantidad === 1 ? 'text-red-600 hover:bg-red-50' : 'text-slate-600 hover:bg-slate-100'}`}
+                              className={`p-2 rounded-lg transition-colors ${item.cantidad === 1 ? 'text-red-600 hover:bg-red-100/80' : 'text-slate-700 hover:bg-white'}`}
                             >
-                              {item.cantidad === 1 ? <FaTrash size={11} /> : <FaMinus size={11} />}
+                              {item.cantidad === 1 ? <FaTrash size={12} /> : <FaMinus size={12} />}
                             </button>
-                            <span className="w-8 text-center text-xs font-bold text-slate-800 border-x border-slate-200 py-1">
+                            <span className="w-9 text-center text-sm font-extrabold text-slate-900">
                               {item.cantidad}
                             </span>
                             <button 
                               type="button"
                               onClick={() => actualizarCantidad(item.id, 1)} 
-                              className="p-1.5 text-slate-600 hover:bg-slate-100 transition-colors"
+                              className="p-2 text-slate-700 hover:bg-white rounded-lg transition-colors"
                             >
-                              <FaPlus size={11} />
+                              <FaPlus size={12} />
                             </button>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                      <td className="py-3.5 px-5 text-right font-mono font-extrabold text-slate-900 text-base whitespace-nowrap">
                         S/ {(item.precioVenta * item.cantidad).toFixed(2)}
                       </td>
                     </tr>
@@ -459,63 +467,73 @@ export default function Ventas() {
             )}
           </div>
 
-          {/* Pie de tabla con conteo de ítems */}
-          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-600 shrink-0">
-            <span>Ítems en lista: <strong>{carrito.length}</strong></span>
-            <span>Unidades totales: <strong>{carrito.reduce((acc, i) => acc + i.cantidad, 0)}</strong></span>
+          {/* Pie de tabla simétrico */}
+          <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-200/80 flex justify-between items-center text-sm text-slate-600 font-medium shrink-0">
+            <span>Productos en lista: <strong className="text-slate-900 font-bold">{carrito.length}</strong></span>
+            <span>Unidades totales: <strong className="text-slate-900 font-bold">{carrito.reduce((acc, i) => acc + i.cantidad, 0)}</strong></span>
           </div>
         </div>
 
-        {/* PANEL DERECHO: COMPROBANTE, PAGO Y LIQUIDACIÓN */}
-        <div className="w-full lg:w-[380px] bg-white border border-slate-300 border-t-4 border-t-emerald-600 rounded-md shadow-xs flex flex-col h-fit">
+        {/* PANEL DERECHO (5 COLUMNAS): DATOS DEL COMPROBANTE Y COBRO */}
+        <div className="lg:col-span-5 xl:col-span-4 flex flex-col bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
           
-          {/* Cabecera limpia estilo AdminLTE */}
-          <div className="px-5 py-3.5 bg-white border-b border-slate-200 flex justify-between items-center">
-            <h2 className="text-slate-800 font-bold text-sm flex items-center gap-2">
-              <FaFileInvoice className="text-emerald-600" /> Datos del Comprobante
-            </h2>
-            <span className="text-[11px] font-semibold text-emerald-800 bg-verde-pastel/50 px-2 py-0.5 rounded border border-emerald-200">
+          {/* Cabecera del panel derecho con ícono en recuadro pastel estilo Figma */}
+          <div className="px-6 py-4 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
+                <FaFileInvoice size={18} />
+              </div>
+              <h2 className="text-slate-900 font-bold text-lg tracking-tight">
+                Datos del Comprobante
+              </h2>
+            </div>
+            <span className="text-xs font-bold text-emerald-800 bg-verde-pastel/45 px-3 py-1 rounded-full">
               IGV {igvPorcentaje}%
             </span>
           </div>
 
-          <div className="p-5 space-y-4 bg-white">
+          {/* Cuerpo desplazable para que nunca se corte en pantallas medianas */}
+          <div className="p-6 space-y-5 bg-white flex-1 overflow-y-auto">
             
-            {/* 1. Selector de Tipo de Comprobante */}
+            {/* 1. Selector de Tipo de Operación */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Tipo de Operación</label>
-              <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-md border border-slate-200">
+              <label className="block text-sm font-bold text-slate-800 mb-2">
+                Tipo de Operación
+              </label>
+              <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200/70">
                 <button type="button" onClick={() => setTipoComprobante('TICKET')} 
-                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'TICKET' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'TICKET' ? 'bg-verde-pastel text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Venta Rápida
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('BOLETA')} 
-                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'BOLETA' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'BOLETA' ? 'bg-verde-pastel text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Boleta
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('FACTURA')} 
-                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'FACTURA' ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'FACTURA' ? 'bg-verde-pastel text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Factura
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('FIADO')} 
-                  className={`py-1.5 text-xs font-semibold rounded transition-all ${tipoComprobante === 'FIADO' ? 'bg-amber-500 text-white shadow-2xs' : 'text-amber-700 hover:bg-amber-50'}`}>
-                  Crédito/Fiar
+                  className={`py-2 px-1 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${tipoComprobante === 'FIADO' ? 'bg-amber-500 text-white shadow-xs' : 'text-amber-700 hover:bg-amber-100/60'}`}>
+                  Fiado
                 </button>
               </div>
             </div>
 
-            {/* 2. Selector de Método de Pago con Logos Reales (Yape / Plin / Bancos) */}
+            {/* 2. Selector de Medio de Pago con tarjetas simétricas como "Acciones rápidas" de Figma */}
             {tipoComprobante !== 'FIADO' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Medio de Pago Recibido</label>
-                <div className="grid grid-cols-3 gap-2">
+                <label className="block text-sm font-bold text-slate-800 mb-2">
+                  Medio de Pago Recibido
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
                   <button
                     type="button"
                     onClick={() => setMetodoPago('EFECTIVO')}
-                    className={`p-2 rounded-md text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-1.5 ${
+                    className={`p-3 rounded-xl text-sm font-bold border transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
                       metodoPago === 'EFECTIVO'
-                        ? 'bg-emerald-50/70 border-emerald-600 text-emerald-950 ring-1 ring-emerald-600'
-                        : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                        ? 'bg-verde-pastel/25 border-emerald-500 text-emerald-950 shadow-xs ring-2 ring-verde-pastel/50'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     <LogoEfectivo />
@@ -525,10 +543,10 @@ export default function Ventas() {
                   <button
                     type="button"
                     onClick={() => setMetodoPago('YAPE_PLIN')}
-                    className={`p-2 rounded-md text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-1.5 ${
+                    className={`p-3 rounded-xl text-sm font-bold border transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
                       metodoPago === 'YAPE_PLIN'
-                        ? 'bg-purple-50/70 border-[#742384] text-purple-950 ring-1 ring-[#742384]'
-                        : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                        ? 'bg-purple-50/80 border-[#742384] text-purple-950 shadow-xs ring-2 ring-purple-200'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     <LogosYapePlin />
@@ -538,10 +556,10 @@ export default function Ventas() {
                   <button
                     type="button"
                     onClick={() => setMetodoPago('TRANSFERENCIA')}
-                    className={`p-2 rounded-md text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-1.5 ${
+                    className={`p-3 rounded-xl text-sm font-bold border transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
                       metodoPago === 'TRANSFERENCIA'
-                        ? 'bg-blue-50/70 border-blue-600 text-blue-950 ring-1 ring-blue-600'
-                        : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                        ? 'bg-blue-50/80 border-blue-600 text-blue-950 shadow-xs ring-2 ring-blue-200'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     <LogosBancos />
@@ -551,20 +569,22 @@ export default function Ventas() {
               </div>
             )}
 
-            {/* 3. Datos del Cliente / Adquiriente */}
+            {/* 3. Datos del Cliente */}
             {(tipoComprobante !== 'TICKET' || tipoComprobante === 'FIADO') && (
-              <div className="space-y-3 pt-2 border-t border-slate-200">
+              <div className="space-y-4 pt-3 border-t border-slate-100">
                 
                 {tipoComprobante !== 'FIADO' && (
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <label className="text-sm font-bold text-slate-800 mb-1.5 flex items-center justify-between">
                       <span>{tipoComprobante === 'FACTURA' ? 'Número de RUC *' : 'Número de DNI *'}</span>
-                      <span className="text-[10px] text-emerald-700 font-normal">Consulta RENIEC/SUNAT</span>
+                      <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md">
+                        Autocompletado SUNAT
+                      </span>
                     </label>
                     <input 
                       type="text" 
                       required 
-                      placeholder={tipoComprobante === 'FACTURA' ? '11 dígitos (Ej: 20...)' : '8 dígitos'}
+                      placeholder={tipoComprobante === 'FACTURA' ? 'Ingrese 11 dígitos (Ej: 20...)' : 'Ingrese 8 dígitos'}
                       value={cliente.documento} 
                       onChange={e => {
                         const limit = tipoComprobante === 'FACTURA' ? 11 : 8;
@@ -574,30 +594,30 @@ export default function Ventas() {
                           buscarDocumento(num, tipoComprobante);
                         }
                       }}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm font-mono" 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
                     />
                   </div>
                 )}
                 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                    {tipoComprobante === 'FIADO' ? 'Nombre del Cliente (Vecino) *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre del Cliente *')}
+                  <label className="text-sm font-bold text-slate-800 mb-1.5 block">
+                    {tipoComprobante === 'FIADO' ? 'Nombre del Vecino / Cliente *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre del Cliente *')}
                   </label>
                   <input 
                     type="text" 
                     required 
-                    placeholder={isLoadingDoc ? 'Consultando padrón oficial...' : (tipoComprobante === 'FIADO' ? 'Nombre completo o referencia' : 'Nombre o Razón Social')}
+                    placeholder={isLoadingDoc ? 'Consultando padrón oficial...' : (tipoComprobante === 'FIADO' ? 'Nombre completo o referencia' : 'Nombre completo o Razón Social')}
                     value={cliente.nombre} 
                     onChange={e => setCliente({...cliente, nombre: e.target.value})}
                     disabled={isLoadingDoc}
-                    className={`w-full px-3 py-2 border rounded-md outline-none text-sm transition-colors ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-400' : 'bg-white border-slate-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 text-slate-900'}`} 
+                    className={`w-full px-3.5 py-2.5 border rounded-xl outline-none text-sm font-medium transition-all ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-slate-50/70 focus:bg-white border-slate-200 focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 text-slate-900'}`} 
                   />
                 </div>
 
                 {tipoComprobante === 'FIADO' && (
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
-                      <FaWhatsapp className="text-emerald-600" /> Teléfono Celular (WhatsApp) *
+                    <label className="text-sm font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
+                      <FaWhatsapp className="text-emerald-600 text-base" /> Celular WhatsApp *
                     </label>
                     <input 
                       type="text" 
@@ -609,34 +629,34 @@ export default function Ventas() {
                         if (num.length > 0 && !num.startsWith('9')) return; 
                         setCliente({...cliente, telefono: num.slice(0, 9)});
                       }}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm font-mono" 
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
                     />
                   </div>
                 )}
 
                 {tipoComprobante !== 'FIADO' && (
-                  <div className="pt-2">
-                    <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                  <div className="pt-1">
+                    <label className="text-sm font-bold text-slate-800 mb-2 block">
                       Entrega de Comprobante
                     </label>
-                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 mb-2">
+                    <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200/70 mb-2.5">
                       <button type="button" onClick={() => setMetodoEnvio('NINGUNO')} 
-                        className={`py-1 text-xs font-semibold rounded transition-all ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'}`}>
+                        className={`py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         Impresión
                       </button>
                       <button type="button" onClick={() => setMetodoEnvio('CORREO')} 
-                        className={`py-1 text-xs font-semibold rounded transition-all ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'}`}>
+                        className={`py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         Correo
                       </button>
                       <button type="button" onClick={() => setMetodoEnvio('WHATSAPP')} 
-                        className={`py-1 text-xs font-semibold rounded transition-all ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'}`}>
+                        className={`py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         WhatsApp
                       </button>
                     </div>
 
                     {metodoEnvio === 'CORREO' && (
                       <input type="email" required placeholder="cliente@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 outline-none text-sm" />
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-medium" />
                     )}
                     {metodoEnvio === 'WHATSAPP' && (
                       <input type="text" required placeholder="Celular WhatsApp (9 dígitos)" 
@@ -646,7 +666,7 @@ export default function Ventas() {
                           if (num.length > 0 && !num.startsWith('9')) return;
                           setCliente({...cliente, telefono: num.slice(0, 9)});
                         }}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:border-emerald-600 outline-none text-sm font-mono" />
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-mono font-semibold" />
                     )}
                   </div>
                 )}
@@ -655,48 +675,48 @@ export default function Ventas() {
             )}
 
             {tipoComprobante === 'TICKET' && (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-600">
-                Emisión rápida de <strong>Venta Rápida</strong> para control de caja e inventario (no declarable a SUNAT).
+              <div className="p-4 bg-verde-pastel/20 border border-emerald-200/80 rounded-xl text-sm text-emerald-950 font-medium leading-relaxed">
+                Emisión rápida de <strong>Venta Rápida</strong> con ticket interno para control inmediato de caja e inventario.
               </div>
             )}
           </div>
 
-          {/* 4. Resumen de Importes y Botón de Cobro */}
-          <div className="p-5 border-t border-slate-200 bg-slate-50 rounded-b-md mt-auto">
+          {/* 4. Pie Fijo de Resumen e Importe Total (Siempre visible sin cortarse) */}
+          <div className="p-6 border-t border-slate-200/80 bg-slate-50/70 shrink-0">
             {tipoComprobante !== 'TICKET' && (
-              <div className="space-y-1 mb-3 pb-3 border-b border-slate-200 text-xs text-slate-600">
+              <div className="space-y-1.5 mb-3 pb-3 border-b border-slate-200 text-sm text-slate-600 font-medium">
                 <div className="flex justify-between">
                   <span>Op. Gravada (Subtotal):</span>
-                  <span className="font-mono font-semibold">S/ {subtotalBase.toFixed(2)}</span>
+                  <span className="font-mono font-bold text-slate-800">S/ {subtotalBase.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>I.G.V. ({igvPorcentaje}%):</span>
-                  <span className="font-mono font-semibold">S/ {montoIgv.toFixed(2)}</span>
+                  <span className="font-mono font-bold text-slate-800">S/ {montoIgv.toFixed(2)}</span>
                 </div>
               </div>
             )}
             
-            <div className="flex justify-between items-baseline mb-4">
-              <span className="text-xs font-bold text-slate-700 uppercase">Importe Total:</span>
-              <span className="text-2xl font-black text-slate-900 font-mono">S/ {totalPagado.toFixed(2)}</span>
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">Importe Total:</span>
+              <span className="text-3xl font-extrabold text-slate-900 tracking-tight">S/ {totalPagado.toFixed(2)}</span>
             </div>
 
             <button 
               type="button"
               onClick={() => tipoComprobante === 'FIADO' ? handleProcesarVenta(true) : handleProcesarVenta(false)}
               disabled={carrito.length === 0 || isProcessing} 
-              className={`w-full font-bold py-3 px-4 rounded-md transition-all shadow-xs flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm ${
+              className={`w-full font-extrabold py-3.5 px-5 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed text-sm cursor-pointer ${
                 tipoComprobante === 'FIADO' 
                   ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                  : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 border border-emerald-300'
+                  : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950'
               }`}
             >
               {isProcessing ? (
                 <span>Procesando operación...</span>
               ) : tipoComprobante === 'FIADO' ? (
-                <><FaUser size={14} /> Registrar Cuenta por Cobrar (Fiado)</>
+                <><FaUser size={15} /> Registrar Fiado (S/ {totalPagado.toFixed(2)})</>
               ) : (
-                <><FaShoppingCart size={14} /> Emitir Comprobante (S/ {totalPagado.toFixed(2)})</>
+                <><FaShoppingCart size={15} /> Procesar Venta (S/ {totalPagado.toFixed(2)})</>
               )}
             </button>
           </div>
@@ -707,71 +727,73 @@ export default function Ventas() {
       {/* MODAL DEL ESCÁNER CÁMARA */}
       <AnimatePresence>
         {isScannerOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 z-[60] flex flex-col items-center justify-center p-4 backdrop-blur-xs">
+          <div className="fixed inset-0 bg-slate-950/75 z-[60] flex flex-col items-center justify-center p-4 backdrop-blur-xs">
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-sm bg-white rounded-md border border-slate-300 shadow-xl overflow-hidden"
+              className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
             >
-              <div className="px-4 py-3 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
-                <h3 className="text-sm font-bold flex items-center gap-2">
+              <div className="px-5 py-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 className="text-base font-bold flex items-center gap-2.5">
                   <FaCamera className="text-verde-pastel" /> Lector de Código de Barras
                 </h3>
                 <button onClick={() => setIsScannerOpen(false)} className="text-slate-400 hover:text-white">
-                  <FaTimes />
+                  <FaTimes size={18} />
                 </button>
               </div>
-              <div className="p-4 bg-slate-50 flex flex-col items-center">
-                <div id="reader-ventas" className="w-full bg-black rounded overflow-hidden border border-slate-300"></div>
-                <p className="text-xs text-slate-500 mt-3 text-center">Enfoque el código de barras del empaque frente a la cámara.</p>
+              <div className="p-5 bg-slate-50 flex flex-col items-center">
+                <div id="reader-ventas" className="w-full bg-black rounded-xl overflow-hidden border border-slate-300"></div>
+                <p className="text-sm text-slate-600 font-medium mt-3 text-center">Enfoque el código de barras del producto frente a la cámara.</p>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* --- MODAL DE VENTA EXITOSA (ESTILO COMPROBANTE EMPRESARIAL) --- */}
+      {/* MODAL DE VENTA EXITOSA */}
       <AnimatePresence>
         {ventaGenerada && (
           <div className="fixed inset-0 bg-slate-950/70 z-[80] flex items-center justify-center p-4 backdrop-blur-xs">
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
-              className="bg-white rounded-md w-full max-w-sm overflow-hidden shadow-xl border border-slate-300 flex flex-col"
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-200 flex flex-col"
             >
-              <div className="bg-white p-5 border-b border-slate-200 border-t-4 border-t-emerald-600 flex items-center gap-3">
-                <FaCheckCircle className="text-emerald-600 text-2xl shrink-0" />
+              <div className="bg-white p-6 border-b border-slate-100 flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-xl bg-verde-pastel/40 text-emerald-700 flex items-center justify-center shrink-0">
+                  <FaCheckCircle className="text-2xl" />
+                </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">Operación Registrada</h2>
-                  <p className="text-xs text-slate-500">
-                    {ventaGenerada.tipo === 'TICKET' ? 'Nota de Venta Interna' : `${ventaGenerada.tipo} Electrónica`} emitida correctamente.
+                  <h2 className="text-lg font-extrabold text-slate-900">Operación Registrada</h2>
+                  <p className="text-sm text-slate-600 font-medium">
+                    {ventaGenerada.tipo === 'TICKET' ? 'Venta Rápida' : `${ventaGenerada.tipo} Electrónica`} emitida con éxito.
                   </p>
                 </div>
               </div>
 
-              <div className="p-5 bg-slate-50 space-y-2.5 text-xs">
-                <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
-                  <span className="text-slate-500 font-semibold">N° Operación:</span>
+              <div className="p-6 bg-slate-50/80 space-y-3 text-sm">
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
+                  <span className="text-slate-600 font-semibold">N° Operación:</span>
                   <span className="text-slate-900 font-mono font-bold">#000{ventaGenerada.id}</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
-                  <span className="text-slate-500 font-semibold">Cliente:</span>
-                  <span className="text-slate-800 font-semibold truncate max-w-[180px]">{ventaGenerada.cliente}</span>
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
+                  <span className="text-slate-600 font-semibold">Cliente:</span>
+                  <span className="text-slate-900 font-bold truncate max-w-[180px]">{ventaGenerada.cliente}</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
-                  <span className="text-slate-500 font-semibold">Medio de Pago:</span>
-                  <span className="text-slate-800 font-bold">
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
+                  <span className="text-slate-600 font-semibold">Medio de Pago:</span>
+                  <span className="text-slate-900 font-bold">
                     {ventaGenerada.metodoPago === 'YAPE_PLIN' ? 'Yape / Plin' : ventaGenerada.metodoPago}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2">
-                  <span className="text-slate-700 font-bold uppercase">Total Cobrado:</span>
-                  <span className="text-emerald-700 font-black text-xl font-mono">S/ {ventaGenerada.total.toFixed(2)}</span>
+                  <span className="text-slate-800 font-extrabold uppercase">Total Cobrado:</span>
+                  <span className="text-emerald-700 font-extrabold text-2xl">S/ {ventaGenerada.total.toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="p-4 bg-white border-t border-slate-200 flex flex-col gap-2">
+              <div className="p-5 bg-white border-t border-slate-100 flex flex-col gap-2.5">
                 {ventaGenerada.metodoEnvio === 'WHATSAPP' && ventaGenerada.tipo !== 'TICKET' && (
                   <button 
                     onClick={() => {
@@ -788,18 +810,18 @@ export default function Ventas() {
 
                       window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(textoMensaje)}`, '_blank');
                     }}
-                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold py-2.5 px-4 rounded-md transition-colors flex justify-center items-center gap-2 text-xs"
+                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm"
                   >
-                    <FaWhatsapp size={16} /> Enviar Comprobante por WhatsApp
+                    <FaWhatsapp size={18} /> Enviar Comprobante por WhatsApp
                   </button>
                 )}
 
                 {ventaGenerada.metodoEnvio === 'CORREO' && ventaGenerada.tipo !== 'TICKET' && (
                   <button 
                     onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-md transition-colors flex justify-center items-center gap-2 text-xs"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm"
                   >
-                    <FaEnvelope size={14} /> Abrir PDF / Correo Enviado
+                    <FaEnvelope size={15} /> Abrir PDF / Correo Enviado
                   </button>
                 )}
 
@@ -812,15 +834,15 @@ export default function Ventas() {
                         window.open(`/ticket/${ventaGenerada.id}`, '_blank', 'width=400,height=600');
                       }
                     }}
-                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-md transition-colors flex justify-center items-center gap-2 text-xs"
+                    className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm"
                   >
-                    <FaPrint size={14} /> Imprimir {ventaGenerada.tipo === 'TICKET' ? 'Ticket' : ventaGenerada.tipo}
+                    <FaPrint size={15} /> Imprimir {ventaGenerada.tipo === 'TICKET' ? 'Ticket' : ventaGenerada.tipo}
                   </button>
                 )}
                 
                 <button 
                   onClick={() => setVentaGenerada(null)}
-                  className="w-full font-semibold py-2.5 px-4 rounded-md transition-colors text-xs bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  className="w-full font-bold py-3 px-4 rounded-xl transition-colors text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
                 >
                   Nueva Operación
                 </button>
