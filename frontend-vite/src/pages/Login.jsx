@@ -1,20 +1,28 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaUserShield, FaLock, FaSpinner, FaStore, FaIdCard, FaUserTie } from 'react-icons/fa';
+import { 
+  FaUserShield, FaLock, FaSpinner, FaStore, FaIdCard, 
+  FaUserTie, FaCheckCircle, FaChartLine, FaRobot, FaFileInvoiceDollar 
+} from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import TerminosModal from '../components/TerminosModal';
 
-// --- COMPONENTES VISUALES ---
+// --- COMPONENTE DE CAMPO DE TEXTO LIMPIO ---
 const InputField = ({ icon: Icon, type, value, onChange, placeholder, disabled, required = true }) => (
   <div className="relative group">
-    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-      <Icon className="text-neutral-500 group-focus-within:text-verde-pastel transition-colors duration-300" />
+    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+      <Icon className="text-slate-400 group-focus-within:text-emerald-600 transition-colors duration-200 text-sm" />
     </div>
     <input
-      type={type} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} required={required}
-      className="w-full pl-11 pr-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl focus:ring-1 focus:ring-verde-pastel focus:border-verde-pastel outline-none transition-all text-white placeholder-neutral-600 shadow-inner text-sm font-medium disabled:opacity-50"
+      type={type}
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      placeholder={placeholder}
+      required={required}
+      className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 focus:bg-white border border-slate-200 rounded-xl focus:ring-3 focus:ring-verde-pastel/35 focus:border-emerald-500 outline-none transition-all text-slate-900 placeholder-slate-400 text-sm font-medium disabled:opacity-50"
     />
   </div>
 );
@@ -59,9 +67,9 @@ export default function Login() {
 
   const toastStyle = {
     borderRadius: '12px',
-    background: '#0a0a0a',
+    background: '#0f172a',
     color: '#fff',
-    border: '1px solid #262626',
+    border: '1px solid #334155',
   };
 
   // --- FUNCIÓN DE LOGIN ---
@@ -81,7 +89,7 @@ export default function Login() {
       localStorage.setItem('user', JSON.stringify(res.data.user));
       
       setIntentosFallidos(0);
-      toast.success('¡Sesión iniciada correctamente!', { style: toastStyle, iconTheme: { primary: '#a7f3d0', secondary: '#000' } });
+      toast.success('¡Sesión iniciada correctamente!', { style: toastStyle, iconTheme: { primary: '#a7f3d0', secondary: '#0f172a' } });
       
       setTimeout(() => {
         if (res.data.user.rol === 'SUPER_ADMIN') {
@@ -141,7 +149,7 @@ export default function Login() {
 
       const res = await axios.post('/auth/registro-saas', payload);
       
-      toast.success(res.data.message, { style: toastStyle, iconTheme: { primary: '#a7f3d0', secondary: '#000' } });
+      toast.success(res.data.message, { style: toastStyle, iconTheme: { primary: '#a7f3d0', secondary: '#0f172a' } });
       
       // Auto-llenar el login y regresar a la vista de login
       setEmail(regEmail);
@@ -157,152 +165,346 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-[#092b1a] via-neutral-950 to-black relative overflow-hidden font-sans px-4 py-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#e6faef] via-slate-50 to-[#d5f5e5] relative overflow-hidden font-sans antialiased px-4 py-8">
       
-      {/* Selector superior para cambiar entre Login y Registro (Unificado en Verde Pastel) */}
-      <div className="absolute top-8 w-full max-w-xs mx-auto flex bg-neutral-900/50 p-1 rounded-full border border-neutral-800 backdrop-blur-md z-20">
-        <button 
-          type="button"
-          onClick={() => setIsRegistering(false)}
-          className={`flex-1 py-2 text-xs font-bold rounded-full transition-all ${!isRegistering ? 'bg-verde-pastel text-neutral-950 shadow-md' : 'text-neutral-400 hover:text-white'}`}
-        >
-          Iniciar Sesión
-        </button>
-        <button 
-          type="button"
-          onClick={() => setIsRegistering(true)}
-          className={`flex-1 py-2 text-xs font-bold rounded-full transition-all ${isRegistering ? 'bg-verde-pastel text-neutral-950 shadow-md' : 'text-neutral-400 hover:text-white'}`}
-        >
-          Crear Bodega
-        </button>
-      </div>
+      {/* Formas suaves decorativas de fondo (Mezcla de Blanco y Verde Pastel) */}
+      <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-verde-pastel/45 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-emerald-300/30 blur-3xl pointer-events-none" />
 
-      <AnimatePresence mode="wait">
-        {!isRegistering ? (
+      {/* CONTENEDOR CENTRAL MITAD Y MITAD (Inspirado en tu 3ra imagen) */}
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-[0_20px_60px_rgba(15,23,42,0.10)] border border-white/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12 z-10">
+        
+        {/* ================= MITAD IZQUIERDA: PANEL VISUAL E ILUSTRATIVO ================= */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 text-white p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden">
           
-          /* ============= VISTA DE LOGIN ============ */
-          <motion.div 
-            key="login"
-            initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }} transition={{ duration: 0.3 }}
-            className="bg-neutral-950/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.8)] w-full max-w-md z-10 border border-neutral-800 hover:border-verde-pastel/30 transition-colors duration-500 mt-12"
-          >
-            <div className="text-center mb-10">
-              <h1 className="text-4xl font-extrabold text-white mb-3 tracking-tight flex items-center justify-center gap-3">
-                <div className="w-4 h-4 rounded-full bg-verde-pastel shadow-[0_0_15px_rgba(167,243,208,0.5)]"></div>
-                VendaIA
-              </h1>
-              <p className="text-neutral-500 font-bold tracking-widest text-[10px] uppercase">Sistema de Ventas y Gestión Inteligente para Bodegas</p>
+          {/* Ondas y círculos decorativos estilo la 3ra imagen */}
+          <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-verde-pastel/15 blur-xl pointer-events-none" />
+          <div className="absolute bottom-10 -left-16 w-56 h-56 rounded-full bg-emerald-400/15 blur-xl pointer-events-none" />
+
+          {/* Logo e Identidad */}
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-xs px-4 py-2 rounded-2xl border border-white/15 mb-6">
+              <div className="w-8 h-8 rounded-xl bg-verde-pastel text-emerald-950 flex items-center justify-center font-black">
+                <FaStore size={16} />
+              </div>
+              <span className="text-xl font-extrabold tracking-tight text-white">
+                Venda<span className="text-verde-pastel">IA</span>
+              </span>
             </div>
 
-            {sesionExpirada && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-amber-500/10 border border-amber-500/30 text-amber-200 px-4 py-4 rounded-xl mb-6 text-sm text-center">
-                <p className="font-bold mb-1">Tu sesión ha finalizado</p>
-                <p className="text-amber-200/70 text-xs">Ingresa tus datos para continuar.</p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight tracking-tight text-white">
+              Gestión inteligente para tu bodega en un solo lugar.
+            </h1>
+            <p className="text-emerald-100/85 text-sm font-medium mt-3 leading-relaxed">
+              Controla tus ventas, inventario, cuentas por cobrar y facturación electrónica con apoyo de Inteligencia Artificial.
+            </p>
+          </div>
+
+          {/* Tarjetas ilustrativas del sistema POS */}
+          <div className="relative z-10 space-y-3 my-8">
+            <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-2xl p-3.5 flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-verde-pastel text-emerald-950 flex items-center justify-center shrink-0">
+                <FaFileInvoiceDollar size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Punto de Venta y Fiados</p>
+                <p className="text-xs text-emerald-100/80">Boletas, facturas SUNAT y avisos por WhatsApp.</p>
+              </div>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-2xl p-3.5 flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-verde-pastel text-emerald-950 flex items-center justify-center shrink-0">
+                <FaChartLine size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Control de Caja e Inventario</p>
+                <p className="text-xs text-emerald-100/80">Flujo de capital en vivo, lector de barras y compras.</p>
+              </div>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-2xl p-3.5 flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-verde-pastel text-emerald-950 flex items-center justify-center shrink-0">
+                <FaRobot size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Asistente VendaIA Integrado</p>
+                <p className="text-xs text-emerald-100/80">Consulta tus ganancias y alertas de stock al instante.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Pie del panel izquierdo */}
+          <div className="relative z-10 pt-4 border-t border-white/15 flex items-center justify-between text-xs text-emerald-100/80 font-medium">
+            <span className="flex items-center gap-1.5">
+              <FaCheckCircle className="text-verde-pastel" /> Plataforma Multi-Bodega
+            </span>
+            <span>Perú • SUNAT</span>
+          </div>
+        </div>
+
+        {/* ================= MITAD DERECHA: FORMULARIO DE LOGIN / REGISTRO ================= */}
+        <div className="lg:col-span-7 p-7 sm:p-10 md:p-12 bg-white flex flex-col justify-center">
+          
+          {/* Selector superior integrado (Sin encimarse con el formulario) */}
+          <div className="w-full max-w-xs mx-auto flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 mb-7">
+            <button 
+              type="button"
+              onClick={() => setIsRegistering(false)}
+              className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                !isRegistering 
+                  ? 'bg-verde-pastel text-emerald-950 shadow-2xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Iniciar Sesión
+            </button>
+            <button 
+              type="button"
+              onClick={() => setIsRegistering(true)}
+              className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                isRegistering 
+                  ? 'bg-verde-pastel text-emerald-950 shadow-2xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Crear Bodega
+            </button>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {!isRegistering ? (
+              
+              /* ============= VISTA DE LOGIN ============ */
+              <motion.div 
+                key="login"
+                initial={{ opacity: 0, x: -20 }} 
+                animate={{ opacity: 1, x: 0 }} 
+                exit={{ opacity: 0, x: 20 }} 
+                transition={{ duration: 0.22 }}
+                className="w-full max-w-md mx-auto"
+              >
+                <div className="mb-7 text-center sm:text-left">
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    Bienvenido de nuevo
+                  </h2>
+                  <p className="text-slate-500 font-medium text-sm mt-1">
+                    Ingresa tus credenciales para acceder al panel de tu bodega.
+                  </p>
+                </div>
+
+                {sesionExpirada && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -8 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl mb-5 text-xs sm:text-sm"
+                  >
+                    <p className="font-bold">Tu sesión ha finalizado por seguridad</p>
+                    <p className="text-amber-700 text-xs mt-0.5">Vuelve a ingresar tus datos para continuar trabajando.</p>
+                  </motion.div>
+                )}
+
+                <form onSubmit={handleLogin} noValidate className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Correo Electrónico
+                    </label>
+                    <InputField 
+                      icon={FaUserShield} 
+                      type="email" 
+                      value={email} 
+                      onChange={e => setEmail(e.target.value)} 
+                      disabled={tiempoBloqueo > 0 || isLoading} 
+                      placeholder="admin@mibodega.com" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Contraseña
+                    </label>
+                    <InputField 
+                      icon={FaLock} 
+                      type="password" 
+                      value={password} 
+                      onChange={e => setPassword(e.target.value)} 
+                      disabled={tiempoBloqueo > 0 || isLoading} 
+                      placeholder="••••••••" 
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button 
+                      type="submit" 
+                      disabled={tiempoBloqueo > 0 || isLoading}
+                      className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold text-sm sm:text-base py-3.5 px-5 rounded-xl transition-all shadow-xs flex justify-center items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      {isLoading ? (
+                        <><FaSpinner className="animate-spin" /> Verificando acceso...</>
+                      ) : tiempoBloqueo > 0 ? (
+                        <><FaLock /> Bloqueado temporalmente ({tiempoBloqueo}s)</>
+                      ) : (
+                        'Ingresar al Sistema'
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+                <p className="text-center text-xs text-slate-500 font-medium mt-6">
+                  ¿Aún no tienes una cuenta para tu negocio?{' '}
+                  <button 
+                    type="button" 
+                    onClick={() => setIsRegistering(true)}
+                    className="text-emerald-700 hover:text-emerald-900 font-bold underline underline-offset-4 cursor-pointer"
+                  >
+                    Registra tu bodega aquí
+                  </button>
+                </p>
+              </motion.div>
+
+            ) : (
+
+              /* ========== VISTA DE REGISTRO SAAS (BIEN ESPACIADA Y SIMÉTRICA) ======= */
+              <motion.div 
+                key="registro"
+                initial={{ opacity: 0, x: 20 }} 
+                animate={{ opacity: 1, x: 0 }} 
+                exit={{ opacity: 0, x: -20 }} 
+                transition={{ duration: 0.22 }}
+                className="w-full max-w-md mx-auto"
+              >
+                <div className="mb-5 text-center sm:text-left">
+                  <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center justify-center sm:justify-start gap-2.5">
+                    <span className="w-8 h-8 rounded-lg bg-verde-pastel/50 text-emerald-900 flex items-center justify-center text-sm">
+                      <FaStore />
+                    </span>
+                    Registra tu Bodega
+                  </h2>
+                  <p className="text-slate-500 font-medium text-xs sm:text-sm mt-1">
+                    Crea tu cuenta de administrador en segundos y comienza a vender hoy mismo.
+                  </p>
+                </div>
+
+                <form onSubmit={handleRegistro} noValidate className="space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                        Nombre de Bodega *
+                      </label>
+                      <InputField 
+                        icon={FaStore} 
+                        type="text" 
+                        value={regNombreNegocio} 
+                        onChange={e => setRegNombreNegocio(e.target.value)} 
+                        disabled={isLoading} 
+                        placeholder="Ej: Bodega Don Pepe" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                        RUC (Opcional)
+                      </label>
+                      <InputField 
+                        icon={FaIdCard} 
+                        type="text" 
+                        value={regRuc} 
+                        onChange={e => setRegRuc(e.target.value.replace(/\D/g, '').slice(0, 11))} 
+                        disabled={isLoading} 
+                        placeholder="11 dígitos" 
+                        required={false} 
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                      Nombre del Dueño *
+                    </label>
+                    <InputField 
+                      icon={FaUserTie} 
+                      type="text" 
+                      value={regNombreDuenio} 
+                      onChange={e => setRegNombreDuenio(e.target.value)} 
+                      disabled={isLoading} 
+                      placeholder="Tu nombre completo" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                      Correo Administrador *
+                    </label>
+                    <InputField 
+                      icon={FaUserShield} 
+                      type="email" 
+                      value={regEmail} 
+                      onChange={e => setRegEmail(e.target.value)} 
+                      disabled={isLoading} 
+                      placeholder="correo@ejemplo.com" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                      Crea tu Contraseña *
+                    </label>
+                    <InputField 
+                      icon={FaLock} 
+                      type="password" 
+                      value={regPassword} 
+                      onChange={e => setRegPassword(e.target.value)} 
+                      disabled={isLoading} 
+                      placeholder="Mínimo 6 caracteres" 
+                    />
+                  </div>
+
+                  {/* TÉRMINOS Y CONDICIONES INTERACTIVOS */}
+                  <div className="pt-1 flex items-start gap-2.5">
+                    <input 
+                      type="checkbox" 
+                      checked={aceptoTerminos}
+                      onChange={(e) => setAceptoTerminos(e.target.checked)}
+                      className="mt-1 w-4 h-4 rounded border-slate-300 accent-emerald-600 cursor-pointer shrink-0" 
+                    />
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                      Al registrarte, aceptas nuestros{' '}
+                      <button
+                        type="button"
+                        onClick={() => setIsTerminosOpen(true)}
+                        className="text-emerald-700 hover:text-emerald-900 font-bold underline underline-offset-4 decoration-emerald-400 cursor-pointer transition-colors"
+                      >
+                        Términos y Condiciones y la Política de Privacidad
+                      </button>{' '}
+                      de datos del sistema POS.
+                    </p>
+                  </div>
+
+                  <div className="pt-2">
+                    <button 
+                      type="submit" 
+                      disabled={isLoading}
+                      className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold text-sm sm:text-base py-3.5 px-5 rounded-xl transition-all shadow-xs flex justify-center items-center gap-2 disabled:opacity-60 cursor-pointer"
+                    >
+                      {isLoading ? (
+                        <><FaSpinner className="animate-spin" /> Creando cuenta...</>
+                      ) : (
+                        'Crear Bodega e Iniciar Sesión'
+                      )}
+                    </button>
+                  </div>
+                </form>
               </motion.div>
             )}
+          </AnimatePresence>
 
-            <form onSubmit={handleLogin} noValidate className="space-y-6">
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-500 mb-2 uppercase tracking-widest">Correo Electrónico</label>
-                <InputField icon={FaUserShield} type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={tiempoBloqueo > 0 || isLoading} placeholder="admin@mibodega.com" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-500 mb-2 uppercase tracking-widest">Contraseña</label>
-                <InputField icon={FaLock} type="password" value={password} onChange={e => setPassword(e.target.value)} disabled={tiempoBloqueo > 0 || isLoading} placeholder="••••••••" />
-              </div>
-
-              <div className="pt-4">
-                <button type="submit" disabled={tiempoBloqueo > 0 || isLoading}
-                  className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-neutral-950 font-extrabold text-base py-4 px-4 rounded-xl transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:bg-neutral-700 disabled:text-neutral-400"
-                >
-                  {isLoading ? <><FaSpinner className="animate-spin" /> Verificando...</> : tiempoBloqueo > 0 ? <><FaLock /> Bloqueado ({tiempoBloqueo}s)</> : 'Ingresar al Sistema'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-
-        ) : (
-
-          /* ========== VISTA DE REGISTRO SAAS (CON ESTILO VERDE PASTEL) ======= */
-          <motion.div 
-            key="registro"
-            initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}
-            className="bg-neutral-950/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.8)] w-full max-w-lg z-10 border border-neutral-800 hover:border-verde-pastel/30 transition-colors duration-500 mt-12"
-          >
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-extrabold text-white mb-2 tracking-tight flex items-center justify-center gap-2">
-                <FaStore className="text-verde-pastel" /> Registra tu Bodega
-              </h2>
-              <p className="text-neutral-500 font-medium text-xs">Crea tu cuenta de administrador en segundos y comienza a vender hoy mismo.</p>
-            </div>
-
-            <form onSubmit={handleRegistro} noValidate className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-500 mb-1.5 uppercase">Nombre de Bodega *</label>
-                  <InputField icon={FaStore} type="text" value={regNombreNegocio} onChange={e => setRegNombreNegocio(e.target.value)} disabled={isLoading} placeholder="Ej: Bodega Don Pepe" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-500 mb-1.5 uppercase">RUC (Opcional)</label>
-                  <InputField icon={FaIdCard} type="text" value={regRuc} onChange={e => setRegRuc(e.target.value.replace(/\D/g, '').slice(0, 11))} disabled={isLoading} placeholder="11 dígitos" required={false} />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-500 mb-1.5 uppercase">Nombre del Dueño *</label>
-                <InputField icon={FaUserTie} type="text" value={regNombreDuenio} onChange={e => setRegNombreDuenio(e.target.value)} disabled={isLoading} placeholder="Tu nombre completo" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-500 mb-1.5 uppercase">Correo Administrador *</label>
-                <InputField icon={FaUserShield} type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} disabled={isLoading} placeholder="correo@ejemplo.com" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-500 mb-1.5 uppercase">Crea tu Contraseña *</label>
-                <InputField icon={FaLock} type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} disabled={isLoading} placeholder="Mínimo 6 caracteres" />
-              </div>
-
-              {/* TÉRMINOS Y CONDICIONES INTERACTIVOS */}
-              <div className="py-2 flex items-start gap-3">
-                <input 
-                  type="checkbox" 
-                  checked={aceptoTerminos}
-                  onChange={(e) => setAceptoTerminos(e.target.checked)}
-                  className="mt-1 w-4 h-4 rounded border-neutral-700 bg-neutral-900 accent-verde-pastel cursor-pointer shrink-0" 
-                />
-                <p className="text-xs text-neutral-400 leading-relaxed">
-                  Al registrarte, aceptas nuestros{' '}
-                  <button
-                    type="button"
-                    onClick={() => setIsTerminosOpen(true)}
-                    className="text-verde-pastel hover:text-[#86e6bb] font-bold underline underline-offset-4 decoration-verde-pastel/60 hover:decoration-verde-pastel cursor-pointer transition-colors"
-                  >
-                    Términos y Condiciones y la Política de Privacidad
-                  </button>{' '}
-                  de datos del sistema POS.
-                </p>
-              </div>
-
-              <div className="pt-2">
-                <button type="submit" disabled={isLoading}
-                  className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-neutral-950 font-extrabold text-base py-4 px-4 rounded-xl transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:bg-neutral-700 disabled:text-neutral-400"
-                >
-                  {isLoading ? <><FaSpinner className="animate-spin" /> Creando cuenta...</> : 'Crear Bodega e Iniciar Sesión'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      </div>
 
       {/* VENTANA FLOTANTE DE TÉRMINOS Y CONDICIONES (DESDE EL REGISTRO) */}
       <TerminosModal 
         isOpen={isTerminosOpen}
         modoObligatorio={false}
         onClose={() => {
-          setAceptoTerminos(true); // Si los abre y presiona "Entendido", marcamos el check por comodidad
+          setAceptoTerminos(true);
           setIsTerminosOpen(false);
         }}
       />
