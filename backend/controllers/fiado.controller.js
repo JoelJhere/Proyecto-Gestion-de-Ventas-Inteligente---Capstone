@@ -167,3 +167,89 @@ export const registrarAvisoWhatsApp = async (req, res) => {
     res.status(500).json({ message: 'Error al registrar el aviso en el sistema' });
   }
 };
+
+// 5. Obtener el directorio completo de vecinos (creados en POS o en Fiados)
+export const obtenerClientesFiado = async (req, res) => {
+  const negocioId = req.user.negocioId;
+  try {
+    const clientes = await prisma.cliente.findMany({
+      where: { negocioId: negocioId },
+      include: {
+        _count: {
+          select: { fiados: { where: { estado: 'PENDIENTE' } } }
+        }
+      },
+      orderBy: { nombre: 'asc' }
+    });
+    res.status(200).json(clientes);
+  } catch (error) {
+    console.error('Error al obtener clientes de fiado:', error);
+    res.status(500).json({ message: 'Error al cargar el directorio de vecinos' });
+  }
+};
+
+// 6. Registrar un vecino manualmente desde el módulo Control de Fiados
+export const crearClienteFiado = async (req, res) => {
+  const negocioId = req.user.negocioId;
+  const { nombre, telefono } = req.body;
+
+  if (!nombre?.trim() || !telefono?.trim()) {
+    return res.status(400).json({ message: 'El nombre y el celular son obligatorios.' });
+  }
+
+  try {
+    const existente = await prisma.cliente.findFirst({
+      where: {
+        negocioId: negocioId,
+        nombre: { equals: nombre.trim(), mode: 'insensitive' }
+      }
+    });
+
+    if (existente) {
+      return res.status(400).json({ message: 'Ya existe un vecino registrado con ese nombre.' });
+    }
+
+    const nuevoCliente = await prisma.cliente.create({
+      data: {
+        nombre: nombre.trim(),
+        telefono: telefono.trim(),
+        negocioId: negocioId
+      }
+    });
+
+    res.status(201).json({ message: 'Vecino agregado al directorio', cliente: nuevoCliente });
+  } catch (error) {
+    console.error('Error al crear cliente:', error);
+    res.status(500).json({ message: 'Error interno al registrar vecino' });
+  }
+};
+
+// 7. Actualizar nombre o celular de un vecino
+export const actualizarClienteFiado = async (req, res) => {
+  const { id } = req.params;
+  const negocioId = req.user.negocioId;
+  const { nombre, telefono } = req.body;
+
+  try {
+    const clienteExistente = await prisma.cliente.findFirst({
+      where: { id: parseInt(id), negocioId: negocioId }
+    });
+
+    if (!clienteExistente) {
+      return res.status(404).json({ message: 'Vecino no encontrado en tu bodega.' });
+    }
+
+    const actualizado = await prisma.cliente.update({
+      where: { id: parseInt(id) },
+      data: {
+        nombre: nombre?.trim() || clienteExistente.nombre,
+        telefono: telefono?.trim() || clienteExistente.telefono
+      }
+    });
+
+    res.status(200).json({ message: 'Datos del vecino actualizados', cliente: actualizado });
+  } catch (error) {
+    console.error('Error al actualizar vecino:', error);
+    res.status(500).json({ message: 'Error al actualizar los datos del vecino' });
+  }
+};

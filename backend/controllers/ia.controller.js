@@ -46,7 +46,7 @@ export const obtenerResumenIA = async (req, res) => {
   }
 };
 
-// --- MOTOR LÓGICO DE RESPALDO (Analiza los datos reales de la bodega si la API externa falla) ---
+// --- MOTOR LÓGICO DE RESPALDO  ---
 const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
   const texto = preguntaRaw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
@@ -162,7 +162,7 @@ export const consultarAsistenteIA = async (req, res) => {
     hace7Dias.setDate(hace7Dias.getDate() - 7);
     const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
 
-    // Consultamos ÚNICAMENTE los datos de la bodega actual (negocioId)
+    // Consultamos unicamente los datos de la bodega actual (negocioId)
     const [negocio, productos, ventasRecientes, fiados, planesCompra, movimientosCaja] = await prisma.$transaction([
       prisma.negocio.findUnique({ where: { id: negocioId } }),
       prisma.producto.findMany({
@@ -287,10 +287,13 @@ export const consultarAsistenteIA = async (req, res) => {
 
     const systemPrompt = `Eres VendaIA, el asesor comercial, logístico y financiero exclusivo de la bodega "${negocio?.nombre || 'la tienda'}".
 REGLAS ESTRICTAS:
-1. LÍMITE DE TEMA: SOLO puedes responder preguntas relacionadas con el negocio (ventas, inventario, qué productos comprar, proveedores, fiados, flujo de caja o ganancias de esta bodega).
-2. RECHAZO DE TEMAS AJENOS: Si el usuario pregunta sobre política, deportes, fútbol, religión, chistes, tareas, programación o cualquier tema que NO tenga relación con su bodega, responde ÚNICAMENTE con esta frase exacta:
+1. LÍMITE DE TEMA: SOLO puedes responder preguntas relacionadas con el negocio (ventas, inventario, qué productos comprar, proveedores, 
+fiados, flujo de caja o ganancias de esta bodega).
+2. RECHAZO DE TEMAS AJENOS: Si el usuario pregunta sobre política, deportes, fútbol, religión, chistes, tareas, programación o 
+cualquier tema que NO tenga relación con su bodega, responde ÚNICAMENTE con esta frase exacta:
 "No puedo responder a esa pregunta, ya que solo estoy programado para ayudarte con las ventas, el inventario y las finanzas de tu negocio."
-3. CERO INVENCIÓN: Usa EXCLUSIVAMENTE los datos reales del siguiente JSON. Nunca inventes productos ni cifras. Responde en español claro, conciso y amigable usando Soles (S/).
+3. CERO INVENCIÓN: Usa EXCLUSIVAMENTE los datos reales del siguiente JSON. Nunca inventes productos ni cifras. Responde en español claro, 
+conciso y amigable usando Soles (S/).
 
 DATOS EN TIEMPO REAL DE LA BODEGA:
 ${JSON.stringify(contextoNegocio)}`;

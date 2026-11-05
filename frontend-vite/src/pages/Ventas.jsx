@@ -56,6 +56,10 @@ export default function Ventas() {
   const [ventaGenerada, setVentaGenerada] = useState(null);
   const [isLoadingDoc, setIsLoadingDoc] = useState(false);
 
+  // Estados para autocompletado de vecinos en Fiados
+  const [clientesFiado, setClientesFiado] = useState([]);
+  const [showVecinosDropdown, setShowVecinosDropdown] = useState(false);
+
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
 
   // Guardado automático en caché
@@ -77,6 +81,9 @@ export default function Ventas() {
       const res = await axios.get('/productos', { headers: { Authorization: `Bearer ${token}` } });
       const disponibles = res.data.filter(p => p.estado === true && p.stock > 0);
       setProductos(disponibles);
+
+      const resClientes = await axios.get('/fiados/clientes', { headers: { Authorization: `Bearer ${token}` } });
+      setClientesFiado(resClientes.data);
 
       // Seguridad Multi-Bodega: filtramos el carrito en caché para que solo queden productos de esta tienda
       setCarrito(prevCarrito => 
@@ -312,6 +319,16 @@ export default function Ventas() {
     prod.codigo.toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  // Filtro inteligente de vecinos para autocompletar en Fiados
+  const vecinosFiltrados = clientesFiado.filter(v =>
+    v.nombre.toLowerCase().includes((cliente.nombre || '').toLowerCase()) ||
+    (v.telefono && v.telefono.includes(cliente.nombre || ''))
+  );
+
+  const vecinoCoincidente = clientesFiado.find(
+    v => v.nombre.toLowerCase() === (cliente.nombre || '').trim().toLowerCase()
+  );
+
   return (
     <div className="flex flex-col gap-6 text-slate-800 pb-16 lg:pb-2 font-sans antialiased">
       
@@ -492,10 +509,10 @@ export default function Ventas() {
             </span>
           </div>
 
-          {/* Cuerpo con todo visible y barra deslizante moderna, delgada y sin flechas */}
+          {/* Cuerpo con barra deslizante moderna */}
           <div className="px-5 py-3.5 space-y-3 bg-white flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-emerald-300 [&::-webkit-scrollbar-thumb]:rounded-full">
             
-            {/* 1. Selector de Tipo de Operación*/}
+            {/* 1. Selector de Tipo de Operación */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Tipo de Operación
@@ -599,19 +616,81 @@ export default function Ventas() {
                   </div>
                 )}
                 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 mb-1 block">
-                    {tipoComprobante === 'FIADO' ? 'Nombre del Vecino / Cliente *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre del Cliente *')}
+                {/* Campo de Nombre con Autocompletado si es FIADO */}
+                <div className="relative">
+                  <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>
+                      {tipoComprobante === 'FIADO' ? 'Nombre del Vecino / Cliente *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre del Cliente *')}
+                    </span>
+                    {tipoComprobante === 'FIADO' && cliente.nombre.trim().length > 1 && (
+                      vecinoCoincidente ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-verde-pastel/45 px-2 py-0.5 rounded-md">
+                          <FaCheckCircle size={10} /> Vecino registrado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
+                          <FaPlus size={9} /> Nuevo vecino (se guardará)
+                        </span>
+                      )
+                    )}
                   </label>
+
                   <input 
                     type="text" 
                     required 
-                    placeholder={isLoadingDoc ? 'Consultando padrón oficial...' : (tipoComprobante === 'FIADO' ? 'Nombre completo o referencia' : 'Nombre completo o Razón Social')}
+                    placeholder={isLoadingDoc ? 'Consultando padrón oficial...' : (tipoComprobante === 'FIADO' ? 'Escribe para buscar o registrar vecino...' : 'Nombre completo o Razón Social')}
                     value={cliente.nombre} 
-                    onChange={e => setCliente({...cliente, nombre: e.target.value})}
+                    onFocus={() => { if (tipoComprobante === 'FIADO') setShowVecinosDropdown(true); }}
+                    onBlur={() => setTimeout(() => setShowVecinosDropdown(false), 200)}
+                    onChange={e => {
+                      const nuevoNombre = e.target.value;
+                      const match = clientesFiado.find(v => v.nombre.toLowerCase() === nuevoNombre.trim().toLowerCase());
+                      setCliente({
+                        ...cliente,
+                        id: match ? match.id : undefined,
+                        nombre: nuevoNombre,
+                        telefono: match ? (match.telefono || '') : cliente.telefono
+                      });
+                      if (tipoComprobante === 'FIADO') setShowVecinosDropdown(true);
+                    }}
                     disabled={isLoadingDoc}
                     className={`w-full px-3 py-2 border rounded-xl outline-none text-sm font-medium transition-all ${isLoadingDoc ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-slate-50/70 focus:bg-white border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/40 text-slate-900'}`} 
                   />
+
+                  {/* Lista desplegable de vecinos registrados */}
+                  <AnimatePresence>
+                    {tipoComprobante === 'FIADO' && showVecinosDropdown && vecinosFiltrados.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 4 }}
+                        className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-[0_12px_28px_rgba(15,23,42,0.12)] z-30 max-h-40 overflow-y-auto divide-y divide-slate-100"
+                      >
+                        {vecinosFiltrados.map(vecino => (
+                          <div
+                            key={vecino.id}
+                            onMouseDown={() => {
+                              setCliente({
+                                ...cliente,
+                                id: vecino.id,
+                                nombre: vecino.nombre,
+                                telefono: vecino.telefono || ''
+                              });
+                              setShowVecinosDropdown(false);
+                            }}
+                            className="px-3.5 py-2 hover:bg-verde-pastel/25 cursor-pointer flex justify-between items-center transition-colors"
+                          >
+                            <span className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
+                              <FaUser size={11} className="text-slate-400" /> {vecino.nombre}
+                            </span>
+                            <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                              {vecino.telefono || 'Sin número'}
+                            </span>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {tipoComprobante === 'FIADO' && (
@@ -631,6 +710,18 @@ export default function Ventas() {
                       }}
                       className="w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/40 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
                     />
+
+                    {/* Mensaje explicativo corto o aviso si se cambió el celular de un vecino */}
+                    {vecinoCoincidente && vecinoCoincidente.telefono && cliente.telefono && vecinoCoincidente.telefono !== cliente.telefono ? (
+                      <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1.5 rounded-lg mt-1.5 flex items-center gap-1.5">
+                        <FaCheckCircle className="text-amber-600 shrink-0" size={12} />
+                        <span>Número modificado ({vecinoCoincidente.telefono} a {cliente.telefono}). Se actualizará al registrar el fiado.</span>
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-slate-500 font-medium mt-1">
+                        Si el vecino cambió de celular, edítalo aquí y se actualizará automáticamente.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -728,11 +819,16 @@ export default function Ventas() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
             >
-              <div className="px-5 py-4 bg-slate-900 text-white flex justify-between items-center">
-                <h3 className="text-base font-bold flex items-center gap-2.5">
-                  <FaCamera className="text-verde-pastel" /> Lector de Código de Barras
-                </h3>
-                <button onClick={() => setIsScannerOpen(false)} className="text-slate-400 hover:text-white">
+              <div className="px-5 py-4 bg-white border-b border-slate-100 flex justify-between items-center">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
+                    <FaCamera size={15} />
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Lector de Código de Barras
+                  </h3>
+                </div>
+                <button onClick={() => setIsScannerOpen(false)} className="text-slate-400 hover:text-slate-700">
                   <FaTimes size={18} />
                 </button>
               </div>
@@ -804,7 +900,7 @@ export default function Ventas() {
 
                       window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(textoMensaje)}`, '_blank');
                     }}
-                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm"
+                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer"
                   >
                     <FaWhatsapp size={18} /> Enviar Comprobante por WhatsApp
                   </button>
@@ -813,7 +909,7 @@ export default function Ventas() {
                 {ventaGenerada.metodoEnvio === 'CORREO' && ventaGenerada.tipo !== 'TICKET' && (
                   <button 
                     onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer"
                   >
                     <FaEnvelope size={15} /> Abrir PDF / Correo Enviado
                   </button>
@@ -828,7 +924,7 @@ export default function Ventas() {
                         window.open(`/ticket/${ventaGenerada.id}`, '_blank', 'width=400,height=600');
                       }
                     }}
-                    className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm"
+                    className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer"
                   >
                     <FaPrint size={15} /> Imprimir {ventaGenerada.tipo === 'TICKET' ? 'Ticket' : ventaGenerada.tipo}
                   </button>
@@ -836,7 +932,7 @@ export default function Ventas() {
                 
                 <button 
                   onClick={() => setVentaGenerada(null)}
-                  className="w-full font-bold py-3 px-4 rounded-xl transition-colors text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  className="w-full font-bold py-3 px-4 rounded-xl transition-colors text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
                 >
                   Nueva Operación
                 </button>

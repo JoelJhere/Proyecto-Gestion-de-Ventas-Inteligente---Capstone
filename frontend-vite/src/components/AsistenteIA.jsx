@@ -207,11 +207,11 @@ export default function AsistenteIA() {
                   </div>
                   <div>
                     <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
-                      Asistente VendaIA
+                      Asistente de {businessConfig?.nombre || 'Analítica en Tiempo Real'}
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     </h3>
                     <p className="text-[11px] text-neutral-400 font-medium truncate max-w-[180px]">
-                      {businessConfig?.nombre || 'Analítica en Tiempo Real'}
+                      VendaIA
                     </p>
                   </div>
                 </div>

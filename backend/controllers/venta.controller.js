@@ -174,20 +174,41 @@ export const crearVenta = async (req, res) => {
       
       let clienteIdDb = null;
       if (esFiado) {
-        let clienteDB = await tx.cliente.findFirst({
-          where: { 
-            nombre: cliente.nombre, 
-            telefono: cliente.telefono,
-            negocioId: negocioId
-          }
-        });
+        const nombreLimpio = cliente.nombre.trim();
+        const telefonoLimpio = cliente.telefono.trim();
+
+        // 1. Buscamos al vecino por ID (si fue seleccionado de la lista) o por su nombre
+        let clienteDB = null;
+        if (cliente.id) {
+          clienteDB = await tx.cliente.findFirst({
+            where: { id: parseInt(cliente.id), negocioId: negocioId }
+          });
+        }
+
+        if (!clienteDB) {
+          clienteDB = await tx.cliente.findFirst({
+            where: { 
+              nombre: { equals: nombreLimpio, mode: 'insensitive' }, 
+              negocioId: negocioId
+            }
+          });
+        }
         
+        // 2. Si no existe, lo creamos; si ya existe y cambió de número, actualizamos su teléfono
         if (!clienteDB) {
           clienteDB = await tx.cliente.create({
             data: { 
-              nombre: cliente.nombre, 
-              telefono: cliente.telefono,
+              nombre: nombreLimpio, 
+              telefono: telefonoLimpio,
               negocioId: negocioId
+            }
+          });
+        } else if (clienteDB.telefono !== telefonoLimpio || clienteDB.nombre !== nombreLimpio) {
+          clienteDB = await tx.cliente.update({
+            where: { id: clienteDB.id },
+            data: {
+              nombre: nombreLimpio,
+              telefono: telefonoLimpio
             }
           });
         }

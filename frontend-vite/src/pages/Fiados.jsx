@@ -49,6 +49,11 @@ export default function Fiados() {
   const [modalCobro, setModalCobro] = useState(null);
   const [metodoPagoCobro, setMetodoPagoCobro] = useState('EFECTIVO');
 
+  // Estados para el Directorio de Vecinos
+  const [clientesDirectorio, setClientesDirectorio] = useState([]);
+  const [modalDirectorio, setModalDirectorio] = useState(false);
+  const [nuevoVecino, setNuevoVecino] = useState({ id: null, nombre: '', telefono: '' });
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
     cargarFiados();
@@ -57,13 +62,39 @@ export default function Fiados() {
   const cargarFiados = async () => {
     setIsLoading(true);
     try {
-      const res = await axios.get('/fiados');
-      setFiados(res.data);
+      const [resFiados, resClientes] = await Promise.all([
+        axios.get('/fiados'),
+        axios.get('/fiados/clientes')
+      ]);
+      setFiados(resFiados.data);
+      setClientesDirectorio(resClientes.data);
     } catch (error) {
       console.error(error);
       toast.error('Error al cargar la lista de fiados.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGuardarVecino = async (e) => {
+    e.preventDefault();
+    if (!nuevoVecino.nombre.trim()) return toast.error('Ingresa el nombre del vecino.');
+    if (!nuevoVecino.telefono || nuevoVecino.telefono.length !== 9 || !nuevoVecino.telefono.startsWith('9')) {
+      return toast.error('El celular debe tener 9 dígitos y empezar con 9.');
+    }
+
+    try {
+      if (nuevoVecino.id) {
+        await axios.put(`/fiados/clientes/${nuevoVecino.id}`, nuevoVecino);
+        toast.success('Datos del vecino actualizados.');
+      } else {
+        await axios.post('/fiados/clientes', nuevoVecino);
+        toast.success('Vecino registrado para autocompletado en ventas.');
+      }
+      setNuevoVecino({ id: null, nombre: '', telefono: '' });
+      cargarFiados();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al guardar vecino.');
     }
   };
 
@@ -162,17 +193,30 @@ export default function Fiados() {
           </p>
         </div>
         
-        <div className="relative w-full md:w-80">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <FaSearch className="text-slate-400 text-sm" />
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <div className="relative w-full sm:w-72">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <FaSearch className="text-slate-400 text-sm" />
+            </div>
+            <input 
+              type="text" 
+              placeholder="Buscar vecino o cliente por nombre..." 
+              value={busqueda} 
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium text-sm placeholder:text-slate-400" 
+            />
           </div>
-          <input 
-            type="text" 
-            placeholder="Buscar vecino o cliente por nombre..." 
-            value={busqueda} 
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium text-sm placeholder:text-slate-400" 
-          />
+
+          <button
+            type="button"
+            onClick={() => {
+              setNuevoVecino({ id: null, nombre: '', telefono: '' });
+              setModalDirectorio(true);
+            }}
+            className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-2xs text-sm whitespace-nowrap cursor-pointer"
+          >
+            <FaUser size={13} /> Directorio de Vecinos ({clientesDirectorio.length})
+          </button>
         </div>
       </div>
 
@@ -527,6 +571,110 @@ export default function Fiados() {
                 >
                   {procesandoId === modalCobro.id ? 'Registrando...' : 'Confirmar Cobro'}
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL DE DIRECTORIO DE VECINOS (AGREGAR Y EDITAR CLIENTES DE FIADO) */}
+      <AnimatePresence>
+        {modalDirectorio && (
+          <div className="fixed inset-0 bg-slate-950/70 z-[80] flex items-center justify-center p-4 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[88vh]"
+            >
+              <div className="px-6 py-4 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
+                    <FaUser size={17} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base">Directorio de Vecinos</h3>
+                    <p className="text-xs text-slate-500 font-medium">Se autocompletarán automáticamente en el Punto de Venta.</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setModalDirectorio(false)} className="text-slate-400 hover:text-slate-700">
+                  <FaTimes size={18} />
+                </button>
+              </div>
+
+              {/* Formulario para agregar o editar vecino */}
+              <form onSubmit={handleGuardarVecino} className="p-5 bg-slate-50/80 border-b border-slate-200/80 space-y-3 shrink-0">
+                <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  {nuevoVecino.id ? 'Editar datos del vecino seleccionado' : 'Registrar nuevo vecino'}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                  <input
+                    type="text"
+                    placeholder="Nombre completo del vecino"
+                    value={nuevoVecino.nombre}
+                    onChange={e => setNuevoVecino({ ...nuevoVecino, nombre: e.target.value })}
+                    className="sm:col-span-6 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Celular (9 dígitos)"
+                    value={nuevoVecino.telefono}
+                    onChange={e => {
+                      let num = e.target.value.replace(/\D/g, '');
+                      if (num.length > 0 && !num.startsWith('9')) return;
+                      setNuevoVecino({ ...nuevoVecino, telefono: num.slice(0, 9) });
+                    }}
+                    className="sm:col-span-4 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono font-semibold outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="submit"
+                    className="sm:col-span-2 py-2.5 px-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold rounded-xl text-xs transition-all cursor-pointer"
+                  >
+                    {nuevoVecino.id ? 'Guardar' : 'Agregar'}
+                  </button>
+                </div>
+                {nuevoVecino.id && (
+                  <button
+                    type="button"
+                    onClick={() => setNuevoVecino({ id: null, nombre: '', telefono: '' })}
+                    className="text-xs text-slate-500 underline cursor-pointer"
+                  >
+                    Cancelar edición
+                  </button>
+                )}
+              </form>
+
+              {/* Lista de todos los vecinos registrados */}
+              <div className="p-5 overflow-y-auto flex-1 space-y-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                {clientesDirectorio.length === 0 ? (
+                  <p className="text-center text-sm text-slate-400 py-8 font-medium">
+                    Aún no hay vecinos registrados en el directorio.
+                  </p>
+                ) : (
+                  clientesDirectorio.map(vecino => (
+                    <div key={vecino.id} className="flex items-center justify-between p-3 bg-white border border-slate-200/80 rounded-xl hover:bg-slate-50/70 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-verde-pastel/40 text-emerald-900 font-bold text-sm flex items-center justify-center shrink-0">
+                          {vecino.nombre.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{vecino.nombre}</p>
+                          <p className="text-xs font-mono text-slate-500 flex items-center gap-1 mt-0.5">
+                            <FaWhatsapp className="text-emerald-600" size={11} />
+                            <strong className="text-emerald-700">{vecino.telefono || 'No registrado'}</strong>
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNuevoVecino({ id: vecino.id, nombre: vecino.nombre, telefono: vecino.telefono || '' })}
+                        className="text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </motion.div>
           </div>
