@@ -20,7 +20,11 @@ export const obtenerConfiguracion = async (req, res) => {
       return res.status(404).json({ message: 'Negocio no encontrado.' });
     }
 
-    res.json(config);
+    const { nubefactToken, ...configPublica } = config;
+    res.json({
+    ...configPublica,
+  nubefactTokenGuardado: Boolean(nubefactToken)
+});
   } catch (error) {
     console.error("Error al obtener configuración:", error);
     res.status(500).json({ message: 'Error al obtener la configuración' });
@@ -56,11 +60,12 @@ export const actualizarConfiguracion = async (req, res) => {
         impuestoPorcentaje: parseFloat(impuestoPorcentaje) || 18.0,
         logo,
         nubefactRuta,
-        nubefactToken
+        ...(nubefactToken ? { nubefactToken } : {})
       }
     });
 
-    res.json({ message: 'Configuración actualizada con éxito', config: configActualizada });
+    const { nubefactToken: _omitido, ...configPublica } = configActualizada;
+    res.json({ message: 'Configuración actualizada con éxito', config: configPublica });
   } catch (error) {
     console.error("Error al actualizar configuración:", error);
     res.status(500).json({ message: 'Error al actualizar configuración' });

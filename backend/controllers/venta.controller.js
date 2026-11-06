@@ -52,7 +52,7 @@ export const crearVenta = async (req, res) => {
     let correlativoFinal = esFiado ? `FIADO-${Date.now()}` : `${tipoDocDB.charAt(0)}-${Date.now()}`;
 
     // 3. INTEGRACIÓN CON NUBEFACT (CON AUTO-SINCRONIZACIÓN DE CORRELATIVO)
-    if (tipoComprobante !== 'TICKET' && !esFiado) {
+    if (tipoDocDB !== 'SIN_COMPROBANTE') {
       
       const rutaNubefact = configNegocio.nubefactRuta?.trim();
       const tokenNubefact = configNegocio.nubefactToken?.trim();
@@ -375,25 +375,52 @@ export const crearVenta = async (req, res) => {
 };
 
 export const obtenerVentaPorId = async (req, res) => {
-  const { id } = req.params;
+  const ventaId = parseInt(req.params.id);
   const negocioId = req.user.negocioId;
 
+  if (!negocioId) {
+    return res.status(400).json({ message: 'Usuario no asociado a ningún negocio.' });
+  }
+  if (Number.isNaN(ventaId)) {
+    return res.status(400).json({ message: 'Identificador de venta inválido.' });
+  }
+
   try {
-    const venta = await prisma.venta.findUnique({
-      where: { id: parseInt(id) },
+    // findFirst con negocioId: una venta de otra bodega responde 404, igual que una inexistente
+    const venta = await prisma.venta.findFirst({
+      where: { id: ventaId, negocioId },
       include: {
-        detalles: { include: { producto: true } },
-        vendedor: { select: { nombre: true } }
+        detalles: {
+          include: {
+            producto: { select: { nombre: true, codigo: true, unidadMedida: true } }
+          }
+        },
+        vendedor: { select: { nombre: true } },
+        negocio: {
+          select: {
+            nombre: true,
+            razonSocial: true,
+            ruc: true,
+            direccionFiscal: true,
+            ciudad: true,
+            departamento: true,
+            telefono: true,
+            email: true,
+            mensajeTicket: true,
+            impuestoPorcentaje: true,
+            logo: true
+          }
+        }
       }
     });
 
-    if (!venta || venta.negocioId !== negocioId) {
+    if (!venta) {
       return res.status(404).json({ message: 'Venta no encontrada o no pertenece a su bodega.' });
     }
 
     res.json(venta);
   } catch (error) {
-    console.error("Error al obtener venta:", error);
+    console.error('Error al obtener venta:', error);
     res.status(500).json({ message: 'Error interno al cargar el ticket' });
   }
 };
