@@ -10,7 +10,7 @@ import {
   FaArrowDown, FaPlus, FaMinus, FaPrint
 } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
-import ComprobanteDetallado from '../components/ComprobanteDetallado';
+import ComprobanteDetallado from '../components/Comprobantedetallado';
 
 // --- LOGOS REALES EN SVG PARA MÉTODOS DE PAGO ---
 const LogoEfectivo = () => (
