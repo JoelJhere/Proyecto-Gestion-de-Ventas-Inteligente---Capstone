@@ -122,7 +122,7 @@ export default function Historial() {
 
   const calcularFechasFiltro = useCallback((tipo) => {
     const hoy = new Date();
-    const formato = (fecha) => fecha.toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+    const formato = (fecha) => fecha.toISOString().split('T')[0];
     let inicio = '';
     let fin = formato(hoy);
 
