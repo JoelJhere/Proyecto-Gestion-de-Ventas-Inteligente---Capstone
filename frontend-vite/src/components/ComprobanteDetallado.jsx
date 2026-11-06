@@ -33,8 +33,6 @@ export default function ComprobanteDetallado({ venta, negocio }) {
 
   return (
     <div className="bg-white text-slate-900 w-[80mm] max-w-full shrink-0 overflow-hidden rounded-xl border border-slate-200 shadow-[0_12px_40px_rgba(15,23,42,0.10)] print:w-full print:rounded-none print:border-0 print:shadow-none">
-      <div className="h-1.5 bg-verde-pastel print:hidden" />
-
       <div className="px-4 py-5 text-[11px] leading-snug tabular-nums">
         {/* EMISOR */}
         <header className="text-center">

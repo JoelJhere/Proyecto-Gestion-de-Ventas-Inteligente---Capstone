@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaUser, FaFileInvoice, FaTimes, FaEnvelope, FaWhatsapp, FaPrint, FaCheckCircle, FaBarcode } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaUser, FaFileInvoice, FaTimes, FaEnvelope, FaWhatsapp, FaPrint, FaCheckCircle, FaBarcode, FaExternalLinkAlt } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Html5Qrcode } from 'html5-qrcode';
 import { io } from 'socket.io-client';
 import { useBusiness } from '../context/BusinessContext';
+import ComprobanteDetallado from '../components/ComprobanteDetallado';
 
 const socket = io(`https://proyecto-gestion-de-ventas-inteligente.onrender.com`);
 
@@ -285,12 +286,27 @@ export default function Ventas() {
       toast.success('¡Venta registrada con éxito!', { icon: '✅' });
       
       setVentaGenerada({
+        ...res.data.venta,
         id: res.data.venta.id,
         tipo: tipoComprobante,
+        tipoComprobante: res.data.venta.tipoComprobante,
+        numeroComprobante: res.data.venta.numeroComprobante,
+        createdAt: res.data.venta.createdAt || new Date().toISOString(),
         metodoPago: metodoPagoFinal,
+        subtotal: subtotalBase,
+        igv: montoIgv,
         total: totalPagado,
         cliente: tipoComprobante === 'TICKET' ? 'Cliente Varios' : (cliente.nombre || 'Cliente Varios'),
+        clienteNombre: tipoComprobante === 'TICKET' ? 'Cliente Varios' : (cliente.nombre || 'Cliente Varios'),
         documentoCliente: cliente.documento,
+        clienteDocumento: cliente.documento,
+        vendedor: { nombre: usuario.nombre || 'Cajero' },
+        detalles: carrito.map((item) => ({
+          id: item.id,
+          cantidad: item.cantidad,
+          subtotal: item.precioVenta * item.cantidad,
+          producto: { nombre: item.nombre, codigo: item.codigo }
+        })),
         metodoEnvio: tipoComprobante === 'TICKET' ? 'NINGUNO' : metodoEnvio,
         contactoEnvio: tipoComprobante === 'TICKET' ? '' : (metodoEnvio === 'CORREO' ? cliente.correo : cliente.telefono),
         enlacePdf: res.data.enlacePdf,
@@ -841,98 +857,152 @@ export default function Ventas() {
         )}
       </AnimatePresence>
 
-      {/* MODAL DE VENTA EXITOSA */}
+      {/* MODAL DE VENTA EXITOSA CON VISTA PREVIA DEL COMPROBANTE */}
       <AnimatePresence>
         {ventaGenerada && (
-          <div className="fixed inset-0 bg-slate-950/70 z-[80] flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="fixed inset-0 bg-slate-950/75 z-[80] flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
-              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-200 flex flex-col"
+              exit={{ scale: 0.95, opacity: 0 }}
+              className={`bg-white rounded-2xl w-full ${
+                ventaGenerada.tipo === 'BOLETA' || ventaGenerada.tipo === 'FACTURA' ? 'max-w-lg' : 'max-w-sm'
+              } overflow-hidden shadow-2xl border border-slate-200 flex flex-col my-auto max-h-[92vh]`}
             >
-              <div className="bg-white p-6 border-b border-slate-100 flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-xl bg-verde-pastel/40 text-emerald-700 flex items-center justify-center shrink-0">
-                  <FaCheckCircle className="text-2xl" />
+              {/* Cabecera del Modal */}
+              <div className="bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-verde-pastel/40 text-emerald-700 flex items-center justify-center shrink-0">
+                    <FaCheckCircle className="text-xl" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-extrabold text-slate-900">Operación Registrada</h2>
+                    <p className="text-xs sm:text-sm text-slate-600 font-medium">
+                      {ventaGenerada.tipo === 'TICKET'
+                        ? 'Venta Rápida emitida con éxito.'
+                        : ventaGenerada.tipo === 'FIADO'
+                        ? 'Crédito registrado correctamente.'
+                        : `${ventaGenerada.tipo} Electrónica (${ventaGenerada.numeroComprobante})`}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-lg font-extrabold text-slate-900">Operación Registrada</h2>
-                  <p className="text-sm text-slate-600 font-medium">
-                    {ventaGenerada.tipo === 'TICKET' ? 'Venta Rápida' : `${ventaGenerada.tipo} Electrónica`} emitida con éxito.
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setVentaGenerada(null)}
+                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                >
+                  <FaTimes size={18} />
+                </button>
               </div>
 
-              <div className="p-6 bg-slate-50/80 space-y-3 text-sm">
-                <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
-                  <span className="text-slate-600 font-semibold">N° Operación:</span>
-                  <span className="text-slate-900 font-mono font-bold">#000{ventaGenerada.id}</span>
+              {/* Cuerpo: Vista Previa de Boleta/Factura o Resumen Simple */}
+              {ventaGenerada.tipo === 'BOLETA' || ventaGenerada.tipo === 'FACTURA' ? (
+                <div className="p-5 bg-slate-100 overflow-y-auto flex justify-center flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                  <ComprobanteDetallado venta={ventaGenerada} negocio={businessConfig} />
                 </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
-                  <span className="text-slate-600 font-semibold">Cliente:</span>
-                  <span className="text-slate-900 font-bold truncate max-w-[180px]">{ventaGenerada.cliente}</span>
+              ) : (
+                <div className="p-6 bg-slate-50/80 space-y-3 text-sm">
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
+                    <span className="text-slate-600 font-semibold">N° Operación:</span>
+                    <span className="text-slate-900 font-mono font-bold">
+                      {ventaGenerada.numeroComprobante || `#000${ventaGenerada.id}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
+                    <span className="text-slate-600 font-semibold">Cliente:</span>
+                    <span className="text-slate-900 font-bold truncate max-w-[180px]">{ventaGenerada.cliente}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
+                    <span className="text-slate-600 font-semibold">Medio de Pago:</span>
+                    <span className="text-slate-900 font-bold">
+                      {ventaGenerada.metodoPago === 'YAPE_PLIN' ? 'Yape / Plin' : ventaGenerada.metodoPago}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-slate-800 font-extrabold uppercase">Total Cobrado:</span>
+                    <span className="text-emerald-700 font-extrabold text-2xl">S/ {ventaGenerada.total.toFixed(2)}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-slate-200/80">
-                  <span className="text-slate-600 font-semibold">Medio de Pago:</span>
-                  <span className="text-slate-900 font-bold">
-                    {ventaGenerada.metodoPago === 'YAPE_PLIN' ? 'Yape / Plin' : ventaGenerada.metodoPago}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-2">
-                  <span className="text-slate-800 font-extrabold uppercase">Total Cobrado:</span>
-                  <span className="text-emerald-700 font-extrabold text-2xl">S/ {ventaGenerada.total.toFixed(2)}</span>
-                </div>
-              </div>
+              )}
 
-              <div className="p-5 bg-white border-t border-slate-100 flex flex-col gap-2.5">
+              {/* Botones de Acción */}
+              <div className="p-5 bg-white border-t border-slate-100 flex flex-col gap-2.5 shrink-0">
+                {/* 1. Botón de Impresión de nuestro Comprobante Limpio */}
+                <button 
+                  type="button"
+                  onClick={() => {
+                    const width = 420;
+                    const height = 720;
+                    const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
+                    const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+                    window.open(
+                      `/ticket/${ventaGenerada.id}?imprimir=1`,
+                      'Comprobante',
+                      `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
+                    );
+                  }}
+                  className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-2.5 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer shadow-2xs"
+                >
+                  <FaPrint size={15} /> Imprimir {ventaGenerada.tipo === 'TICKET' || ventaGenerada.tipo === 'FIADO' ? 'Ticket' : `${ventaGenerada.tipo} (Formato Limpio)`}
+                </button>
+
+                {/* 2. Botón de WhatsApp enviando nuestro resumen y enlace propio */}
                 {ventaGenerada.metodoEnvio === 'WHATSAPP' && ventaGenerada.tipo !== 'TICKET' && (
                   <button 
+                    type="button"
                     onClick={() => {
                       let saludo = `Hola *${ventaGenerada.cliente}*`;
-                      if (ventaGenerada.tipo === 'FACTURA' && ventaGenerada.documentoCliente) {
-                        if (String(ventaGenerada.documentoCliente).startsWith('20')) {
-                          saludo = `Hola equipo de *${ventaGenerada.cliente}*`;
-                        }
+                      if (ventaGenerada.tipo === 'FACTURA' && String(ventaGenerada.documentoCliente || '').startsWith('20')) {
+                        saludo = `Hola equipo de *${ventaGenerada.cliente}*`;
                       }
 
-                      const textoMensaje = `${saludo},\nGracias por su compra en *${ventaGenerada.nombreNegocio}*.\n\nAquí tiene el enlace directo para descargar su comprobante electrónico:\n${ventaGenerada.enlacePdf}\n\n¡Gracias por su preferencia!`;
+                      const urlComprobantePropio = `${window.location.origin}/ticket/${ventaGenerada.id}`;
+                      const listaItems = (ventaGenerada.detalles || [])
+                        .map(d => `- ${d.cantidad}x ${d.producto?.nombre}: S/ ${Number(d.subtotal).toFixed(2)}`)
+                        .join('\n');
+
+                      const textoMensaje =
+                        `${saludo}, gracias por su compra en *${ventaGenerada.nombreNegocio}*.\n\n` +
+                        `*${ventaGenerada.tipo} ELECTRÓNICA: ${ventaGenerada.numeroComprobante}*\n` +
+                        `${listaItems}\n` +
+                        `*TOTAL PAGADO: S/ ${ventaGenerada.total.toFixed(2)}*\n\n` +
+                        `Visualiza e imprime tu comprobante aquí:\n${urlComprobantePropio}`;
+
                       const numeroLimpio = ventaGenerada.contactoEnvio.replace(/[^0-9]/g, '');
                       const numeroFinal = numeroLimpio.startsWith('51') ? numeroLimpio : `51${numeroLimpio}`;
 
                       window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(textoMensaje)}`, '_blank');
                     }}
-                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer"
+                    className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold py-2.5 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer"
                   >
-                    <FaWhatsapp size={18} /> Enviar Comprobante por WhatsApp
+                    <FaWhatsapp size={17} /> Enviar {ventaGenerada.tipo} por WhatsApp
                   </button>
                 )}
 
+                {/* 3. Aviso de Correo Enviado */}
                 {ventaGenerada.metodoEnvio === 'CORREO' && ventaGenerada.tipo !== 'TICKET' && (
-                  <button 
-                    onClick={() => window.open(ventaGenerada.enlacePdf, '_blank')}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer"
-                  >
-                    <FaEnvelope size={15} /> Abrir PDF / Correo Enviado
-                  </button>
+                  <div className="w-full bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold py-2 px-3 rounded-xl flex justify-center items-center gap-2 text-xs">
+                    <FaEnvelope size={13} className="text-emerald-700 shrink-0" />
+                    <span>Comprobante enviado al correo: <strong>{ventaGenerada.contactoEnvio}</strong></span>
+                  </div>
                 )}
 
-                {ventaGenerada.metodoEnvio === 'NINGUNO' && (
-                  <button 
-                    onClick={() => {
-                      if (ventaGenerada.enlacePdf) {
-                        window.open(ventaGenerada.enlacePdf, '_blank');
-                      } else {
-                        window.open(`/ticket/${ventaGenerada.id}`, '_blank', 'width=400,height=600');
-                      }
-                    }}
-                    className="w-full bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-3 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-sm cursor-pointer"
+                {/* 4. Botón para ver el PDF original de Nubefact (con marca de agua de prueba SUNAT) */}
+                {ventaGenerada.enlacePdf && (
+                  <a
+                    href={ventaGenerada.enlacePdf}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-xl transition-colors flex justify-center items-center gap-2 text-xs sm:text-sm"
                   >
-                    <FaPrint size={15} /> Imprimir {ventaGenerada.tipo === 'TICKET' ? 'Ticket' : ventaGenerada.tipo}
-                  </button>
+                    <FaExternalLinkAlt size={12} /> Ver Comprobante Nubefact (SUNAT)
+                  </a>
                 )}
-                
+
                 <button 
+                  type="button"
                   onClick={() => setVentaGenerada(null)}
-                  className="w-full font-bold py-3 px-4 rounded-xl transition-colors text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                  className="w-full font-bold py-2.5 px-4 rounded-xl transition-colors text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
                 >
                   Nueva Operación
                 </button>

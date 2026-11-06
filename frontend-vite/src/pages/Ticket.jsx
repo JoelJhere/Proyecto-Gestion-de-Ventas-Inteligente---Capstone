@@ -37,12 +37,11 @@ export default function Ticket() {
     cargarTicket();
   }, [id]);
 
-  // Si se abrió con ?imprimir=1 (botón Imprimir del Historial), lanza la impresión sola
   useEffect(() => {
-    if (!venta || !esDetallado || !imprimirAlAbrir) return;
-    const temporizador = setTimeout(() => window.print(), 600);
+    if (!venta || !imprimirAlAbrir) return;
+    const temporizador = setTimeout(() => window.print(), 500);
     return () => clearTimeout(temporizador);
-  }, [venta, esDetallado, imprimirAlAbrir]);
+  }, [venta, imprimirAlAbrir]);
 
   if (error) {
     return (

@@ -313,30 +313,103 @@ export const crearVenta = async (req, res) => {
       return venta;
     });
 
-    // 5. ENVÍO DE COMPROBANTE POR CORREO (API DE BREVO)
-    if (!esFiado && metodoEnvio === 'CORREO' && cliente.correo && linkPdf) {
+    // 5. ENVÍO DE COMPROBANTE POR CORREO (API DE BREVO - FORMATO PROPIO VENDAIA)
+    if (!esFiado && metodoEnvio === 'CORREO' && cliente.correo && tipoDocDB !== 'SIN_COMPROBANTE') {
       try {
-        const remitenteOficial = process.env.EMAIL_USER; 
+        const remitenteOficial = process.env.EMAIL_USER;
+        const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
+        const urlTicketPropio = `${frontendUrl}/ticket/${nuevaVenta.id}`;
+        const tituloDoc = tipoDocDB === 'FACTURA' ? 'FACTURA DE VENTA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA';
+        const etiquetaDocCliente = tipoDocDB === 'FACTURA' ? 'RUC' : 'DNI';
+        const fechaEmision = new Date(nuevaVenta.createdAt).toLocaleString('es-PE', { timeZone: 'America/Lima' });
+
+        const filasProductosHtml = carrito.map(item => {
+          const cant = Number(item.cantidad) || 1;
+          const pUnit = Number(item.precioVenta) || 0;
+          const subItem = cant * pUnit;
+          return `
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px dashed #e2e8f0; font-weight: bold; font-size: 13px;">${cant}</td>
+              <td style="padding: 8px 4px; border-bottom: 1px dashed #e2e8f0; font-size: 13px;">${item.nombre}</td>
+              <td style="padding: 8px 4px; border-bottom: 1px dashed #e2e8f0; text-align: right; font-size: 13px;">S/ ${pUnit.toFixed(2)}</td>
+              <td style="padding: 8px 4px; border-bottom: 1px dashed #e2e8f0; text-align: right; font-weight: bold; font-size: 13px;">S/ ${subItem.toFixed(2)}</td>
+            </tr>
+          `;
+        }).join('');
 
         const htmlTemplate = `
-          <div style="font-family: Arial, sans-serif; max-w: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-            <div style="background-color: #092b1a; padding: 20px; text-align: center; border-bottom: 4px solid #a7f3d0;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">¡Gracias por tu compra!</h1>
-            </div>
-            <div style="padding: 30px; background-color: #ffffff; color: #334155;">
-              <p style="font-size: 16px;">Hola <strong>${cliente.nombre || 'Cliente'}</strong>,</p>
-              <p style="font-size: 16px;">Adjuntamos el enlace para que puedas visualizar y descargar tu comprobante electrónico de manera segura emitido por <strong>${nombreParaFrontend}</strong>.</p>
+          <div style="font-family: Arial, sans-serif; max-width: 420px; margin: 20px auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background-color: #ffffff; color: #0f172a;">
+            <div style="padding: 24px 20px;">
               
-              <div style="background-color: #f8fafc; border-left: 4px solid #d4af37; padding: 15px; margin: 25px 0;">
-                <p style="margin: 0; font-size: 14px; color: #64748b;">Total pagado:</p>
-                <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">S/ ${parseFloat(total).toFixed(2)}</p>
+              <!-- CABECERA EMISOR -->
+              <div style="text-align: center; margin-bottom: 16px;">
+                <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; font-weight: 800;">${configNegocio.nombre || configNegocio.razonSocial}</h2>
+                ${configNegocio.razonSocial ? `<p style="margin: 3px 0 0 0; font-size: 12px; color: #475569; text-transform: uppercase;">${configNegocio.razonSocial}</p>` : ''}
+                ${configNegocio.ruc ? `<p style="margin: 4px 0 0 0; font-size: 13px; font-weight: bold;">RUC ${configNegocio.ruc}</p>` : ''}
+                ${configNegocio.direccionFiscal ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #475569;">${configNegocio.direccionFiscal}</p>` : ''}
+                ${configNegocio.telefono ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #475569;">Tel: ${configNegocio.telefono}</p>` : ''}
               </div>
 
-              <div style="text-align: center; margin-top: 30px;">
-                <a href="${linkPdf}" target="_blank" style="background-color: #a7f3d0; color: #064e3b; padding: 14px 28px; text-decoration: none; font-weight: bold; border-radius: 8px; display: inline-block; font-size: 16px;">
-                  📄 Ver Comprobante PDF
+              <!-- RECUADRO SERIE Y CORRELATIVO -->
+              <div style="border: 2px solid #0f172a; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 16px;">
+                <p style="margin: 0; font-size: 12px; font-weight: 800;">${tituloDoc}</p>
+                <p style="margin: 4px 0 0 0; font-size: 16px; font-weight: 900; font-family: monospace;">${correlativoFinal}</p>
+              </div>
+
+              <!-- DATOS DEL CLIENTE Y OPERACIÓN -->
+              <div style="border-top: 1px dashed #94a3b8; border-bottom: 1px dashed #94a3b8; padding: 10px 0; font-size: 12px; margin-bottom: 14px;">
+                <p style="margin: 3px 0;"><strong>Fecha de emisión:</strong> ${fechaEmision}</p>
+                <p style="margin: 3px 0;"><strong>Cliente:</strong> ${cliente.nombre || 'CLIENTE VARIOS'}</p>
+                ${cliente.documento ? `<p style="margin: 3px 0;"><strong>${etiquetaDocCliente}:</strong> ${cliente.documento}</p>` : ''}
+                <p style="margin: 3px 0;"><strong>Moneda:</strong> Soles (PEN)</p>
+                <p style="margin: 3px 0;"><strong>Medio de pago:</strong> ${metodoPago || 'EFECTIVO'}</p>
+              </div>
+
+              <!-- TABLA DE PRODUCTOS -->
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+                <thead>
+                  <tr style="border-top: 1px solid #0f172a; border-bottom: 1px solid #0f172a; font-size: 11px; text-transform: uppercase;">
+                    <th style="padding: 6px 4px; text-align: left;">Cant.</th>
+                    <th style="padding: 6px 4px; text-align: left;">Descripción</th>
+                    <th style="padding: 6px 4px; text-align: right;">P. Unit</th>
+                    <th style="padding: 6px 4px; text-align: right;">Importe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filasProductosHtml}
+                </tbody>
+              </table>
+
+              <!-- TOTALES -->
+              <div style="border-top: 1px solid #0f172a; padding-top: 10px; font-size: 13px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span>Op. Gravada:</span>
+                  <strong style="float: right;">S/ ${ parseFloat(subtotal).toFixed(2) }</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span>IGV (${configNegocio.impuestoPorcentaje || 18}%):</span>
+                  <strong style="float: right;">S/ ${ parseFloat(igv).toFixed(2) }</strong>
+                </div>
+                <div style="border-top: 1px dashed #94a3b8; padding-top: 8px; font-size: 16px; font-weight: 900;">
+                  <span>TOTAL A PAGAR:</span>
+                  <span style="float: right; color: #065f46;">S/ ${ parseFloat(total).toFixed(2) }</span>
+                </div>
+              </div>
+
+              <!-- BOTÓN A COMPROBANTE WEB -->
+              <div style="text-align: center; margin-top: 24px;">
+                <a href="${urlTicketPropio}" target="_blank" style="background-color: #a7f3d0; color: #064e3b; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 8px; display: inline-block; font-size: 14px;">
+                  Ver e Imprimir Comprobante
                 </a>
               </div>
+
+              <!-- PIE DE PÁGINA VENDAIA -->
+              <div style="text-align: center; margin-top: 20px; padding-top: 12px; border-top: 1px dashed #cbd5e1; font-size: 11px; color: #64748b;">
+                <p style="margin: 0; font-weight: bold; color: #1e293b;">${configNegocio.mensajeTicket || '¡Gracias por su preferencia!'}</p>
+                <p style="margin: 6px 0 0 0;">Comprobante generado por <strong style="color: #065f46;">VendaIA</strong></p>
+                <p style="margin: 2px 0 0 0;">Sistema de gestión para bodegas y minimarkets</p>
+              </div>
+
             </div>
           </div>
         `;
@@ -344,7 +417,7 @@ export const crearVenta = async (req, res) => {
         const payloadBrevo = {
           sender: { name: nombreParaFrontend, email: remitenteOficial },
           to: [{ email: cliente.correo, name: cliente.nombre || 'Cliente' }],
-          subject: `Tu comprobante electrónico de ${nombreParaFrontend} ya está listo`,
+          subject: `${tipoDocDB} ELECTRÓNICA ${correlativoFinal} - ${nombreParaFrontend}`,
           htmlContent: htmlTemplate
         };
 
