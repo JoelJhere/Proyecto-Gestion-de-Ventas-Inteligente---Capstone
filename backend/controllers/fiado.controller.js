@@ -188,7 +188,7 @@ export const obtenerClientesFiado = async (req, res) => {
   }
 };
 
-// 6. Registrar un vecino manualmente desde el módulo Control de Fiados
+// 6. Registrar un vecino manualmente (Validando que NO se repita ni el nombre ni el celular)
 export const crearClienteFiado = async (req, res) => {
   const negocioId = req.user.negocioId;
   const { nombre, telefono } = req.body;
@@ -198,15 +198,26 @@ export const crearClienteFiado = async (req, res) => {
   }
 
   try {
-    const existente = await prisma.cliente.findFirst({
+    const nombreDuplicado = await prisma.cliente.findFirst({
       where: {
         negocioId: negocioId,
         nombre: { equals: nombre.trim(), mode: 'insensitive' }
       }
     });
 
-    if (existente) {
-      return res.status(400).json({ message: 'Ya existe un vecino registrado con ese nombre.' });
+    if (nombreDuplicado) {
+      return res.status(400).json({ message: `Ya existe un vecino registrado con el nombre "${nombreDuplicado.nombre}".` });
+    }
+
+    const telefonoDuplicado = await prisma.cliente.findFirst({
+      where: {
+        negocioId: negocioId,
+        telefono: telefono.trim()
+      }
+    });
+
+    if (telefonoDuplicado) {
+      return res.status(400).json({ message: `El número ${telefono.trim()} ya le pertenece al vecino "${telefonoDuplicado.nombre}".` });
     }
 
     const nuevoCliente = await prisma.cliente.create({
@@ -224,23 +235,50 @@ export const crearClienteFiado = async (req, res) => {
   }
 };
 
-// 7. Actualizar nombre o celular de un vecino
+// 7. Actualizar nombre o celular (Validando que no choque con otro vecino existente)
 export const actualizarClienteFiado = async (req, res) => {
   const { id } = req.params;
   const negocioId = req.user.negocioId;
   const { nombre, telefono } = req.body;
+  const clienteId = parseInt(id);
 
   try {
     const clienteExistente = await prisma.cliente.findFirst({
-      where: { id: parseInt(id), negocioId: negocioId }
+      where: { id: clienteId, negocioId: negocioId }
     });
 
     if (!clienteExistente) {
       return res.status(404).json({ message: 'Vecino no encontrado en tu bodega.' });
     }
 
+    if (nombre?.trim()) {
+      const otroConMismoNombre = await prisma.cliente.findFirst({
+        where: {
+          negocioId: negocioId,
+          id: { not: clienteId },
+          nombre: { equals: nombre.trim(), mode: 'insensitive' }
+        }
+      });
+      if (otroConMismoNombre) {
+        return res.status(400).json({ message: `Ya existe otro vecino llamado "${otroConMismoNombre.nombre}".` });
+      }
+    }
+
+    if (telefono?.trim()) {
+      const otroConMismoTelefono = await prisma.cliente.findFirst({
+        where: {
+          negocioId: negocioId,
+          id: { not: clienteId },
+          telefono: telefono.trim()
+        }
+      });
+      if (otroConMismoTelefono) {
+        return res.status(400).json({ message: `El número ${telefono.trim()} ya está registrado con "${otroConMismoTelefono.nombre}".` });
+      }
+    }
+
     const actualizado = await prisma.cliente.update({
-      where: { id: parseInt(id) },
+      where: { id: clienteId },
       data: {
         nombre: nombre?.trim() || clienteExistente.nombre,
         telefono: telefono?.trim() || clienteExistente.telefono
@@ -251,5 +289,42 @@ export const actualizarClienteFiado = async (req, res) => {
   } catch (error) {
     console.error('Error al actualizar vecino:', error);
     res.status(500).json({ message: 'Error al actualizar los datos del vecino' });
+  }
+};
+
+// 8. Eliminar un vecino del directorio (Solo si NO tiene deudas pendientes)
+export const eliminarClienteFiado = async (req, res) => {
+  const { id } = req.params;
+  const negocioId = req.user.negocioId;
+  const clienteId = parseInt(id);
+
+  try {
+    const cliente = await prisma.cliente.findFirst({
+      where: { id: clienteId, negocioId: negocioId },
+      include: {
+        _count: {
+          select: { fiados: { where: { estado: 'PENDIENTE' } } }
+        }
+      }
+    });
+
+    if (!cliente) {
+      return res.status(404).json({ message: 'Vecino no encontrado en tu bodega.' });
+    }
+
+    if (cliente._count.fiados > 0) {
+      return res.status(400).json({ 
+        message: `No puedes eliminar a "${cliente.nombre}" porque tiene una deuda pendiente de cobro.` 
+      });
+    }
+
+    await prisma.cliente.delete({
+      where: { id: clienteId }
+    });
+
+    res.status(200).json({ message: 'Vecino eliminado del directorio correctamente.' });
+  } catch (error) {
+    console.error('Error al eliminar vecino:', error);
+    res.status(500).json({ message: 'Error al eliminar el vecino del directorio' });
   }
 };

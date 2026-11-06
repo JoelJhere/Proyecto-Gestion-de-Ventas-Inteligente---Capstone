@@ -177,7 +177,7 @@ export const crearVenta = async (req, res) => {
         const nombreLimpio = cliente.nombre.trim();
         const telefonoLimpio = cliente.telefono.trim();
 
-        // 1. Buscamos al vecino por ID (si fue seleccionado de la lista) o por su nombre
+        // 1. Buscamos al vecino por ID o por su nombre exacto
         let clienteDB = null;
         if (cliente.id) {
           clienteDB = await tx.cliente.findFirst({
@@ -193,8 +193,21 @@ export const crearVenta = async (req, res) => {
             }
           });
         }
+
+        // 2. Validamos que el celular no le pertenezca a OTRO vecino distinto
+        const celularDeOtroVecino = await tx.cliente.findFirst({
+          where: {
+            negocioId: negocioId,
+            telefono: telefonoLimpio,
+            ...(clienteDB ? { id: { not: clienteDB.id } } : {})
+          }
+        });
+
+        if (celularDeOtroVecino) {
+          throw new Error(`El número ${telefonoLimpio} ya está registrado con otro vecino (${celularDeOtroVecino.nombre}).`);
+        }
         
-        // 2. Si no existe, lo creamos; si ya existe y cambió de número, actualizamos su teléfono
+        // 3. Si es nuevo lo creamos; si ya existe y cambió de número, lo actualizamos
         if (!clienteDB) {
           clienteDB = await tx.cliente.create({
             data: { 
