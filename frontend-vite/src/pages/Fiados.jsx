@@ -141,23 +141,35 @@ export default function Fiados() {
     }
   };
 
-  // Función MEJORADA: Envía el WhatsApp dinámico y actualiza la BD
+  // Envía el recordatorio por WhatsApp con el desglose de productos y actualiza la BD
   const handleWhatsApp = async (fiado) => {
     const numeroLimpio = fiado.cliente.telefono.replace(/[^0-9]/g, '');
     const numeroFinal = numeroLimpio.startsWith('51') ? numeroLimpio : `51${numeroLimpio}`;
     const nombreLocal = businessConfig?.nombre || 'la bodega';
-    
-    const mensaje = `Hola ${fiado.cliente.nombre},\nTe saludamos de *${nombreLocal}*.\n\nTe escribimos para recordarte que tienes una cuenta pendiente por S/ ${fiado.monto.toFixed(2)}.\n\nPor favor, acércate para regularizarlo. Gracias por tu preferencia.`;
-    
+    const fechaRegistro = new Date(fiado.createdAt).toLocaleDateString('es-PE');
+
+    // Construimos la lista detallada de productos llevados en ese fiado
+    const listaProductos = (fiado.venta?.detalles || [])
+      .map(det => `- ${det.cantidad}x ${det.producto?.nombre || 'Producto'}: S/ ${Number(det.subtotal).toFixed(2)}`)
+      .join('\n');
+
+    const mensaje =
+      `Hola *${fiado.cliente.nombre}*, te saludamos de *${nombreLocal}*.\n\n` +
+      `Te escribimos para recordarte que tienes una cuenta pendiente del día *${fechaRegistro}*:\n\n` +
+      `*DETALLE DE PRODUCTOS:*\n` +
+      `${listaProductos}\n\n` +
+      `*TOTAL A PAGAR: S/ ${Number(fiado.monto).toFixed(2)}*\n\n` +
+      `Por favor, acércate al local para regularizarlo. ¡Gracias por tu preferencia!`;
+
     // 1. Abrimos WhatsApp inmediatamente para evitar bloqueos de pop-up
     window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
 
     // 2. Avisamos al backend que se envió, para que sume 1 día y cuente el aviso
     try {
       await axios.put(`/fiados/avisar/${fiado.id}`);
-      
-      toast.success('Aviso registrado. Se postergó la alerta para mañana.', { icon: '📅' });
-      
+
+      toast.success('Aviso registrado. Se postergó la alerta para mañana.');
+
       // 3. Actualizamos la pantalla al instante (sin recargar)
       setFiados(prev => prev.map(f => {
         if (f.id === fiado.id) {
