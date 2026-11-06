@@ -54,21 +54,73 @@ const SelectorProveedor = ({ proveedores, valorActual, onChange }) => {
   );
 };
 
+// Normalizador idéntico al del backend para detectar duplicados en tiempo real ("gaseosa de 150ml" === "gaseosa 150ml")
+const normalizarTextoProducto = (texto = '') => {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(de|del|con|la|el|los|las|en|para|por)\b/g, ' ')
+    .replace(/(\d+)\s+(ml|l|lt|lts|gr|g|kg|un|und|oz)\b/g, '$1$2')
+    .replace(/[^a-z0-9.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+// Sub-componente para filtrar y autocompletar categorías guardadas (locales y globales)
+const SelectorCategoria = ({ categorias, valorActual, onChange }) => {
+  const [abierto, setAbierto] = useState(false);
+  const texto = valorActual || '';
+  const filtradas = categorias.filter(c => c.toLowerCase().includes(texto.toLowerCase()));
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={texto}
+        onFocus={() => setAbierto(true)}
+        onBlur={() => setTimeout(() => setAbierto(false), 200)}
+        onChange={(e) => { onChange(e.target.value); setAbierto(true); }}
+        placeholder="Ej: Bebidas, Abarrotes, Lácteos..."
+        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+      />
+      {abierto && filtradas.length > 0 && (
+        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.12)] max-h-44 overflow-y-auto divide-y divide-slate-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+          {filtradas.map((cat, idx) => (
+            <div
+              key={idx}
+              onMouseDown={() => { onChange(cat); setAbierto(false); }}
+              className="px-3.5 py-2 hover:bg-verde-pastel/25 hover:text-emerald-950 cursor-pointer text-slate-800 text-sm font-semibold transition-colors flex items-center justify-between"
+            >
+              <span>{cat}</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Categoría</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Productos() {
   const [productos, setProductos] = useState([]);
   const [proveedores, setProveedores] = useState([]);
+  const [categoriasGlobales, setCategoriasGlobales] = useState([]);
+  const [productosGlobales, setProductosGlobales] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   
   // Estados de carga (Skeleton)
   const [isLoading, setIsLoading] = useState(true);
   
-  // Estados de Modales
+  // Estados de Modales y Autocompletado
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null); 
   const [stockProduct, setStockProduct] = useState(null);     
   const [barcodeView, setBarcodeView] = useState(null);
   const [scannerTarget, setScannerTarget] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [showSugerenciasNombre, setShowSugerenciasNombre] = useState(false);
+  const [origenAutocompletado, setOrigenAutocompletado] = useState(null); // 'LOCAL' | 'GLOBAL' | null
 
   const [formData, setFormData] = useState({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
   const [stockData, setStockData] = useState({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
@@ -79,12 +131,15 @@ export default function Productos() {
   const cargarDatos = async () => {
     setIsLoading(true); 
     try {
-      const [resProductos, resProveedores] = await Promise.all([
+      const [resProductos, resProveedores, resGlobal] = await Promise.all([
         axios.get('/productos'),
-        axios.get('/proveedores')
+        axios.get('/proveedores'),
+        axios.get('/productos/catalogo-global')
       ]);
       setProductos(resProductos.data);
       setProveedores(resProveedores.data);
+      setCategoriasGlobales(resGlobal.data.categoriasGlobales || []);
+      setProductosGlobales(resGlobal.data.productosGlobales || []);
     } catch (error) {
       console.error("Error al cargar datos:", error);
       toast.error('Ocurrió un problema al cargar los datos');
@@ -95,6 +150,91 @@ export default function Productos() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargarDatos(); }, []);
+
+  // Verifica un código de barras (al escanear o escribir) respetando si el usuario ya llenó datos antes
+  const procesarCodigoEnFormulario = async (codigoLimpio, desdeEscaner = false) => {
+    if (!codigoLimpio) {
+      setOrigenAutocompletado(null);
+      return;
+    }
+
+    // 1. Verificar si ya existe en el inventario de ESTA bodega
+    const existenteLocal = productos.find(p => p.codigo.toLowerCase() === codigoLimpio.toLowerCase());
+    if (existenteLocal) {
+      setOrigenAutocompletado('LOCAL');
+      setFormData(prev => ({
+        ...prev,
+        codigo: codigoLimpio,
+        nombre: prev.nombre.trim() !== '' ? prev.nombre : existenteLocal.nombre,
+        categoria: prev.categoria.trim() !== '' ? prev.categoria : (existenteLocal.categoria || ''),
+        precioCompra: prev.precioCompra !== '' ? prev.precioCompra : (existenteLocal.precioCompra || ''),
+        precioVenta: prev.precioVenta !== '' ? prev.precioVenta : (existenteLocal.precioVenta || ''),
+        proveedorId: prev.proveedorId !== '' ? prev.proveedorId : (existenteLocal.proveedorId || '')
+      }));
+      if (desdeEscaner) toast.error('Este código ya está registrado en tu inventario.');
+      return;
+    }
+
+    // 2. Si el dueño YA escribió primero el nombre/datos y al final escanea el código, NO borramos sus datos
+    if (formData.nombre.trim() !== '') {
+      setOrigenAutocompletado(null);
+      setFormData(prev => ({ ...prev, codigo: codigoLimpio }));
+      if (desdeEscaner) toast.success('Código asignado. Tus datos ingresados se mantuvieron intactos.');
+      return;
+    }
+
+    // 3. Buscar en el Catálogo Global (Productos escaneados en otras bodegas)
+    const existenteGlobal = productosGlobales.find(p => p.codigo.toLowerCase() === codigoLimpio.toLowerCase());
+    if (existenteGlobal) {
+      setOrigenAutocompletado('GLOBAL');
+      setFormData(prev => ({
+        ...prev,
+        codigo: codigoLimpio,
+        nombre: existenteGlobal.nombre,
+        categoria: existenteGlobal.categoria || prev.categoria,
+        precioCompra: existenteGlobal.precioCompra || prev.precioCompra,
+        precioVenta: existenteGlobal.precioVenta || prev.precioVenta
+      }));
+      if (desdeEscaner) toast.success('Producto autocompletado desde el catálogo global');
+      return;
+    }
+
+    setOrigenAutocompletado(null);
+
+    // 4. Si se escaneó con cámara y no está en BD, consultar APIs internacionales
+    if (desdeEscaner) {
+      toast.success('Código escaneado. Buscando información...');
+      try {
+        const resFood = await fetch(`https://world.openfoodfacts.org/api/v0/product/${codigoLimpio}.json`).then(r => r.json());
+        if (resFood.status === 1 && resFood.product.product_name) {
+          setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resFood.product.product_name }));
+          return toast.success('Producto encontrado en la base de datos');
+        }
+
+        const resBeauty = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${codigoLimpio}.json`).then(r => r.json());
+        if (resBeauty.status === 1 && resBeauty.product.product_name) {
+          setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resBeauty.product.product_name }));
+          return toast.success('Producto encontrado en la base de datos');
+        }
+
+        const resProducts = await fetch(`https://world.openproductsfacts.org/api/v0/product/${codigoLimpio}.json`).then(r => r.json());
+        if (resProducts.status === 1 && resProducts.product.product_name) {
+          setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resProducts.product.product_name }));
+          return toast.success('Producto encontrado en la base de datos');
+        }
+
+        const resUpc = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${codigoLimpio}`).then(r => r.json());
+        if (resUpc.items && resUpc.items.length > 0) {
+          setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resUpc.items[0].title }));
+          return toast.success('Producto encontrado en la base de datos');
+        }
+        
+        toast.error('Producto nuevo. Completa sus datos manualmente.');
+      } catch (error) {
+        console.log("Error consultando APIs externas:", error);
+      }
+    }
+  };
 
   useEffect(() => {
     let html5QrCode;
@@ -108,7 +248,6 @@ export default function Productos() {
             { facingMode: "environment" }, 
             { fps: 10, qrbox: { width: 250, height: 100 } },
             async (decodedText) => {
-              
               if (html5QrCode.isScanning) {
                 await html5QrCode.stop();
                 html5QrCode.clear();
@@ -117,38 +256,7 @@ export default function Productos() {
 
               if (scannerTarget === 'crear') {
                 setFormData(prev => ({ ...prev, codigo: decodedText }));
-                toast.success('Código escaneado. Buscando información...');
-
-                try {
-                  const resFood = await fetch(`https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`).then(r => r.json());
-                  if (resFood.status === 1 && resFood.product.product_name) {
-                    setFormData(prev => ({ ...prev, nombre: resFood.product.product_name, codigo: decodedText }));
-                    return toast.success('Producto encontrado en la base de datos');
-                  }
-
-                  const resBeauty = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${decodedText}.json`).then(r => r.json());
-                  if (resBeauty.status === 1 && resBeauty.product.product_name) {
-                    setFormData(prev => ({ ...prev, nombre: resBeauty.product.product_name, codigo: decodedText }));
-                    return toast.success('Producto encontrado en la base de datos');
-                  }
-
-                  const resProducts = await fetch(`https://world.openproductsfacts.org/api/v0/product/${decodedText}.json`).then(r => r.json());
-                  if (resProducts.status === 1 && resProducts.product.product_name) {
-                    setFormData(prev => ({ ...prev, nombre: resProducts.product.product_name, codigo: decodedText }));
-                    return toast.success('Producto encontrado en la base de datos');
-                  }
-
-                  const resUpc = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${decodedText}`).then(r => r.json());
-                  if (resUpc.items && resUpc.items.length > 0) {
-                    setFormData(prev => ({ ...prev, nombre: resUpc.items[0].title, codigo: decodedText }));
-                    return toast.success('Producto encontrado en la base de datos');
-                  }
-                  
-                  toast.error('Producto no encontrado. Requiere ingreso manual.');
-                } catch (error) {
-                  console.log("Error consultando APIs externas:", error);
-                }
-
+                await procesarCodigoEnFormulario(decodedText, true);
               } else if (scannerTarget === 'editar') {
                 setEditingProduct(prev => ({ ...prev, codigo: decodedText }));
                 toast.success('Código escaneado exitosamente');
@@ -173,6 +281,7 @@ export default function Productos() {
         html5QrCode.stop().then(() => html5QrCode.clear()).catch(console.error);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scannerTarget]);
 
   const handleImprimirEtiqueta = () => {
@@ -266,6 +375,30 @@ export default function Productos() {
   const productosActivos = productos.filter(p => p.estado);
   const stockCriticoCount = productosActivos.filter(p => p.stock <= (p.stockMinimo || 5)).length;
   const valorizadoTotal = productosActivos.reduce((acc, p) => acc + (p.stock * p.precioVenta), 0);
+
+  // 1. Verificar si el código escrito ya existe en el inventario local
+  const productoCodigoEnInventario = formData.codigo.trim() !== ''
+    ? productos.find(p => p.codigo.toLowerCase() === formData.codigo.trim().toLowerCase())
+    : null;
+
+  // 2. Verificar si el nombre escrito es un duplicado exacto normalizado ("gaseosa de 150ml" === "gaseosa 150ml")
+  const nombreNormalizadoActual = normalizarTextoProducto(formData.nombre);
+  const productoDuplicadoPorNombre = nombreNormalizadoActual.length >= 3
+    ? productos.find(p => normalizarTextoProducto(p.nombre) === nombreNormalizadoActual)
+    : null;
+
+  // 3. Filtrar productos similares en el inventario para usarlos como plantilla rápida (ej. otro tamaño de gaseosa)
+  const productosSimilaresPlantilla = formData.nombre.trim().length >= 2
+    ? productos.filter(p => p.nombre.toLowerCase().includes(formData.nombre.trim().toLowerCase()))
+    : [];
+
+  // 4. Lista unificada de categorías (globales + locales de esta bodega)
+  const listaCategoriasUnificadas = Array.from(
+    new Set([
+      ...categoriasGlobales,
+      ...productos.map(p => p.categoria).filter(Boolean)
+    ])
+  ).sort();
 
   return (
     <div className="flex flex-col gap-6 text-slate-800 pb-20 lg:pb-4 font-sans antialiased">
@@ -560,19 +693,41 @@ export default function Productos() {
                     <p className="text-xs text-slate-500 font-medium">Completa los datos para añadirlo al catálogo de tu bodega.</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors"><FaTimes size={18}/></button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    setOrigenAutocompletado(null);
+                  }} 
+                  className="text-slate-400 hover:text-slate-700 p-1 transition-colors"
+                >
+                  <FaTimes size={18}/>
+                </button>
               </div>
               
               <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
                 <div className="overflow-y-auto p-6 flex-1 bg-white space-y-5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                   
+                  {/* SECCIÓN DE CÓDIGO DE BARRAS CON DETECTOR DE INVENTARIO Y CATÁLOGO GLOBAL */}
                   <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Código de Barras</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Código de Barras</label>
+                      {origenAutocompletado === 'GLOBAL' && !productoCodigoEnInventario && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-verde-pastel/50 px-2.5 py-0.5 rounded-md">
+                          <FaCheck size={10} /> Autocompletado del catálogo global
+                        </span>
+                      )}
+                    </div>
+
                     <div className="flex flex-col sm:flex-row gap-2.5">
                       <input 
                         type="text" 
                         value={formData.codigo} 
-                        onChange={e => setFormData({...formData, codigo: e.target.value})} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFormData({ ...formData, codigo: val });
+                          procesarCodigoEnFormulario(val.trim(), false);
+                        }} 
                         className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono text-sm font-semibold" 
                         placeholder="Dejar vacío para generar código automático"
                       />
@@ -584,18 +739,136 @@ export default function Productos() {
                         <FaCamera /> Escanear
                       </button>
                     </div>
-                    <p className="text-xs font-medium text-slate-500 mt-1.5">Si el producto no trae código impreso, déjalo en blanco y el sistema le creará uno.</p>
+
+                    {productoCodigoEnInventario ? (
+                      <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-start gap-2 text-xs text-amber-900 font-semibold">
+                          <FaExclamationTriangle className="text-amber-600 mt-0.5 shrink-0" size={13} />
+                          <span>
+                            Este código ya está en tu inventario como <strong>{productoCodigoEnInventario.nombre}</strong> (Stock: {productoCodigoEnInventario.stock} un.).
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCreateModalOpen(false);
+                            setStockProduct(productoCodigoEnInventario);
+                          }}
+                          className="text-xs font-extrabold text-emerald-900 bg-verde-pastel hover:bg-[#86e6bb] px-3 py-1.5 rounded-lg shrink-0 transition-colors cursor-pointer"
+                        >
+                          Sumar Stock
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs font-medium text-slate-500 mt-1.5">
+                        Si el producto no trae código impreso, déjalo en blanco y el sistema le creará uno propio para tu bodega.
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nombre / Descripción del Producto *</label>
-                      <input type="text" required value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
+                    
+                    {/* CAMPO DE NOMBRE CON PLANTILLA PARA OTROS TAMAÑOS Y DETECTOR ANTI-DUPLICADOS */}
+                    <div className="col-span-1 md:col-span-2 relative">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Nombre / Descripción del Producto *
+                        </label>
+                        {productosSimilaresPlantilla.length > 0 && !productoDuplicadoPorNombre && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-verde-pastel/45 px-2.5 py-0.5 rounded-md">
+                            <FaCheck size={9} /> {productosSimilaresPlantilla.length} similar(es) en tu inventario
+                          </span>
+                        )}
+                      </div>
+
+                      <input 
+                        type="text" 
+                        required 
+                        value={formData.nombre} 
+                        onFocus={() => setShowSugerenciasNombre(true)}
+                        onBlur={() => setTimeout(() => setShowSugerenciasNombre(false), 200)}
+                        onChange={e => {
+                          setFormData({ ...formData, nombre: e.target.value });
+                          setShowSugerenciasNombre(true);
+                        }} 
+                        placeholder="Ej: Inka Cola 600 ml, Leche Gloria 180 ml..."
+                        className={`w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border rounded-xl outline-none text-slate-900 text-sm transition-all font-medium ${
+                          productoDuplicadoPorNombre 
+                            ? 'border-amber-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-200/50' 
+                            : 'border-slate-200 focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30'
+                        }`}
+                      />
+
+                      {/* Alerta en tiempo real si escribe un nombre equivalente ("gaseosa de 150ml" vs "gaseosa 150ml") */}
+                      {productoDuplicadoPorNombre && (
+                        <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-900 font-semibold">
+                          <span className="flex items-center gap-2">
+                            <FaExclamationTriangle className="text-amber-600 shrink-0" size={13} />
+                            Ya tienes registrado este producto como &quot;<strong>{productoDuplicadoPorNombre.nombre}</strong>&quot; (Stock: {productoDuplicadoPorNombre.stock} un.). Si es otra presentación, cámbiale el tamaño o medida.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Lista desplegable para usar un producto existente como plantilla (ej. cambiar solo el tamaño) */}
+                      <AnimatePresence>
+                        {showSugerenciasNombre && productosSimilaresPlantilla.length > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 4 }}
+                            className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.14)] overflow-hidden"
+                          >
+                            <div className="px-3.5 py-2 bg-verde-pastel/35 border-b border-emerald-200/70 flex items-center justify-between">
+                              <span className="text-[11px] font-extrabold text-emerald-950 uppercase tracking-wider">
+                                Productos que ya están en tu inventario
+                              </span>
+                              <span className="text-[11px] font-semibold text-emerald-800">
+                                Clic para autocompletar base y cambiar tamaño
+                              </span>
+                            </div>
+                            <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                              {productosSimilaresPlantilla.map(prod => (
+                                <div
+                                  key={prod.id}
+                                  onMouseDown={() => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      // Conservamos intacto prev.codigo por si ya lo escaneó
+                                      nombre: prod.nombre,
+                                      categoria: prod.categoria || prev.categoria,
+                                      proveedorId: prod.proveedorId || prev.proveedorId
+                                    }));
+                                    setShowSugerenciasNombre(false);
+                                    toast.success('Base autocompletada. Ahora solo ajusta el tamaño o medida en el nombre.');
+                                  }}
+                                  className="px-3.5 py-2.5 hover:bg-verde-pastel/20 cursor-pointer flex items-center justify-between transition-colors"
+                                >
+                                  <div>
+                                    <p className="text-sm font-bold text-slate-900">{prod.nombre}</p>
+                                    <p className="text-xs text-slate-500">
+                                      {prod.categoria || 'Sin categoría'} • Proveedor: {prod.proveedor?.nombre || 'Sin asignar'}
+                                    </p>
+                                  </div>
+                                  <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg shrink-0">
+                                    Usar plantilla
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
+
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Categoría</label>
-                      <input type="text" value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} placeholder="Ej: Bebidas, Abarrotes, Lácteos..." className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
+                      <SelectorCategoria
+                        categorias={listaCategoriasUnificadas}
+                        valorActual={formData.categoria}
+                        onChange={(cat) => setFormData({ ...formData, categoria: cat })}
+                      />
                     </div>
+
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Proveedor Asociado</label>
                       <SelectorProveedor 
@@ -604,14 +877,17 @@ export default function Productos() {
                         onChange={(id) => setFormData({...formData, proveedorId: id})} 
                       />
                     </div>
+
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Stock Inicial</label>
                       <input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
                     </div>
+
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Costo de Compra Unit. (S/)</label>
                       <input type="number" step="0.10" value={formData.precioCompra} onChange={e => setFormData({...formData, precioCompra: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium" placeholder="0.00"/>
                     </div>
+
                     <div className="col-span-1 md:col-span-2">
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Precio de Venta al Público (S/) *</label>
                       <input type="number" step="0.10" required value={formData.precioVenta} onChange={e => setFormData({...formData, precioVenta: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-700 font-extrabold text-lg transition-all" placeholder="0.00"/>
@@ -620,8 +896,23 @@ export default function Productos() {
                 </div>
 
                 <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex flex-col sm:flex-row justify-end gap-2.5">
-                  <button type="button" onClick={() => setIsCreateModalOpen(false)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none cursor-pointer">Agregar</button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setIsCreateModalOpen(false);
+                      setOrigenAutocompletado(null);
+                    }} 
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={Boolean(productoCodigoEnInventario)}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Agregar
+                  </button>
                 </div>
               </form>
             </motion.div>
@@ -645,14 +936,51 @@ export default function Productos() {
                     <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
                       Editar Producto <span className="text-emerald-800 font-mono text-xs bg-verde-pastel/40 px-2.5 py-0.5 rounded-md">{editingProduct.codigo}</span>
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium">Actualiza los precios, categoría o proveedor del producto.</p>
+                    <p className="text-xs text-slate-500 font-medium">Actualiza el código de barras, precios, categoría o proveedor del producto.</p>
                   </div>
                 </div>
                 <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors"><FaTimes size={18}/></button>
               </div>
 
               <form onSubmit={handleUpdate} className="flex flex-col flex-1 min-h-0">
-                <div className="overflow-y-auto p-6 flex-1 bg-white [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                <div className="overflow-y-auto p-6 flex-1 bg-white space-y-5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+
+                  {/* SECCIÓN PARA ESCANEAR O REEMPLAZAR EL CÓDIGO DE BARRAS */}
+                  <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Código de Barras
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2.5">
+                      <input 
+                        type="text" 
+                        value={editingProduct.codigo || ''} 
+                        onChange={e => setEditingProduct({...editingProduct, codigo: e.target.value})} 
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono text-sm font-semibold" 
+                        placeholder="Código del producto"
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setScannerTarget('editar')} 
+                        className="w-full sm:w-auto px-4 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl transition-colors font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                      >
+                        <FaCamera /> Escanear Nuevo
+                      </button>
+                    </div>
+
+                    {productos.some(
+                      p => p.id !== editingProduct.id && p.codigo.toLowerCase() === (editingProduct.codigo || '').trim().toLowerCase()
+                    ) ? (
+                      <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-900 font-semibold">
+                        <FaExclamationTriangle className="text-amber-600 shrink-0" size={13} />
+                        <span>Este código ya pertenece a otro producto registrado en tu inventario.</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs font-medium text-slate-500 mt-1.5">
+                        Si el producto tenía un código interno (AJ-) y ahora cuenta con código de barras en su empaque, puedes escanearlo aquí.
+                      </p>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="col-span-1 md:col-span-2">
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nombre del Producto *</label>
@@ -660,7 +988,11 @@ export default function Productos() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Categoría</label>
-                      <input type="text" value={editingProduct.categoria || ''} onChange={e => setEditingProduct({...editingProduct, categoria: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
+                      <SelectorCategoria
+                        categorias={listaCategoriasUnificadas}
+                        valorActual={editingProduct.categoria || ''}
+                        onChange={(cat) => setEditingProduct({...editingProduct, categoria: cat})}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Proveedor</label>
@@ -687,7 +1019,15 @@ export default function Productos() {
                 
                 <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex flex-col sm:flex-row justify-end gap-2.5">
                   <button type="button" onClick={() => setEditingProduct(null)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none cursor-pointer">Guardar</button>
+                  <button 
+                    type="submit" 
+                    disabled={productos.some(
+                      p => p.id !== editingProduct.id && p.codigo.toLowerCase() === (editingProduct.codigo || '').trim().toLowerCase()
+                    )}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Guardar
+                  </button>
                 </div>
               </form>
             </motion.div>
