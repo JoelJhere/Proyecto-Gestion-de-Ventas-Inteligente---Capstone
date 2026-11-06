@@ -1,6 +1,7 @@
 // Utilidades compartidas por Ticket.jsx y el modal de Vista Previa de Historial.jsx
 export const NOMBRE_SISTEMA = 'VendaIA';
 
+// Formatea cualquier valor (number, string o Decimal serializado) a 2 decimales sin romper si llega null/undefined.
 export const dinero = (valor) => (Number(valor) || 0).toFixed(2);
 
 export const etiquetaMetodoPago = (metodo) => {
@@ -64,7 +65,7 @@ export const generarTextoQR = (venta, rucEmisor, igv) => {
   ].join('|') + '|';
 };
 
-// Importe en letras 
+// ---------- Importe en letras ----------
 const UNIDADES = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
 const ESPECIALES = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
 const VEINTI = ['VEINTE', 'VEINTIUNO', 'VEINTIDÓS', 'VEINTITRÉS', 'VEINTICUATRO', 'VEINTICINCO', 'VEINTISÉIS', 'VEINTISIETE', 'VEINTIOCHO', 'VEINTINUEVE'];
@@ -94,6 +95,7 @@ const menorDeMil = (n) => {
   return partes.join(' ');
 };
 
+// "UNO" se apocopa cuando precede a MIL o MILLONES (veintiún mil, treinta y un mil).
 const apocopar = (texto) => texto.replace(/VEINTIUNO$/, 'VEINTIÚN').replace(/UNO$/, 'UN');
 
 const enteroALetras = (n) => {
@@ -111,6 +113,7 @@ const enteroALetras = (n) => {
   return partes.join(' ');
 };
 
+// Ej: 15 -> "QUINCE CON 00/100 SOLES"
 export const numeroALetras = (monto) => {
   const centavosTotales = Math.round((Number(monto) || 0) * 100);
   const entero = Math.floor(centavosTotales / 100);

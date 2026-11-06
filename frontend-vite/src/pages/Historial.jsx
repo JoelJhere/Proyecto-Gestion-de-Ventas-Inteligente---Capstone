@@ -7,9 +7,10 @@ import {
   FaSearch, FaFileExcel, FaEye, FaFilePdf, FaCalendarAlt, 
   FaChartLine, FaShoppingBag, FaReceipt, FaFileInvoice, 
   FaTimes, FaExternalLinkAlt, FaWallet, FaArrowUp, 
-  FaArrowDown, FaPlus, FaMinus 
+  FaArrowDown, FaPlus, FaMinus, FaPrint
 } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
+import ComprobanteDetallado from '../components/ComprobanteDetallado';
 
 // --- LOGOS REALES EN SVG PARA MÉTODOS DE PAGO ---
 const LogoEfectivo = () => (
@@ -78,6 +79,18 @@ export default function Historial() {
     return 'Efectivo';
   };
 
+  const abrirImpresion = (ventaId) => {
+  const width = 420;
+  const height = 720;
+  const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
+  const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+  window.open(
+    `/ticket/${ventaId}?imprimir=1`,
+    'Comprobante',
+    `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
+  );
+};
+
   const BadgeMetodoPago = ({ metodo }) => {
     if (metodo === 'YAPE_PLIN') {
       return (
@@ -109,7 +122,7 @@ export default function Historial() {
 
   const calcularFechasFiltro = useCallback((tipo) => {
     const hoy = new Date();
-    const formato = (fecha) => fecha.toISOString().split('T')[0];
+    const formato = (fecha) => fecha.toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
     let inicio = '';
     let fin = formato(hoy);
 
@@ -976,7 +989,7 @@ export default function Historial() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: RÉPLICA DEL COMPROBANTE NUBEFACT (VISTA PREVIA HTML) */}
+      {/* MODAL 2: VISTA PREVIA DE BOLETA / FACTURA */}
       <AnimatePresence>
         {visorComprobante && (
           <div className="fixed inset-0 bg-neutral-950/90 z-[90] flex flex-col items-center justify-center p-4 backdrop-blur-md overflow-y-auto">
@@ -984,101 +997,38 @@ export default function Historial() {
               initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
               className="w-full max-w-4xl min-h-[85vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col border border-neutral-800 my-8"
             >
-              <div className="bg-neutral-950 p-4 flex justify-between items-center border-b border-neutral-800 shrink-0 sticky top-0 z-10">
+              <div className="bg-neutral-950 p-4 flex flex-wrap gap-3 justify-between items-center border-b border-neutral-800 shrink-0 sticky top-0 z-10">
                 <h3 className="text-white font-bold flex items-center gap-2 text-sm uppercase tracking-widest">
                   <FaFilePdf className="text-red-500 text-lg" /> Vista Previa del Comprobante
                 </h3>
-                <div className="flex gap-2">
-                  <a href={visorComprobante.enlacePdf} target="_blank" rel="noreferrer" className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => abrirImpresion(visorComprobante.id)}
+                    className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 px-4 py-2 rounded-lg text-xs font-extrabold transition-colors flex items-center gap-2 cursor-pointer"
+                  >
+                    <FaPrint size={12} /> Imprimir
+                  </button>
+                  <a
+                    href={visorComprobante.enlacePdf}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2"
+                  >
                     <FaExternalLinkAlt size={12} /> Abrir Original (SUNAT)
                   </a>
-                  <button onClick={() => setVisorComprobante(null)} className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setVisorComprobante(null)}
+                    className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                  >
                     <FaTimes size={14} /> Cerrar
                   </button>
                 </div>
               </div>
 
               <div className="flex-1 bg-neutral-800 w-full flex items-start justify-center p-8 overflow-y-auto">
-                <div className="bg-white text-black font-sans w-[80mm] shadow-2xl p-4 shrink-0 mx-auto leading-tight">
-                  <div className="text-center mb-3">
-                    <h1 className="font-extrabold uppercase text-[13px]">{businessConfig.razonSocial || businessConfig.nombre}</h1>
-                    <p className="text-[12px] font-bold leading-none">-</p>
-                    <p className="text-[12px] font-bold leading-none mb-1">- - -</p>
-                    <p className="text-[12px] font-bold">RUC {businessConfig.ruc}</p>
-                    <p className="text-[13px] font-bold mt-1 uppercase">
-                      {visorComprobante.tipoComprobante === 'FACTURA' ? 'FACTURA DE VENTA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}
-                    </p>
-                    <p className="text-[13px] font-bold">{visorComprobante.numeroComprobante}</p>
-                  </div>
-
-                  <div className="text-[11px] mb-3">
-                    <p className="font-bold">ADQUIRIENTE</p>
-                    <p className="uppercase">{visorComprobante.tipoComprobante === 'FACTURA' ? 'RUC:' : 'DNI:'} {visorComprobante.clienteDocumento}</p>
-                    <p className="uppercase">{visorComprobante.clienteNombre}</p>
-                    <p><span className="font-bold">FECHA EMISIÓN:</span> {new Date(visorComprobante.createdAt).toLocaleDateString('es-PE')}</p>
-                    <p><span className="font-bold">MÉTODO PAGO:</span> {formatearMetodoPago(visorComprobante.metodoPago).toUpperCase()}</p>
-                    <p><span className="font-bold">MONEDA:</span> SOLES</p>
-                    <p><span className="font-bold">IGV:</span> {businessConfig.impuestoPorcentaje || '18.00'} %</p>
-                  </div>
-
-                  <table className="w-full text-left text-[11px] mb-2 border-t border-b border-dashed border-black py-1">
-                    <thead>
-                      <tr>
-                        <th className="py-1 font-bold">[ CANT. ] DESCRIPCIÓN</th>
-                        <th className="py-1 font-bold text-right">P/U</th>
-                        <th className="py-1 font-bold text-right">TOTAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="align-top">
-                      {visorComprobante.detalles.map(det => (
-                        <tr key={det.id}>
-                          <td className="py-1 pr-1">
-                            <span className="font-bold">[ {det.cantidad} ]</span> NIU {det.producto.nombre}
-                          </td>
-                          <td className="py-1 text-right">{(det.subtotal / det.cantidad).toFixed(3)}</td>
-                          <td className="py-1 text-right">{det.subtotal.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  <div className="w-full flex justify-end text-[11px] font-bold mb-2">
-                    <table className="text-right border-collapse">
-                      <tbody>
-                        <tr>
-                          <td className="pr-4 py-0.5">GRAVADA</td>
-                          <td className="pr-2 py-0.5">S/</td>
-                          <td className="py-0.5 w-12">{visorComprobante.subtotal.toFixed(2)}</td>
-                        </tr>
-                        <tr>
-                          <td className="pr-4 py-0.5">IGV</td>
-                          <td className="pr-2 py-0.5">S/</td>
-                          <td className="py-0.5">{visorComprobante.igv.toFixed(2)}</td>
-                        </tr>
-                        <tr>
-                          <td className="pr-4 py-0.5">TOTAL</td>
-                          <td className="pr-2 py-0.5">S/</td>
-                          <td className="py-0.5">{visorComprobante.total.toFixed(2)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="border-t border-b border-gray-300 py-1 mb-2 text-center text-[10px] font-bold text-gray-500 uppercase">
-                     IMPORTE EN LETRAS: (VER PDF ORIGINAL)
-                  </div>
-
-                  <div className="text-center text-[10px] leading-tight">
-                    <p>Representación impresa de la {visorComprobante.tipoComprobante === 'FACTURA' ? 'FACTURA' : 'BOLETA'} DE VENTA ELECTRÓNICA, visita</p>
-                    <p className="font-bold mt-0.5">www.nubefact.com/{businessConfig.ruc}</p>
-                    
-                    <div className="mt-3 border border-gray-300 w-24 h-24 mx-auto flex items-center justify-center p-1 opacity-70">
-                       <span className="text-gray-400 font-bold">QR SUNAT</span>
-                    </div>
-                    
-                    <p className="mt-2 text-[9px] text-gray-500">Emitido desde el Sistema POS</p>
-                  </div>
-                </div>
+                <ComprobanteDetallado venta={visorComprobante} negocio={businessConfig} />
               </div>
             </motion.div>
           </div>

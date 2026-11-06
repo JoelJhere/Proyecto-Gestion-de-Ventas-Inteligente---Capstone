@@ -28,10 +28,10 @@ export const obtenerHistorialVentas = async (req, res) => {
     if (fechaInicio || fechaFin) {
       whereClause.createdAt = {};
       if (fechaInicio) {
-        whereClause.createdAt.gte = new Date(`${fechaInicio}T00:00:00.000Z`);
+        whereClause.createdAt.gte = new Date(`${fechaInicio}T00:00:00.000-05:00`);
       }
       if (fechaFin) {
-        const dateFin = new Date(`${fechaFin}T23:59:59.999Z`);
+        const dateFin = new Date(`${fechaFin}T23:59:59.999-05:00`);
         whereClause.createdAt.lte = dateFin; 
       }
     }
