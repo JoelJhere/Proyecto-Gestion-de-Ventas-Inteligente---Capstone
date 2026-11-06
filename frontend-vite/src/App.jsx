@@ -37,7 +37,9 @@ axios.interceptors.response.use(
       return Promise.reject(error);
     }
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      if (!window.location.pathname.includes('/login')) {
+      const rutaActual = window.location.pathname;
+      // Evitamos redirigir al login si el cliente está viendo su comprobante público
+      if (!rutaActual.includes('/login') && !rutaActual.startsWith('/ticket')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('pos_config');
@@ -107,11 +109,7 @@ function App() {
           <Route path="/usuarios" element={<Usuarios />} />
         </Route>
 
-        <Route path="/ticket/:id" element={
-          <ProtectedRoute>
-            <Ticket />
-          </ProtectedRoute>
-        } />
+        <Route path="/ticket/:id" element={<Ticket />} />
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

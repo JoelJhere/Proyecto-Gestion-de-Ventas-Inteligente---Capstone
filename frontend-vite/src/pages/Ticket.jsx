@@ -24,10 +24,7 @@ export default function Ticket() {
   useEffect(() => {
     const cargarTicket = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`/ventas/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await axios.get(`/ventas/${id}`);
         setVenta(res.data);
       } catch (err) {
         console.error('Error cargando ticket', err);

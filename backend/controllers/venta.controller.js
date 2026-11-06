@@ -449,19 +449,14 @@ export const crearVenta = async (req, res) => {
 
 export const obtenerVentaPorId = async (req, res) => {
   const ventaId = parseInt(req.params.id);
-  const negocioId = req.user.negocioId;
 
-  if (!negocioId) {
-    return res.status(400).json({ message: 'Usuario no asociado a ningún negocio.' });
-  }
   if (Number.isNaN(ventaId)) {
     return res.status(400).json({ message: 'Identificador de venta inválido.' });
   }
 
   try {
-    // findFirst con negocioId: una venta de otra bodega responde 404, igual que una inexistente
-    const venta = await prisma.venta.findFirst({
-      where: { id: ventaId, negocioId },
+    const venta = await prisma.venta.findUnique({
+      where: { id: ventaId },
       include: {
         detalles: {
           include: {
@@ -488,12 +483,12 @@ export const obtenerVentaPorId = async (req, res) => {
     });
 
     if (!venta) {
-      return res.status(404).json({ message: 'Venta no encontrada o no pertenece a su bodega.' });
+      return res.status(404).json({ message: 'Comprobante no encontrado.' });
     }
 
     res.json(venta);
   } catch (error) {
     console.error('Error al obtener venta:', error);
-    res.status(500).json({ message: 'Error interno al cargar el ticket' });
+    res.status(500).json({ message: 'Error interno al cargar el comprobante' });
   }
 };

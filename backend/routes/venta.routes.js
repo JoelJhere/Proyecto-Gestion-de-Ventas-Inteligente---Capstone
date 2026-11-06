@@ -4,8 +4,10 @@ import { verificarToken } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Ruta protegida por el middleware
+// Solo registrar ventas requiere token de cajero/admin
 router.post('/', verificarToken, crearVenta);
-router.get('/:id', verificarToken, obtenerVentaPorId);
+
+// Ruta pública para visualizar e imprimir el comprobante desde enlaces externos
+router.get('/:id', obtenerVentaPorId);
 
 export default router;
