@@ -314,8 +314,33 @@ ${JSON.stringify(contextoNegocio)}`;
     const apiKey = process.env.GEMINI_API_KEY?.trim();
     let respuestaTexto = '';
 
+    // Función auxiliar para extraer el texto sin importar cómo lo anide Google
+    const extraerTextoGemini = (data) => {
+      if (!data) return '';
+      if (typeof data.output_text === 'string' && data.output_text.trim()) return data.output_text;
+      if (typeof data.text === 'string' && data.text.trim()) return data.text;
+      if (typeof data.output === 'string' && data.output.trim()) return data.output;
+      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return data.candidates[0].content.parts[0].text;
+      }
+      if (Array.isArray(data.outputs)) {
+        for (const out of data.outputs) {
+          if (typeof out.text === 'string' && out.text.trim()) return out.text;
+          if (out.content?.parts?.[0]?.text) return out.content.parts[0].text;
+          if (Array.isArray(out.content)) {
+            for (const c of out.content) {
+              if (typeof c.text === 'string' && c.text.trim()) return c.text;
+            }
+          }
+        }
+      }
+      if (data.response?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return data.response.candidates[0].content.parts[0].text;
+      }
+      return '';
+    };
+
     if (apiKey) {
-      // Construimos el historial reciente en texto claro para pasarlo junto a la consulta
       const historialReciente = historial
         .filter(m => m.text && !m.text.includes('Ocurrió un problema de conexión'))
         .slice(-4)
@@ -331,38 +356,33 @@ ${JSON.stringify(contextoNegocio)}`;
         'x-goog-api-key': apiKey
       };
 
-      // Intento 1: Nueva Interactions API recomendada por Google AI Studio con gemini-3.8-flash
-      try {
-        const resInteractions = await axios.post(
-          'https://generativelanguage.googleapis.com/v1beta/interactions',
-          {
-            model: 'gemini-3.8-flash',
-            input: promptCompleto
-          },
-          { headers: headersGemini, timeout: 12000 }
-        );
+      // 1. Probamos la nueva Interactions API con gemini-3.8-flash y gemini-3.5-flash-lite
+      const modelosActivos = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
 
-        // Extraemos la respuesta según el formato que devuelva Interactions API
-        const data = resInteractions.data;
-        respuestaTexto =
-          data?.output_text ||
-          data?.output?.text ||
-          data?.outputs?.[0]?.text ||
-          data?.outputs?.[0]?.content?.parts?.[0]?.text ||
-          data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          (typeof data?.output === 'string' ? data.output : '');
-      } catch (errInteractions) {
-        console.warn(
-          'Aviso Interactions API:',
-          errInteractions.response?.data?.error?.message || errInteractions.message
-        );
+      for (const modelo of modelosActivos) {
+        if (respuestaTexto) break;
+        try {
+          const resInt = await axios.post(
+            'https://generativelanguage.googleapis.com/v1beta/interactions',
+            {
+              model: modelo,
+              input: promptCompleto
+            },
+            { headers: headersGemini, timeout: 12000 }
+          );
+          respuestaTexto = extraerTextoGemini(resInt.data);
+        } catch (errInt) {
+          console.warn(
+            `Aviso Interactions (${modelo}):`,
+            errInt.response?.data?.error?.message || errInt.message
+          );
+        }
       }
 
-      // Intento 2: Endpoint clásico generateContent con gemini-3.8-flash (y respaldos)
+      // 2. Si Interactions no devolvió texto, usamos generateContent con los modelos vigentes
       if (!respuestaTexto) {
-        const modelosGenerate = ['gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
-
-        for (const modelo of modelosGenerate) {
+        for (const modelo of modelosActivos) {
+          if (respuestaTexto) break;
           try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
             const response = await axios.post(
@@ -376,9 +396,7 @@ ${JSON.stringify(contextoNegocio)}`;
               },
               { headers: headersGemini, timeout: 12000 }
             );
-
-            respuestaTexto = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (respuestaTexto) break;
+            respuestaTexto = extraerTextoGemini(response.data);
           } catch (errGen) {
             console.warn(
               `Aviso generateContent (${modelo}):`,
