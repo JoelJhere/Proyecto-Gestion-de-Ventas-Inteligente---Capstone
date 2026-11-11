@@ -46,7 +46,7 @@ export const obtenerResumenIA = async (req, res) => {
   }
 };
 
-// --- MOTOR LÓGICO DE RESPALDO  ---
+//  MOTOR LÓGICO DE RESPALDO
 const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
   const texto = preguntaRaw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
@@ -129,6 +129,19 @@ const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
       resp += `• **${p.nombre}**: Ganas **S/ ${p.ganancia.toFixed(2)}** por unidad (+${p.porcentaje.toFixed(0)}%)\n`;
     });
     return resp.trim();
+  }
+
+  // Respuesta natural para saludos o ayuda
+  if (
+    texto === 'hola' ||
+    texto.startsWith('hola ') ||
+    texto.includes('buenos dias') ||
+    texto.includes('buenas tardes') ||
+    texto.includes('buenas noches') ||
+    texto.includes('que puedes hacer') ||
+    texto === 'ayuda'
+  ) {
+    return `¡Hola! Soy **VendaIA**, el asistente de **${datos.nombreBodega}**.\n\nEn este momento tienes **S/ ${datos.saldoCaja.toFixed(2)}** en caja, **${datos.ventasHoyCount} venta(s)** registradas hoy y **${datos.productosCriticos.length} producto(s)** con stock crítico.\n\nPuedes preguntarme cosas como:\n• ¿Qué tal me fue en las ventas de esta semana?\n• ¿Qué productos me dejan mayor ganancia?\n• ¿Qué mercadería debería comprar pronto?\n• ¿Quiénes me deben fiado actualmente?`;
   }
 
   // Por defecto: Resumen de ventas (hoy, semana, mes) y caja
@@ -302,58 +315,76 @@ ${JSON.stringify(contextoNegocio)}`;
     let respuestaTexto = '';
 
     if (apiKey) {
-      // Limpiamos el historial para asegurar que NUNCA empiece con 'model' ni incluya mensajes de error
-      const historialLimpio = historial
+      // Construimos el historial reciente en texto claro para pasarlo junto a la consulta
+      const historialReciente = historial
         .filter(m => m.text && !m.text.includes('Ocurrió un problema de conexión'))
-        .slice(-4);
+        .slice(-4)
+        .map(m => `${m.role === 'user' ? 'Dueño' : 'VendaIA'}: ${m.text}`)
+        .join('\n');
 
-      while (historialLimpio.length > 0 && historialLimpio[0].role !== 'user') {
-        historialLimpio.shift();
-      }
+      const promptCompleto = `${systemPrompt}\n\n${
+        historialReciente ? `HISTORIAL RECIENTE DE LA CONVERSACIÓN:\n${historialReciente}\n\n` : ''
+      }PREGUNTA ACTUAL DEL DUEÑO DE LA BODEGA: "${mensaje}"`;
 
-      // Inyectamos el contexto en el mensaje del usuario para compatibilidad universal con cualquier endpoint de Gemini
-      const contents = [
-        ...historialLimpio.map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.text }]
-        })),
-        {
-          role: 'user',
-          parts: [{ text: `${systemPrompt}\n\nPREGUNTA DEL DUEÑO DE LA BODEGA: "${mensaje}"` }]
-        }
-      ];
-
-      const payloadGemini = {
-        contents,
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 650
-        }
+      const headersGemini = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
       };
 
-      // Probamos tanto el endpoint Vertex Express (para claves "AQ.") como AI Studio (para claves "AIza")
-      const urlsAProbar = apiKey.startsWith('AQ.')
-        ? [
-            `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-            `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
-          ]
-        : [
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${apiKey}`
-          ];
+      // Intento 1: Nueva Interactions API recomendada por Google AI Studio con gemini-3.8-flash
+      try {
+        const resInteractions = await axios.post(
+          'https://generativelanguage.googleapis.com/v1beta/interactions',
+          {
+            model: 'gemini-3.8-flash',
+            input: promptCompleto
+          },
+          { headers: headersGemini, timeout: 12000 }
+        );
 
-      for (const url of urlsAProbar) {
-        try {
-          const response = await axios.post(url, payloadGemini, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 12000
-          });
-          respuestaTexto = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (respuestaTexto) break;
-        } catch (errApi) {
-          console.warn('Aviso API IA:', errApi.response?.data?.error?.message || errApi.message);
+        // Extraemos la respuesta según el formato que devuelva Interactions API
+        const data = resInteractions.data;
+        respuestaTexto =
+          data?.output_text ||
+          data?.output?.text ||
+          data?.outputs?.[0]?.text ||
+          data?.outputs?.[0]?.content?.parts?.[0]?.text ||
+          data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+          (typeof data?.output === 'string' ? data.output : '');
+      } catch (errInteractions) {
+        console.warn(
+          'Aviso Interactions API:',
+          errInteractions.response?.data?.error?.message || errInteractions.message
+        );
+      }
+
+      // Intento 2: Endpoint clásico generateContent con gemini-3.8-flash (y respaldos)
+      if (!respuestaTexto) {
+        const modelosGenerate = ['gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+
+        for (const modelo of modelosGenerate) {
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
+            const response = await axios.post(
+              url,
+              {
+                contents: [{ role: 'user', parts: [{ text: promptCompleto }] }],
+                generationConfig: {
+                  temperature: 0.2,
+                  maxOutputTokens: 700
+                }
+              },
+              { headers: headersGemini, timeout: 12000 }
+            );
+
+            respuestaTexto = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (respuestaTexto) break;
+          } catch (errGen) {
+            console.warn(
+              `Aviso generateContent (${modelo}):`,
+              errGen.response?.data?.error?.message || errGen.message
+            );
+          }
         }
       }
     }
