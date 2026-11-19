@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FaPlus, FaEdit, FaBox, FaBarcode, FaTimes, FaSearch, 
@@ -67,6 +67,13 @@ const normalizarTextoProducto = (texto = '') => {
     .trim();
 };
 
+// Redondea a 1 decimal estándar (ej: 1.56 -> "1.60", 1.54 -> "1.50")
+const redondearUnDecimal = (valor) => {
+  const num = parseFloat(valor);
+  if (Number.isNaN(num) || num <= 0) return '';
+  return (Math.round((num + Number.EPSILON) * 10) / 10).toFixed(2);
+};
+
 // Sub-componente para filtrar y autocompletar categorías guardadas (locales y globales)
 const SelectorCategoria = ({ categorias, valorActual, onChange }) => {
   const [abierto, setAbierto] = useState(false);
@@ -124,6 +131,123 @@ export default function Productos() {
 
   const [formData, setFormData] = useState({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
   const [stockData, setStockData] = useState({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
+
+  // Bloqueo inmediato anti-spam / doble clic para todas las acciones
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const accionEnCursoRef = useRef(false);
+
+  // Control del cálculo bidireccional (+20% / ÷1.2): null | 'compra' | 'venta' | 'ambos'
+  const [modoPrecioCrear, setModoPrecioCrear] = useState(null);
+  const [modoPrecioEditar, setModoPrecioEditar] = useState('ambos');
+
+  const abrirModalCrear = () => {
+    setFormData({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
+    setOrigenAutocompletado(null);
+    setModoPrecioCrear(null);
+    setIsCreateModalOpen(true);
+  };
+
+  const abrirModalEditar = (prod) => {
+    setEditingProduct({ ...prod });
+    if (prod.precioCompra && prod.precioVenta) setModoPrecioEditar('ambos');
+    else if (prod.precioVenta) setModoPrecioEditar('venta');
+    else if (prod.precioCompra) setModoPrecioEditar('compra');
+    else setModoPrecioEditar(null);
+  };
+
+  // --- CÁLCULO AUTOMÁTICO BIDIRECCIONAL (CREAR) ---
+  const handleCambioCompraCrear = (val) => {
+    if (val === '') {
+      if (modoPrecioCrear === 'compra') {
+        setModoPrecioCrear(null);
+        setFormData(prev => ({ ...prev, precioCompra: '', precioVenta: '' }));
+      } else {
+        setFormData(prev => ({ ...prev, precioCompra: '' }));
+        if (formData.precioVenta === '') setModoPrecioCrear(null);
+      }
+      return;
+    }
+
+    const num = parseFloat(val);
+    if (modoPrecioCrear === null || modoPrecioCrear === 'compra') {
+      setModoPrecioCrear('compra');
+      const ventaSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num * 1.2) : '';
+      setFormData(prev => ({ ...prev, precioCompra: val, precioVenta: ventaSugerida }));
+    } else {
+      setModoPrecioCrear('ambos');
+      setFormData(prev => ({ ...prev, precioCompra: val }));
+    }
+  };
+
+  const handleCambioVentaCrear = (val) => {
+    if (val === '') {
+      if (modoPrecioCrear === 'venta') {
+        setModoPrecioCrear(null);
+        setFormData(prev => ({ ...prev, precioVenta: '', precioCompra: '' }));
+      } else {
+        setFormData(prev => ({ ...prev, precioVenta: '' }));
+        if (formData.precioCompra === '') setModoPrecioCrear(null);
+      }
+      return;
+    }
+
+    const num = parseFloat(val);
+    if (modoPrecioCrear === null || modoPrecioCrear === 'venta') {
+      setModoPrecioCrear('venta');
+      const compraSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num / 1.2) : '';
+      setFormData(prev => ({ ...prev, precioVenta: val, precioCompra: compraSugerida }));
+    } else {
+      setModoPrecioCrear('ambos');
+      setFormData(prev => ({ ...prev, precioVenta: val }));
+    }
+  };
+
+  // --- CÁLCULO AUTOMÁTICO BIDIRECCIONAL (EDITAR) ---
+  const handleCambioCompraEditar = (val) => {
+    if (val === '') {
+      if (modoPrecioEditar === 'compra') {
+        setModoPrecioEditar(null);
+        setEditingProduct(prev => ({ ...prev, precioCompra: '', precioVenta: '' }));
+      } else {
+        setEditingProduct(prev => ({ ...prev, precioCompra: '' }));
+        if (!editingProduct?.precioVenta) setModoPrecioEditar(null);
+      }
+      return;
+    }
+
+    const num = parseFloat(val);
+    if (modoPrecioEditar === null || modoPrecioEditar === 'compra') {
+      setModoPrecioEditar('compra');
+      const ventaSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num * 1.2) : '';
+      setEditingProduct(prev => ({ ...prev, precioCompra: val, precioVenta: ventaSugerida }));
+    } else {
+      setModoPrecioEditar('ambos');
+      setEditingProduct(prev => ({ ...prev, precioCompra: val }));
+    }
+  };
+
+  const handleCambioVentaEditar = (val) => {
+    if (val === '') {
+      if (modoPrecioEditar === 'venta') {
+        setModoPrecioEditar(null);
+        setEditingProduct(prev => ({ ...prev, precioVenta: '', precioCompra: '' }));
+      } else {
+        setEditingProduct(prev => ({ ...prev, precioVenta: '' }));
+        if (!editingProduct?.precioCompra) setModoPrecioEditar(null);
+      }
+      return;
+    }
+
+    const num = parseFloat(val);
+    if (modoPrecioEditar === null || modoPrecioEditar === 'venta') {
+      setModoPrecioEditar('venta');
+      const compraSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num / 1.2) : '';
+      setEditingProduct(prev => ({ ...prev, precioVenta: val, precioCompra: compraSugerida }));
+    } else {
+      setModoPrecioEditar('ambos');
+      setEditingProduct(prev => ({ ...prev, precioVenta: val }));
+    }
+  };
 
   const usuario = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = usuario.rol === 'ADMIN';
@@ -187,6 +311,9 @@ export default function Productos() {
     const existenteGlobal = productosGlobales.find(p => p.codigo.toLowerCase() === codigoLimpio.toLowerCase());
     if (existenteGlobal) {
       setOrigenAutocompletado('GLOBAL');
+      if (existenteGlobal.precioCompra || existenteGlobal.precioVenta) {
+        setModoPrecioCrear('ambos');
+      }
       setFormData(prev => ({
         ...prev,
         codigo: codigoLimpio,
@@ -309,60 +436,91 @@ export default function Productos() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (accionEnCursoRef.current) return;
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
     try {
       const dataAEnviar = { ...formData, proveedorId: formData.proveedorId ? parseInt(formData.proveedorId) : null };
       await axios.post('/productos', dataAEnviar);
       
-      toast.success('Producto registrado correctamente');
+      toast.success('Producto registrado correctamente.', { id: 'prod-accion' });
       setIsCreateModalOpen(false);
+      setOrigenAutocompletado(null);
+      setModoPrecioCrear(null);
       setFormData({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
       cargarDatos();
     } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al guardar el producto'); 
+      toast.error(error.response?.data?.message || 'Error al guardar el producto.', { id: 'prod-accion' }); 
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (accionEnCursoRef.current || !editingProduct) return;
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
     try {
       const dataAEnviar = { ...editingProduct, proveedorId: editingProduct.proveedorId ? parseInt(editingProduct.proveedorId) : null };
       await axios.put(`/productos/${editingProduct.id}`, dataAEnviar);
       
-      toast.success('Producto actualizado correctamente');
+      toast.success('Producto actualizado correctamente.', { id: 'prod-accion' });
       setEditingProduct(null);
       cargarDatos();
     } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al actualizar el producto'); 
+      toast.error(error.response?.data?.message || 'Error al actualizar el producto.', { id: 'prod-accion' }); 
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
   const handleManageStock = async (e) => {
     e.preventDefault();
+    if (accionEnCursoRef.current || !stockProduct) return;
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
     try {
       await axios.post(`/productos/${stockProduct.id}/stock`, stockData);
-      toast.success('Inventario actualizado');
+      toast.success('Inventario actualizado correctamente.', { id: 'prod-accion' });
       setStockProduct(null);
       setStockData({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
       cargarDatos();
     } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al actualizar el inventario'); 
+      toast.error(error.response?.data?.message || 'Error al actualizar el inventario.', { id: 'prod-accion' }); 
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
   const prepararToggleEstado = (prod) => {
+    if (accionEnCursoRef.current) return;
     setConfirmDialog(prod);
   };
 
   const ejecutarToggleEstado = async () => {
-    if (!confirmDialog) return;
-    const accion = confirmDialog.estado ? 'descontinuar' : 'reactivar';
+    if (!confirmDialog || accionEnCursoRef.current) return;
+    const productoObjetivo = confirmDialog;
+    const accion = productoObjetivo.estado ? 'descontinuado' : 'reactivado';
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
     try {
-      await axios.put(`/productos/${confirmDialog.id}/estado`, {});
-      toast.success(`Producto ${accion}do exitosamente`);
+      await axios.put(`/productos/${productoObjetivo.id}/estado`, {});
+      toast.success(`Producto ${accion} exitosamente.`, { id: 'prod-accion' });
       setConfirmDialog(null);
       cargarDatos();
     } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al cambiar estado del producto'); 
+      toast.error(error.response?.data?.message || 'Error al cambiar el estado del producto.', { id: 'prod-accion' }); 
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -441,7 +599,7 @@ export default function Productos() {
           {isAdmin && (
             <button 
               type="button"
-              onClick={() => setIsCreateModalOpen(true)} 
+              onClick={abrirModalCrear} 
               className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-2xs text-sm whitespace-nowrap cursor-pointer"
             >
               <FaPlus size={13} /> Nuevo Producto
@@ -489,19 +647,137 @@ export default function Productos() {
         </div>
       </div>
 
-      {/* TABLA PRINCIPAL CON SOMBRA FLOTANTE SUAVE */}
+      {/* LISTADO RESPONSIVE */}
       <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[920px]">
+        
+        {/* VISTA MÓVIL */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {isLoading ? (
+            [...Array(4)].map((_, i) => (
+              <div key={i} className="p-4 animate-pulse space-y-2.5">
+                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                <div className="h-3 bg-slate-100 rounded w-1/2"></div>
+                <div className="h-8 bg-slate-100 rounded-lg w-full"></div>
+              </div>
+            ))
+          ) : productosFiltrados.length === 0 ? (
+            <div className="p-10 text-center text-slate-500 font-medium text-sm">
+              {busqueda ? 'No se encontraron productos con ese criterio de búsqueda.' : 'Aún no hay productos registrados en el catálogo.'}
+            </div>
+          ) : (
+            productosFiltrados.map((prod) => {
+              const esStockBajo = prod.stock <= (prod.stockMinimo || 5);
+              return (
+                <div key={prod.id} className={`p-4 space-y-3 ${prod.estado ? 'bg-white' : 'opacity-55 bg-slate-50/70'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug" title={prod.nombre}>
+                        {prod.nombre}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <span className="font-mono text-[11px] font-semibold text-slate-500">{prod.codigo}</span>
+                        {prod.categoria && (
+                          <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                            {prod.categoria}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shrink-0 ${
+                      esStockBajo 
+                        ? 'bg-red-50 text-red-700 border-red-200' 
+                        : 'bg-verde-pastel/35 text-emerald-900 border-emerald-200'
+                    }`}>
+                      {prod.stock} un.
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs bg-slate-50/90 px-3 py-2 rounded-xl border border-slate-100">
+                    <div className="min-w-0 pr-2">
+                      <span className="text-slate-400 font-semibold block">Proveedor</span>
+                      <span className="text-slate-700 font-semibold truncate block">
+                        {prod.proveedor?.nombre || 'Sin asignar'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 text-right">
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Compra</span>
+                        <span className="font-mono font-semibold text-slate-600">
+                          {prod.precioCompra ? `S/ ${prod.precioCompra.toFixed(2)}` : '-'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Venta</span>
+                        <span className="font-mono font-extrabold text-slate-900 text-sm">
+                          S/ {prod.precioVenta.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                    <button 
+                      type="button"
+                      onClick={() => setBarcodeView(prod)} 
+                      className="p-2 text-slate-600 bg-white hover:bg-slate-100 border border-slate-200/80 rounded-lg cursor-pointer" 
+                      title="Ver Código"
+                    >
+                      <FaBarcode size={14} />
+                    </button>
+                    {prod.estado && (
+                      <>
+                        {isAdmin && (
+                          <button 
+                            type="button"
+                            onClick={() => abrirModalEditar(prod)} 
+                            className="p-2 text-amber-600 bg-white hover:bg-amber-50 border border-slate-200/80 rounded-lg cursor-pointer" 
+                            title="Editar Producto"
+                          >
+                            <FaEdit size={14} />
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => setStockProduct(prod)} 
+                          className="p-2 text-emerald-700 bg-white hover:bg-verde-pastel/30 border border-slate-200/80 rounded-lg cursor-pointer" 
+                          title="Actualizar Stock"
+                        >
+                          <FaBox size={14} />
+                        </button>
+                      </>
+                    )}
+                    {isAdmin && (
+                      <button 
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => prepararToggleEstado(prod)}
+                        className={`p-2 bg-white border border-slate-200/80 rounded-lg cursor-pointer disabled:opacity-40 ${
+                          prod.estado ? 'text-red-500 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'
+                        }`}
+                        title={prod.estado ? 'Descontinuar Producto' : 'Reactivar Producto'}
+                      >
+                        {prod.estado ? <FaTimes size={14} /> : <FaCheck size={14} />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* VISTA TABLET Y ESCRITORIO (>= 768px): Tabla ordenada con control de textos largos */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[740px]">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
-                <th className="py-3.5 px-5 whitespace-nowrap">Código</th>
-                <th className="py-3.5 px-4 whitespace-nowrap">Producto / Categoría</th>
-                <th className="py-3.5 px-4 whitespace-nowrap">Proveedor</th>
-                <th className="py-3.5 px-4 whitespace-nowrap text-right">Costo Compra</th>
-                <th className="py-3.5 px-4 whitespace-nowrap text-right">Precio Venta</th>
-                <th className="py-3.5 px-4 text-center whitespace-nowrap">Existencias</th>
-                <th className="py-3.5 px-5 text-center whitespace-nowrap">Acciones</th>
+                <th className="py-3.5 px-4 xl:px-5 whitespace-nowrap">Código</th>
+                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap">Producto / Categoría</th>
+                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap">Proveedor</th>
+                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-right">Costo Compra</th>
+                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-right">Precio Venta</th>
+                <th className="py-3.5 px-3 xl:px-4 text-center whitespace-nowrap">Existencias</th>
+                <th className="py-3.5 px-4 xl:px-5 text-center whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -509,8 +785,8 @@ export default function Productos() {
                 [...Array(5)].map((_, index) => (
                   <tr key={index} className="animate-pulse">
                     <td className="py-4 px-5"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
-                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-48"></div></td>
-                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-28"></div></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-44"></div></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
                     <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-16 ml-auto"></div></td>
                     <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-16 ml-auto"></div></td>
                     <td className="py-4 px-4"><div className="h-6 bg-slate-200 rounded-full w-14 mx-auto"></div></td>
@@ -532,28 +808,32 @@ export default function Productos() {
                   const esStockBajo = prod.stock <= (prod.stockMinimo || 5);
                   return (
                     <tr key={prod.id} className={`transition-colors ${prod.estado ? 'hover:bg-slate-50/80' : 'opacity-55 bg-slate-50/60'}`}>
-                      <td className="py-3.5 px-5 font-mono text-xs font-semibold text-slate-600 align-middle whitespace-nowrap">
+                      <td className="py-3.5 px-4 xl:px-5 font-mono text-xs font-semibold text-slate-600 align-middle whitespace-nowrap">
                         {prod.codigo}
                       </td>
-                      <td className="py-3.5 px-4 align-middle min-w-[220px]">
-                        <p className="font-bold text-slate-900 text-sm">{prod.nombre}</p>
+                      <td className="py-3.5 px-3 xl:px-4 align-middle max-w-[200px] lg:max-w-[250px] xl:max-w-[300px]">
+                        <p className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug" title={prod.nombre}>
+                          {prod.nombre}
+                        </p>
                         {prod.categoria && (
-                          <span className="inline-block text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-0.5">
+                          <span className="inline-block text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-0.5 max-w-full truncate">
                             {prod.categoria}
                           </span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-600 font-medium align-middle">
-                        {prod.proveedor?.nombre || <span className="text-slate-400 text-xs">Sin asignar</span>}
+                      <td className="py-3.5 px-3 xl:px-4 text-slate-600 font-medium align-middle max-w-[140px] xl:max-w-[180px]">
+                        <span className="block truncate" title={prod.proveedor?.nombre || ''}>
+                          {prod.proveedor?.nombre || <span className="text-slate-400 text-xs">Sin asignar</span>}
+                        </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono text-slate-600 font-medium align-middle whitespace-nowrap">
+                      <td className="py-3.5 px-3 xl:px-4 text-right font-mono text-slate-600 font-medium align-middle whitespace-nowrap">
                         {prod.precioCompra ? `S/ ${prod.precioCompra.toFixed(2)}` : '-'}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono text-slate-900 font-extrabold text-base align-middle whitespace-nowrap">
+                      <td className="py-3.5 px-3 xl:px-4 text-right font-mono text-slate-900 font-extrabold text-sm xl:text-base align-middle whitespace-nowrap">
                         S/ {prod.precioVenta.toFixed(2)}
                       </td>
-                      <td className="py-3.5 px-4 text-center align-middle whitespace-nowrap">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${
+                      <td className="py-3.5 px-3 xl:px-4 text-center align-middle whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                           esStockBajo 
                             ? 'bg-red-50 text-red-700 border-red-200' 
                             : 'bg-verde-pastel/35 text-emerald-900 border-emerald-200'
@@ -561,7 +841,7 @@ export default function Productos() {
                           {prod.stock} un.
                         </span>
                       </td>
-                      <td className="py-3.5 px-5 align-middle whitespace-nowrap">
+                      <td className="py-3.5 px-4 xl:px-5 align-middle whitespace-nowrap">
                         <div className="flex justify-center gap-1.5">
                           <button 
                             type="button"
@@ -577,7 +857,7 @@ export default function Productos() {
                               {isAdmin && (
                                 <button 
                                   type="button"
-                                  onClick={() => setEditingProduct(prod)} 
+                                  onClick={() => abrirModalEditar(prod)} 
                                   className="p-2 text-amber-600 hover:text-amber-700 bg-white hover:bg-amber-50 border border-slate-200/80 rounded-lg transition-colors cursor-pointer" 
                                   title="Editar Producto"
                                 >
@@ -598,8 +878,9 @@ export default function Productos() {
                           {isAdmin && (
                             <button 
                               type="button"
+                              disabled={isSubmitting}
                               onClick={() => prepararToggleEstado(prod)}
-                              className={`p-2 bg-white border border-slate-200/80 rounded-lg transition-colors cursor-pointer ${
+                              className={`p-2 bg-white border border-slate-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                                 prod.estado 
                                   ? 'text-red-500 hover:text-red-700 hover:bg-red-50' 
                                   : 'text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50'
@@ -640,11 +921,23 @@ export default function Productos() {
                 </p>
               </div>
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button type="button" onClick={() => setConfirmDialog(null)} className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition-colors text-sm cursor-pointer">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setConfirmDialog(null)}
+                  className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition-colors text-sm disabled:opacity-50 cursor-pointer"
+                >
                   Cancelar
                 </button>
-                <button type="button" onClick={ejecutarToggleEstado} className={`flex-1 py-2.5 rounded-xl font-extrabold transition-colors text-sm cursor-pointer ${confirmDialog.estado ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950'}`}>
-                  Confirmar
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={ejecutarToggleEstado}
+                  className={`flex-1 py-2.5 rounded-xl font-extrabold transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
+                    confirmDialog.estado ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950'
+                  }`}
+                >
+                  {isSubmitting ? 'Procesando...' : 'Confirmar'}
                 </button>
               </div>
             </motion.div>
@@ -884,13 +1177,44 @@ export default function Productos() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Costo de Compra Unit. (S/)</label>
-                      <input type="number" step="0.10" value={formData.precioCompra} onChange={e => setFormData({...formData, precioCompra: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium" placeholder="0.00"/>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Costo de Compra Unit. (S/)</label>
+                        {modoPrecioCrear === 'venta' && formData.precioCompra && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-1.5 py-0.5 rounded">
+                            Auto ÷1.2
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.precioCompra}
+                        onChange={e => handleCambioCompraCrear(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                        placeholder="0.00"
+                      />
                     </div>
 
                     <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Precio de Venta al Público (S/) *</label>
-                      <input type="number" step="0.10" required value={formData.precioVenta} onChange={e => setFormData({...formData, precioVenta: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-700 font-extrabold text-lg transition-all" placeholder="0.00"/>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Precio de Venta al Público (S/) *</label>
+                        {modoPrecioCrear === 'compra' && formData.precioVenta && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-2 py-0.5 rounded">
+                            Sugerido ×1.2 (editable)
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        required
+                        value={formData.precioVenta}
+                        onChange={e => handleCambioVentaCrear(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-700 font-extrabold text-lg transition-all"
+                        placeholder="0.00"
+                      />
                     </div>
                   </div>
                 </div>
@@ -908,10 +1232,10 @@ export default function Productos() {
                   </button>
                   <button 
                     type="submit" 
-                    disabled={Boolean(productoCodigoEnInventario)}
+                    disabled={Boolean(productoCodigoEnInventario) || isSubmitting}
                     className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    Agregar
+                    {isSubmitting ? 'Guardando...' : 'Agregar'}
                   </button>
                 </div>
               </form>
@@ -1007,12 +1331,55 @@ export default function Productos() {
                       <input type="number" disabled value={editingProduct.stock} className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 cursor-not-allowed font-bold text-sm" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Costo Unitario (S/)</label>
-                      <input type="number" step="0.10" value={editingProduct.precioCompra || ''} onChange={e => setEditingProduct({...editingProduct, precioCompra: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Costo Unitario (S/)</label>
+                        {editingProduct.precioVenta > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModoPrecioEditar('ambos');
+                              setEditingProduct(prev => ({ ...prev, precioCompra: redondearUnDecimal(prev.precioVenta / 1.2) }));
+                            }}
+                            className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          >
+                            Calcular ÷1.2
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editingProduct.precioCompra ?? ''}
+                        onChange={e => handleCambioCompraEditar(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                      />
                     </div>
                     <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Precio Unitario de Venta (S/) *</label>
-                      <input type="number" step="0.10" required value={editingProduct.precioVenta} onChange={e => setEditingProduct({...editingProduct, precioVenta: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-700 font-extrabold text-lg transition-all"/>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Precio Unitario de Venta (S/) *</label>
+                        {editingProduct.precioCompra > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModoPrecioEditar('ambos');
+                              setEditingProduct(prev => ({ ...prev, precioVenta: redondearUnDecimal(prev.precioCompra * 1.2) }));
+                            }}
+                            className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          >
+                            Calcular ×1.2
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        required
+                        value={editingProduct.precioVenta ?? ''}
+                        onChange={e => handleCambioVentaEditar(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-700 font-extrabold text-lg transition-all"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1021,12 +1388,15 @@ export default function Productos() {
                   <button type="button" onClick={() => setEditingProduct(null)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer">Cancelar</button>
                   <button 
                     type="submit" 
-                    disabled={productos.some(
-                      p => p.id !== editingProduct.id && p.codigo.toLowerCase() === (editingProduct.codigo || '').trim().toLowerCase()
-                    )}
+                    disabled={
+                      isSubmitting ||
+                      productos.some(
+                        p => p.id !== editingProduct.id && p.codigo.toLowerCase() === (editingProduct.codigo || '').trim().toLowerCase()
+                      )
+                    }
                     className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    Guardar
+                    {isSubmitting ? 'Guardando...' : 'Guardar'}
                   </button>
                 </div>
               </form>
@@ -1087,7 +1457,13 @@ export default function Productos() {
 
                 <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex flex-col sm:flex-row justify-end gap-2.5">
                   <button type="button" onClick={() => setStockProduct(null)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer">Cancelar</button>
-                  <button type="submit" className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none cursor-pointer">Actualizar</button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {isSubmitting ? 'Actualizando...' : 'Actualizar'}
+                  </button>
                 </div>
               </form>
             </motion.div>
