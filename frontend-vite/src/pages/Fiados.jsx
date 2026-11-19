@@ -44,6 +44,7 @@ export default function Fiados() {
 
   const [fiados, setFiados] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('TODOS'); // TODOS | VENCIDOS | PROXIMOS
   const [isLoading, setIsLoading] = useState(true);
   const [procesandoId, setProcesandoId] = useState(null);
   const [avisandoId, setAvisandoId] = useState(null);
@@ -64,6 +65,7 @@ export default function Fiados() {
   const [nuevaFecha, setNuevaFecha] = useState('');
   const [modalCobro, setModalCobro] = useState(null);
   const [metodoPagoCobro, setMetodoPagoCobro] = useState('EFECTIVO');
+  const [montoRecibidoCobro, setMontoRecibidoCobro] = useState('');
 
   // Estados para el Directorio de Vecinos
   const [clientesDirectorio, setClientesDirectorio] = useState([]);
@@ -119,21 +121,24 @@ export default function Fiados() {
     e.preventDefault();
     if (accionEnCursoRef.current) return;
 
-    if (!nuevoVecino.nombre.trim()) {
+    const nombreLimpio = nuevoVecino.nombre.trim();
+    if (!nombreLimpio) {
       return toast.error('Ingresa el nombre del vecino.', { id: 'fiado-accion' });
     }
     if (!nuevoVecino.telefono || nuevoVecino.telefono.length !== 9 || !nuevoVecino.telefono.startsWith('9')) {
       return toast.error('El celular debe tener 9 dígitos y empezar con 9.', { id: 'fiado-accion' });
     }
 
+    const payload = { ...nuevoVecino, nombre: nombreLimpio };
+
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
     try {
       if (nuevoVecino.id) {
-        await axios.put(`/fiados/clientes/${nuevoVecino.id}`, nuevoVecino);
+        await axios.put(`/fiados/clientes/${nuevoVecino.id}`, payload);
         toast.success('Datos del vecino actualizados.', { id: 'fiado-accion' });
       } else {
-        await axios.post('/fiados/clientes', nuevoVecino);
+        await axios.post('/fiados/clientes', payload);
         toast.success('Vecino registrado para autocompletado en ventas.', { id: 'fiado-accion' });
       }
       setNuevoVecino({ id: null, nombre: '', telefono: '' });
@@ -166,7 +171,6 @@ export default function Fiados() {
       toast.success(`Deuda de ${cuentaObjetivo.cliente.nombre} liquidada y sumada a caja.`, { id: 'fiado-accion' });
 
       setFiados(prev => prev.filter(f => f.id !== cuentaObjetivo.id));
-      // Actualizamos el contador de deudas activas en el directorio local al instante
       setClientesDirectorio(prev =>
         prev.map(c =>
           c.id === cuentaObjetivo.cliente?.id && c._count?.fiados > 0
@@ -176,6 +180,7 @@ export default function Fiados() {
       );
       setModalCobro(null);
       setMetodoPagoCobro('EFECTIVO');
+      setMontoRecibidoCobro('');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error al procesar el pago.', { id: 'fiado-accion' });
     } finally {
@@ -213,10 +218,8 @@ export default function Fiados() {
       `*TOTAL A PAGAR: S/ ${Number(fiado.monto).toFixed(2)}*\n\n` +
       `Por favor, acércate al local para regularizarlo. ¡Gracias por tu preferencia!`;
 
-    // 1. Abrimos WhatsApp inmediatamente para evitar bloqueos de pop-up
     window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
 
-    // 2. Avisamos al backend que se envió, para que sume 1 día y cuente el aviso
     try {
       await axios.put(`/fiados/avisar/${fiado.id}`);
       toast.success('Aviso registrado. Se postergó la alerta para mañana.', { id: 'fiado-accion' });
@@ -240,7 +243,7 @@ export default function Fiados() {
 
   const handleActualizarFecha = async (e) => {
     e.preventDefault();
-    if (!modalPlazo || accionEnCursoRef.current) return;
+    if (!modalPlazo || !nuevaFecha || accionEnCursoRef.current) return;
 
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
@@ -248,7 +251,7 @@ export default function Fiados() {
       const fechaLocalString = `${nuevaFecha}T12:00:00.000Z`;
       await axios.put(`/fiados/plazo/${modalPlazo.id}`, { nuevaFecha: fechaLocalString });
       toast.success('Día de aviso actualizado correctamente.', { id: 'fiado-accion' });
-      
+
       setFiados(prev => prev.map(f => f.id === modalPlazo.id ? { ...f, fechaLimite: fechaLocalString } : f));
       setModalPlazo(null);
     } catch (error) {
@@ -260,30 +263,42 @@ export default function Fiados() {
     }
   };
 
+  // Métricas en vivo para tarjetas superiores y pestañas de filtro
+  const totalDeudaGeneral = fiados.reduce((acc, f) => acc + Number(f.monto || 0), 0);
+  const cantidadVencidosHoy = fiados.filter(f => esFechaCumplida(f.fechaLimite)).length;
+  const cantidadProximos = fiados.length - cantidadVencidosHoy;
+
   // Filtros y paginación progresiva (30 en 30)
+  const qBusqueda = busqueda.trim().toLowerCase();
   const fiadosFiltrados = fiados.filter(f => {
-    const q = busqueda.toLowerCase();
+    const vencido = esFechaCumplida(f.fechaLimite);
+    if (filtroEstado === 'VENCIDOS' && !vencido) return false;
+    if (filtroEstado === 'PROXIMOS' && vencido) return false;
+    if (!qBusqueda) return true;
     return (
-      f.cliente.nombre.toLowerCase().includes(q) ||
-      (f.cliente.telefono && f.cliente.telefono.includes(q))
+      f.cliente.nombre.toLowerCase().includes(qBusqueda) ||
+      (f.cliente.telefono && f.cliente.telefono.includes(qBusqueda))
     );
   });
   const fiadosVisibles = fiadosFiltrados.slice(0, limiteVisible);
   const restantesFiados = fiadosFiltrados.length - fiadosVisibles.length;
+  const hayFiltrosActivos = filtroEstado !== 'TODOS' || qBusqueda !== '';
 
+  const qDirectorio = busquedaDirectorio.trim().toLowerCase();
   const vecinosFiltrados = clientesDirectorio.filter(v => {
-    const q = busquedaDirectorio.toLowerCase();
+    if (!qDirectorio) return true;
     return (
-      v.nombre.toLowerCase().includes(q) ||
-      (v.telefono && v.telefono.includes(q))
+      v.nombre.toLowerCase().includes(qDirectorio) ||
+      (v.telefono && v.telefono.includes(qDirectorio))
     );
   });
   const vecinosVisibles = vecinosFiltrados.slice(0, limiteDirectorio);
   const restantesVecinos = vecinosFiltrados.length - vecinosVisibles.length;
 
-  // Métricas en vivo para las tarjetas superiores estilo Figma
-  const totalDeudaGeneral = fiados.reduce((acc, f) => acc + f.monto, 0);
-  const cantidadVencidosHoy = fiados.filter(f => esFechaCumplida(f.fechaLimite)).length;
+  // Cálculo rápido de vuelto en modal de cobro
+  const montoRecibidoNum = parseFloat(montoRecibidoCobro);
+  const tieneMontoRecibido = montoRecibidoCobro !== '' && !Number.isNaN(montoRecibidoNum) && montoRecibidoNum > 0;
+  const vueltoCobro = modalCobro && tieneMontoRecibido ? montoRecibidoNum - Number(modalCobro.monto || 0) : 0;
 
   return (
     <div className="flex flex-col gap-6 text-slate-800 pb-24 lg:pb-6 font-sans antialiased min-h-[calc(100vh-6rem)] relative">
@@ -349,7 +364,7 @@ export default function Fiados() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs sm:text-sm font-semibold text-slate-500 truncate">Total por Cobrar</p>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight font-mono">
               S/ {totalDeudaGeneral.toFixed(2)}
             </p>
           </div>
@@ -383,7 +398,48 @@ export default function Fiados() {
         </div>
       </div>
 
-      {/* LISTADO DE TARJETAS DE FIADOS */}
+      {/* BARRA DE FILTROS RÁPIDOS POR ESTADO DE COBRO */}
+      {!isLoading && fiados.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'TODOS', label: `Todos (${fiados.length})`, activoClase: 'bg-verde-pastel text-emerald-950 border-emerald-300 shadow-2xs' },
+            { id: 'VENCIDOS', label: `Aviso Hoy (${cantidadVencidosHoy})`, activoClase: 'bg-red-50 text-red-700 border-red-300 shadow-2xs' },
+            { id: 'PROXIMOS', label: `Próximos (${cantidadProximos})`, activoClase: 'bg-amber-50 text-amber-900 border-amber-300 shadow-2xs' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setFiltroEstado(tab.id);
+                setLimiteVisible(BLOQUE_CARGA);
+              }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                filtroEstado === tab.id
+                  ? tab.activoClase
+                  : 'bg-white text-slate-600 border-slate-200/90 hover:bg-slate-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroEstado('TODOS');
+                setBusqueda('');
+                setLimiteVisible(BLOQUE_CARGA);
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <FaTimes size={10} /> Limpiar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* LISTADO DE TARJETAS DE FIADOS (1 col celular / 2 cols tablet / 3 cols PC) */}
       <div className="flex-1 flex flex-col gap-5">
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -409,11 +465,11 @@ export default function Fiados() {
                   <FaCheckCircle className="text-3xl" />
                 </div>
                 <p className="text-lg font-bold text-slate-800">
-                  {busqueda.trim() ? 'No se encontraron cuentas con ese criterio' : '¡Todas las cuentas están al día!'}
+                  {hayFiltrosActivos ? 'No se encontraron cuentas con ese filtro' : '¡Todas las cuentas están al día!'}
                 </p>
                 <p className="text-sm text-slate-500 font-medium mt-1">
-                  {busqueda.trim()
-                    ? 'Intenta buscar con otro nombre o número de celular.'
+                  {hayFiltrosActivos
+                    ? 'Intenta limpiar los filtros o buscar con otro nombre o número.'
                     : 'No se encontraron deudas pendientes de cobro en este momento.'}
                 </p>
               </motion.div>
@@ -541,6 +597,7 @@ export default function Fiados() {
                             onClick={() => {
                               if (accionEnCursoRef.current) return;
                               setMetodoPagoCobro('EFECTIVO');
+                              setMontoRecibidoCobro('');
                               setModalCobro(fiado);
                             }}
                             disabled={estaCobrando || estaAvisando}
@@ -554,21 +611,21 @@ export default function Fiados() {
                   })}
                 </div>
 
-                {/* PIE DE PAGINACIÓN PROGRESIVA (30 EN 30) */}
-                <div className="px-5 py-3.5 bg-white border border-slate-200/90 rounded-2xl shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <p className="text-xs font-semibold text-slate-500">
+                {/* PIE DE PAGINACIÓN PROGRESIVA CENTRADO Y CON ESPACIO (30 EN 30) */}
+                <div className="px-5 py-5 bg-white border border-slate-200/90 rounded-2xl shadow-2xs flex flex-col items-center justify-center gap-3 text-center">
+                  <p className="text-xs sm:text-sm font-semibold text-slate-500">
                     Mostrando <strong className="text-slate-800">{fiadosVisibles.length}</strong> de{' '}
                     <strong className="text-slate-800">{fiadosFiltrados.length}</strong> cuenta(s) pendiente(s)
-                    {busqueda.trim() ? ' encontradas' : ''}
+                    {hayFiltrosActivos ? ' filtradas' : ''}
                   </p>
 
                   {restantesFiados > 0 && (
                     <button
                       type="button"
                       onClick={() => setLimiteVisible(prev => prev + BLOQUE_CARGA)}
-                      className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs cursor-pointer"
+                      className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-6 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
                     >
-                      <FaChevronDown size={11} />
+                      <FaChevronDown size={12} />
                       <span>
                         Cargar {Math.min(BLOQUE_CARGA, restantesFiados)} cuenta{Math.min(BLOQUE_CARGA, restantesFiados) === 1 ? '' : 's'} más
                       </span>
@@ -652,7 +709,7 @@ export default function Fiados() {
         )}
       </AnimatePresence>
 
-      {/* MODAL DE CONFIRMACIÓN DE COBRO (EFECTIVO, YAPE/PLIN, BANCOS) */}
+      {/* MODAL DE CONFIRMACIÓN DE COBRO (EFECTIVO, YAPE/PLIN, BANCOS + VUELTO RÁPIDO) */}
       <AnimatePresence>
         {modalCobro && (
           <div className="fixed inset-0 bg-slate-950/70 z-[80] flex items-center justify-center p-4 backdrop-blur-xs">
@@ -687,8 +744,8 @@ export default function Fiados() {
                 </div>
               </div>
 
-              {/* SELECTOR DE MÉTODO DE PAGO CON LOGOS REALES (Responsive móvil/tablet) */}
-              <div className="mb-6">
+              {/* SELECTOR DE MÉTODO DE PAGO CON LOGOS REALES */}
+              <div className="mb-4">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   ¿Con qué medio de pago canceló el cliente?
                 </label>
@@ -710,7 +767,7 @@ export default function Fiados() {
                   <button
                     type="button"
                     disabled={procesandoId === modalCobro.id}
-                    onClick={() => setMetodoPagoCobro('YAPE_PLIN')}
+                    onClick={() => { setMetodoPagoCobro('YAPE_PLIN'); setMontoRecibidoCobro(''); }}
                     className={`py-2.5 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold border transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer disabled:opacity-60 ${
                       metodoPagoCobro === 'YAPE_PLIN'
                         ? 'bg-purple-50/80 border-[#742384] text-purple-950 shadow-2xs ring-1 ring-[#742384]/40'
@@ -724,7 +781,7 @@ export default function Fiados() {
                   <button
                     type="button"
                     disabled={procesandoId === modalCobro.id}
-                    onClick={() => setMetodoPagoCobro('TRANSFERENCIA')}
+                    onClick={() => { setMetodoPagoCobro('TRANSFERENCIA'); setMontoRecibidoCobro(''); }}
                     className={`py-2.5 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold border transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer disabled:opacity-60 ${
                       metodoPagoCobro === 'TRANSFERENCIA'
                         ? 'bg-blue-50/80 border-blue-600 text-blue-950 shadow-2xs ring-1 ring-blue-500/40'
@@ -736,12 +793,44 @@ export default function Fiados() {
                   </button>
                 </div>
               </div>
+
+              {/* Calculadora rápida de vuelto (opcional, solo en Efectivo) */}
+              {metodoPagoCobro === 'EFECTIVO' && (
+                <div className="p-3 bg-slate-50/90 border border-slate-200/80 rounded-xl space-y-2 mb-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider shrink-0">
+                      Paga con (S/):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.10"
+                      min="0"
+                      value={montoRecibidoCobro}
+                      onChange={e => setMontoRecibidoCobro(e.target.value)}
+                      placeholder={Number(modalCobro.monto).toFixed(2)}
+                      className="w-28 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-emerald-500 outline-none text-right font-mono font-bold text-sm text-slate-900"
+                    />
+                  </div>
+                  {tieneMontoRecibido && (
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/70 text-xs">
+                      <span className="font-bold text-slate-600">
+                        {vueltoCobro >= 0 ? 'Vuelto a entregar:' : 'Falta completar:'}
+                      </span>
+                      <span className={`font-mono font-extrabold text-sm ${
+                        vueltoCobro >= 0 ? 'text-emerald-700' : 'text-red-600'
+                      }`}>
+                        S/ {Math.abs(vueltoCobro).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="flex gap-3 mt-auto">
                 <button 
                   type="button"
                   disabled={procesandoId === modalCobro.id}
-                  onClick={() => setModalCobro(null)}
+                  onClick={() => { setModalCobro(null); setMontoRecibidoCobro(''); }}
                   className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all text-sm disabled:opacity-50 cursor-pointer"
                 >
                   Cancelar
@@ -782,8 +871,9 @@ export default function Fiados() {
                 </div>
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setModalDirectorio(false)}
-                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer disabled:opacity-40"
                 >
                   <FaTimes size={18} />
                 </button>
@@ -807,7 +897,7 @@ export default function Fiados() {
                     placeholder="Celular (9 dígitos)"
                     value={nuevoVecino.telefono}
                     onChange={e => {
-                      let num = e.target.value.replace(/\D/g, '');
+                      const num = e.target.value.replace(/\D/g, '');
                       if (num.length > 0 && !num.startsWith('9')) return;
                       setNuevoVecino({ ...nuevoVecino, telefono: num.slice(0, 9) });
                     }}
@@ -834,7 +924,7 @@ export default function Fiados() {
               </form>
 
               {/* Buscador interno del directorio */}
-              {clientesDirectorio.length > 5 && (
+              {clientesDirectorio.length > 0 && (
                 <div className="px-4 sm:px-5 pt-3.5 pb-1 bg-white shrink-0">
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -842,7 +932,7 @@ export default function Fiados() {
                     </div>
                     <input
                       type="text"
-                      placeholder="Filtrar vecino registrado..."
+                      placeholder="Filtrar vecino por nombre o celular..."
                       value={busquedaDirectorio}
                       onChange={e => {
                         setBusquedaDirectorio(e.target.value);
@@ -871,7 +961,7 @@ export default function Fiados() {
               <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-2.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 {vecinosFiltrados.length === 0 ? (
                   <p className="text-center text-sm text-slate-400 py-8 font-medium">
-                    {busquedaDirectorio.trim()
+                    {qDirectorio
                       ? 'No se encontraron vecinos con ese filtro.'
                       : 'Aún no hay vecinos registrados en el directorio.'}
                   </p>
@@ -937,11 +1027,11 @@ export default function Fiados() {
                     })}
 
                     {restantesVecinos > 0 && (
-                      <div className="pt-2 text-center">
+                      <div className="pt-3 pb-1 text-center">
                         <button
                           type="button"
                           onClick={() => setLimiteDirectorio(prev => prev + BLOQUE_CARGA)}
-                          className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs cursor-pointer"
+                          className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-5 py-2.5 rounded-xl transition-colors shadow-2xs cursor-pointer"
                         >
                           <FaChevronDown size={11} />
                           <span>
