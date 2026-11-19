@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaSearch, FaShoppingCart, FaTrash, FaPlus, FaMinus, FaCamera, FaUser, FaFileInvoice, FaTimes, FaEnvelope, FaWhatsapp, FaPrint, FaCheckCircle, FaBarcode, FaExternalLinkAlt } from 'react-icons/fa';
 import axios from 'axios';
@@ -11,19 +11,17 @@ import ComprobanteDetallado from '../components/ComprobanteDetallado';
 const socket = io(`https://proyecto-gestion-de-ventas-inteligente.onrender.com`);
 
 const LogoEfectivo = () => (
-  <div className="flex items-center justify-center w-8 h-6 rounded bg-emerald-700 text-white font-bold text-xs shadow-2xs shrink-0 border border-emerald-800">
+  <div className="flex items-center justify-center w-7 h-5 rounded bg-emerald-700 text-white font-bold text-[11px] shadow-2xs shrink-0 border border-emerald-800">
     S/
   </div>
 );
 
 const LogosYapePlin = () => (
   <div className="flex items-center -space-x-1.5 shrink-0">
-    {/* Logo Yape */}
-    <div className="w-6 h-6 rounded-md bg-[#742384] text-white flex items-center justify-center font-black text-[11px] shadow-2xs border border-white z-10">
+    <div className="w-5 h-5 rounded-md bg-[#742384] text-white flex items-center justify-center font-black text-[10px] shadow-2xs border border-white z-10">
       y
     </div>
-    {/* Logo Plin */}
-    <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-[#00A8E8] to-[#00E5FF] text-white flex items-center justify-center font-extrabold text-[9px] shadow-2xs border border-white">
+    <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#00A8E8] to-[#00E5FF] text-white flex items-center justify-center font-extrabold text-[8px] shadow-2xs border border-white">
       plin
     </div>
   </div>
@@ -31,8 +29,8 @@ const LogosYapePlin = () => (
 
 const LogosBancos = () => (
   <div className="flex items-center gap-0.5 shrink-0">
-    <span className="px-1.5 py-0.5 rounded bg-[#002A8D] text-white font-black text-[9px] tracking-tighter">BCP</span>
-    <span className="px-1.5 py-0.5 rounded bg-[#009B3A] text-white font-black text-[9px] tracking-tighter">IBK</span>
+    <span className="px-1 py-0.5 rounded bg-[#002A8D] text-white font-black text-[8px] tracking-tighter">BCP</span>
+    <span className="px-1 py-0.5 rounded bg-[#009B3A] text-white font-black text-[8px] tracking-tighter">IBK</span>
   </div>
 );
 
@@ -54,6 +52,7 @@ export default function Ventas() {
   // Estados de UI
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const procesandoRef = useRef(false);
   const [ventaGenerada, setVentaGenerada] = useState(null);
   const [isLoadingDoc, setIsLoadingDoc] = useState(false);
 
@@ -232,32 +231,34 @@ export default function Ventas() {
 
   // --- PROCESAMIENTO DE VENTA ---
   const handleProcesarVenta = async (esFiado = false) => {
-    if (carrito.length === 0) return toast.error('El carrito está vacío.');
+    if (procesandoRef.current) return;
+    if (carrito.length === 0) return toast.error('El carrito está vacío.', { id: 'pos-validacion' });
 
     if (esFiado) {
-      if (!cliente.nombre.trim()) return toast.error('Ingrese el nombre del vecino para fiarle.');
+      if (!cliente.nombre.trim()) return toast.error('Ingrese el nombre del vecino para fiarle.', { id: 'pos-validacion' });
       if (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9')) {
-        return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');
+        return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.', { id: 'pos-validacion' });
       }
     }
 
     if (tipoComprobante === 'FACTURA') {
-      if (!cliente.documento || cliente.documento.length !== 11) return toast.error('Ingrese un RUC válido de 11 dígitos.');
-      if (!cliente.nombre.trim()) return toast.error('Ingrese la Razón Social.');
+      if (!cliente.documento || cliente.documento.length !== 11) return toast.error('Ingrese un RUC válido de 11 dígitos.', { id: 'pos-validacion' });
+      if (!cliente.nombre.trim()) return toast.error('Ingrese la Razón Social.', { id: 'pos-validacion' });
     } else if (tipoComprobante === 'BOLETA') {
-      if (!cliente.documento || cliente.documento.length !== 8) return toast.error('Ingrese un DNI válido de 8 dígitos.');
-      if (!cliente.nombre.trim()) return toast.error('Ingrese el Nombre del cliente.');
+      if (!cliente.documento || cliente.documento.length !== 8) return toast.error('Ingrese un DNI válido de 8 dígitos.', { id: 'pos-validacion' });
+      if (!cliente.nombre.trim()) return toast.error('Ingrese el Nombre del cliente.', { id: 'pos-validacion' });
     }
 
     if (tipoComprobante !== 'TICKET' && !esFiado) {
-      if (metodoEnvio === 'CORREO' && !cliente.correo.trim()) return toast.error('Ingrese el correo electrónico para enviar el comprobante.');
+      if (metodoEnvio === 'CORREO' && !cliente.correo.trim()) return toast.error('Ingrese el correo electrónico para enviar el comprobante.', { id: 'pos-validacion' });
       if (metodoEnvio === 'WHATSAPP' && (!cliente.telefono || cliente.telefono.length !== 9 || !cliente.telefono.startsWith('9'))) {
-        return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.');
+        return toast.error('El número de WhatsApp debe tener 9 dígitos y empezar con 9.', { id: 'pos-validacion' });
       }
     }
 
     const metodoPagoFinal = esFiado ? 'FIADO' : metodoPago;
 
+    procesandoRef.current = true;
     setIsProcessing(true);
     try {
       const token = localStorage.getItem('token');
@@ -283,7 +284,7 @@ export default function Ventas() {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      toast.success('¡Venta registrada con éxito!', { icon: '✅' });
+      toast.success('Venta registrada con éxito.', { id: 'pos-exito' });
       
       setVentaGenerada({
         ...res.data.venta,
@@ -323,8 +324,9 @@ export default function Ventas() {
       cargarCatalogo();
 
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Ocurrió un error al procesar la venta.');
+      toast.error(error.response?.data?.message || 'Ocurrió un error al procesar la venta.', { id: 'pos-error' });
     } finally {
+      procesandoRef.current = false;
       setIsProcessing(false);
     }
   };
@@ -346,48 +348,48 @@ export default function Ventas() {
   );
 
   return (
-    <div className="flex flex-col gap-6 text-slate-800 pb-16 lg:pb-2 font-sans antialiased">
+    <div className="flex flex-col gap-5 text-slate-800 pb-24 lg:pb-6 font-sans antialiased">
       
-      {/* CABECERA PRINCIPAL (Inspirada en la jerarquía de Figma) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      {/* CABECERA PRINCIPAL */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Punto de Venta
           </h1>
-          <p className="text-sm text-slate-600 font-medium mt-1">
+          <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 truncate">
             Módulo de facturación y despacho rápido • Cajero: <span className="font-bold text-slate-900">{usuario.nombre || 'Activo'}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-3 text-sm text-slate-700 bg-white px-4 py-2.5 rounded-xl border border-slate-200/90 shadow-[0_2px_12px_rgba(15,23,42,0.05)] self-start sm:self-auto">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/15"></span>
+        <div className="inline-flex items-center gap-2.5 text-xs sm:text-sm text-slate-700 bg-white px-3.5 py-2 rounded-xl border border-slate-200/90 shadow-[0_2px_12px_rgba(15,23,42,0.05)] self-start sm:self-auto whitespace-nowrap shrink-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/15 shrink-0"></span>
           <span className="font-semibold text-slate-700">SUNAT / OSE En Línea</span>
           <span className="text-slate-300">|</span>
           <span className="font-mono font-bold text-slate-900">{new Date().toLocaleDateString('es-PE')}</span>
         </div>
       </div>
 
-      {/* CONTENEDOR SIMÉTRICO DE 2 PANELES CON SOMBRA ESTILO FIGMA */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:h-[calc(100vh-9.5rem)] items-stretch">
+      {/* CONTENEDOR SIMÉTRICO DE 2 PANELES */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:h-[calc(100vh-10.5rem)] items-stretch">
         
-        {/* PANEL IZQUIERDO (7 COLUMNAS): CATÁLOGO Y TABLA DE VENTA */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden min-h-[480px] lg:min-h-0">
+        {/* PANEL IZQUIERDO: CATÁLOGO Y TABLA DE VENTA */}
+        <div className="lg:col-span-7 xl:col-span-8 flex flex-col bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden min-h-[380px] sm:min-h-[430px] lg:min-h-0">
           
           {/* Barra superior de búsqueda */}
-          <div className="p-5 bg-white border-b border-slate-100 shrink-0">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <FaSearch className="text-slate-400 text-base" />
+          <div className="p-4 sm:p-5 bg-white border-b border-slate-100 shrink-0">
+            <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
+              <div className="relative flex-1 min-w-0">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <FaSearch className="text-slate-400 text-sm" />
                 </div>
                 <input 
                   type="text" 
-                  placeholder="Buscar producto por nombre o escanear código de barras..." 
+                  placeholder="Buscar producto por nombre o escanear código..." 
                   value={busqueda} 
                   onChange={(e) => { setBusqueda(e.target.value); setShowDropdown(true); }}
                   onFocus={() => setShowDropdown(true)}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-verde-pastel/30 outline-none text-sm font-medium text-slate-800 placeholder:text-slate-400 transition-all" 
+                  className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-verde-pastel/30 outline-none text-sm font-medium text-slate-800 placeholder:text-slate-400 transition-all" 
                 />
 
                 <AnimatePresence>
@@ -399,12 +401,12 @@ export default function Ventas() {
                       ) : (
                         productosBuscados.map(prod => (
                           <div key={prod.id} onMouseDown={() => { agregarAlCarrito(prod); setBusqueda(''); setShowDropdown(false); }} 
-                            className="px-4 py-3 hover:bg-verde-pastel/20 cursor-pointer flex justify-between items-center transition-colors">
-                            <div>
-                              <p className="text-sm font-bold text-slate-900">{prod.nombre}</p>
+                            className="px-4 py-3 hover:bg-verde-pastel/20 cursor-pointer flex justify-between items-center gap-3 transition-colors">
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-900 line-clamp-2">{prod.nombre}</p>
                               <p className="text-xs text-slate-500 font-mono mt-0.5">Código: {prod.codigo}</p>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right shrink-0">
                               <p className="text-emerald-700 font-extrabold text-sm">S/ {prod.precioVenta.toFixed(2)}</p>
                               <span className="inline-block text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md mt-0.5">
                                 Stock: {prod.stock} un.
@@ -421,7 +423,7 @@ export default function Ventas() {
               <button 
                 type="button"
                 onClick={() => setIsScannerOpen(true)}
-                className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-bold px-5 py-3 rounded-xl text-sm transition-all shadow-2xs flex items-center justify-center gap-2.5 whitespace-nowrap shrink-0 cursor-pointer"
+                className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-bold px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm transition-all shadow-2xs flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <FaCamera className="text-emerald-900 text-base" />
                 <span>Lector Cámara</span>
@@ -430,7 +432,7 @@ export default function Ventas() {
           </div>
           
           {/* Cuerpo de la tabla de productos */}
-          <div className="flex-1 overflow-y-auto bg-white">
+          <div className="flex-1 overflow-auto bg-white">
             {carrito.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8">
                 <div className="w-16 h-16 rounded-2xl bg-verde-pastel/30 text-emerald-700 flex items-center justify-center mb-4 shadow-2xs">
@@ -442,55 +444,57 @@ export default function Ventas() {
                 </p>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[540px]">
                 <thead className="bg-slate-50/90 border-b border-slate-200 sticky top-0 z-10">
-                  <tr className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    <th className="py-3.5 px-5">Código</th>
-                    <th className="py-3.5 px-4">Producto / Descripción</th>
-                    <th className="py-3.5 px-4 text-right">Precio Unit.</th>
-                    <th className="py-3.5 px-4 text-center">Cantidad</th>
-                    <th className="py-3.5 px-5 text-right">Subtotal</th>
+                  <tr className="text-[11px] xl:text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    <th className="py-3 px-4 hidden sm:table-cell">Código</th>
+                    <th className="py-3 px-4">Producto / Descripción</th>
+                    <th className="py-3 px-3 text-right">P. Unit.</th>
+                    <th className="py-3 px-3 text-center">Cantidad</th>
+                    <th className="py-3 px-4 text-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {carrito.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-5 font-mono text-xs font-semibold text-slate-600 whitespace-nowrap">
+                      <td className="py-3 px-4 font-mono text-xs font-semibold text-slate-600 whitespace-nowrap hidden sm:table-cell">
                         {item.codigo}
                       </td>
-                      <td className="py-3.5 px-4">
-                        <p className="font-bold text-slate-900 text-sm">{item.nombre}</p>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      <td className="py-3 px-4 max-w-[170px] sm:max-w-[230px] xl:max-w-[300px]">
+                        <p className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-2 leading-snug" title={item.nombre}>
+                          {item.nombre}
+                        </p>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                           Disponible: <span className={item.stock <= 5 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>{item.stock} un.</span>
                         </p>
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-slate-700 whitespace-nowrap">
+                      <td className="py-3 px-3 text-right font-mono font-semibold text-slate-700 text-xs sm:text-sm whitespace-nowrap">
                         S/ {item.precioVenta.toFixed(2)}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-3">
                         <div className="flex items-center justify-center">
-                          <div className="inline-flex items-center border border-slate-200 rounded-xl bg-slate-50 p-1 shadow-2xs">
+                          <div className="inline-flex items-center border border-slate-200 rounded-xl bg-slate-50 p-0.5 shadow-2xs">
                             <button 
                               type="button"
                               onClick={() => actualizarCantidad(item.id, -1)} 
-                              className={`p-2 rounded-lg transition-colors ${item.cantidad === 1 ? 'text-red-600 hover:bg-red-100/80' : 'text-slate-700 hover:bg-white'}`}
+                              className={`p-1.5 sm:p-2 rounded-lg transition-colors cursor-pointer ${item.cantidad === 1 ? 'text-red-600 hover:bg-red-100/80' : 'text-slate-700 hover:bg-white'}`}
                             >
-                              {item.cantidad === 1 ? <FaTrash size={12} /> : <FaMinus size={12} />}
+                              {item.cantidad === 1 ? <FaTrash size={11} /> : <FaMinus size={11} />}
                             </button>
-                            <span className="w-9 text-center text-sm font-extrabold text-slate-900">
+                            <span className="w-8 text-center text-xs sm:text-sm font-extrabold text-slate-900">
                               {item.cantidad}
                             </span>
                             <button 
                               type="button"
                               onClick={() => actualizarCantidad(item.id, 1)} 
-                              className="p-2 text-slate-700 hover:bg-white rounded-lg transition-colors"
+                              className="p-1.5 sm:p-2 text-slate-700 hover:bg-white rounded-lg transition-colors cursor-pointer"
                             >
-                              <FaPlus size={12} />
+                              <FaPlus size={11} />
                             </button>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3.5 px-5 text-right font-mono font-extrabold text-slate-900 text-base whitespace-nowrap">
+                      <td className="py-3 px-4 text-right font-mono font-extrabold text-slate-900 text-sm sm:text-base whitespace-nowrap">
                         S/ {(item.precioVenta * item.cantidad).toFixed(2)}
                       </td>
                     </tr>
@@ -501,7 +505,7 @@ export default function Ventas() {
           </div>
 
           {/* Pie de tabla simétrico */}
-          <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-200/80 flex justify-between items-center text-sm text-slate-600 font-medium shrink-0">
+          <div className="px-4 sm:px-5 py-3 bg-slate-50/80 border-t border-slate-200/80 flex justify-between items-center text-xs sm:text-sm text-slate-600 font-medium shrink-0">
             <span>Productos en lista: <strong className="text-slate-900 font-bold">{carrito.length}</strong></span>
             <span>Unidades totales: <strong className="text-slate-900 font-bold">{carrito.reduce((acc, i) => acc + i.cantidad, 0)}</strong></span>
           </div>
@@ -511,92 +515,92 @@ export default function Ventas() {
         <div className="lg:col-span-5 xl:col-span-4 flex flex-col bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
           
           {/* Cabecera compacta */}
-          <div className="px-5 py-3 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
-            <div className="flex items-center gap-2.5">
+          <div className="px-4 sm:px-5 py-3 bg-white border-b border-slate-100 flex justify-between items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
-                <FaFileInvoice size={15} />
+                <FaFileInvoice size={14} />
               </div>
-              <h2 className="text-slate-900 font-bold text-base tracking-tight">
+              <h2 className="text-slate-900 font-bold text-sm sm:text-base tracking-tight truncate">
                 Datos del Comprobante
               </h2>
             </div>
-            <span className="text-xs font-bold text-emerald-800 bg-verde-pastel/45 px-2.5 py-0.5 rounded-full">
+            <span className="text-[11px] font-bold text-emerald-800 bg-verde-pastel/45 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
               IGV {igvPorcentaje}%
             </span>
           </div>
 
           {/* Cuerpo con barra deslizante moderna */}
-          <div className="px-5 py-3.5 space-y-3 bg-white flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-emerald-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+          <div className="px-4 sm:px-5 py-3.5 space-y-3 bg-white flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-emerald-300 [&::-webkit-scrollbar-thumb]:rounded-full">
             
             {/* 1. Selector de Tipo de Operación */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Tipo de Operación
               </label>
-              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/70 gap-1">
+              <div className="grid grid-cols-4 bg-slate-100 p-1 rounded-xl border border-slate-200/70 gap-1">
                 <button type="button" onClick={() => setTipoComprobante('TICKET')} 
-                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'TICKET' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`py-1.5 px-1 text-[11px] xl:text-xs font-bold rounded-lg transition-all text-center leading-tight cursor-pointer ${tipoComprobante === 'TICKET' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Venta Rápida
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('BOLETA')} 
-                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'BOLETA' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`py-1.5 px-1 text-[11px] xl:text-xs font-bold rounded-lg transition-all text-center leading-tight cursor-pointer ${tipoComprobante === 'BOLETA' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Boleta
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('FACTURA')} 
-                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'FACTURA' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                  className={`py-1.5 px-1 text-[11px] xl:text-xs font-bold rounded-lg transition-all text-center leading-tight cursor-pointer ${tipoComprobante === 'FACTURA' ? 'bg-verde-pastel text-emerald-950 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                   Factura
                 </button>
                 <button type="button" onClick={() => setTipoComprobante('FIADO')} 
-                  className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${tipoComprobante === 'FIADO' ? 'bg-amber-500 text-white shadow-2xs' : 'text-amber-700 hover:bg-amber-100/60'}`}>
+                  className={`py-1.5 px-1 text-[11px] xl:text-xs font-bold rounded-lg transition-all text-center leading-tight cursor-pointer ${tipoComprobante === 'FIADO' ? 'bg-amber-500 text-white shadow-2xs' : 'text-amber-700 hover:bg-amber-100/60'}`}>
                   Fiado
                 </button>
               </div>
             </div>
 
-            {/* 2. Selector de Medio de Pago en formato horizontal compacto */}
+            {/* 2. Selector de Medio de Pago (apilado ordenado en laptop/tablet, horizontal en monitores 2xl) */}
             {tipoComprobante !== 'FIADO' && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Medio de Pago Recibido
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setMetodoPago('EFECTIVO')}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-1.5 rounded-xl text-[11px] xl:text-xs font-bold border transition-all flex flex-col 2xl:flex-row items-center justify-center gap-1 2xl:gap-1.5 cursor-pointer ${
                       metodoPago === 'EFECTIVO'
                         ? 'bg-verde-pastel/25 border-emerald-500 text-emerald-950 shadow-2xs ring-1 ring-emerald-500/40'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <LogoEfectivo />
-                    <span>Efectivo</span>
+                    <span className="whitespace-nowrap">Efectivo</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setMetodoPago('YAPE_PLIN')}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-1.5 rounded-xl text-[11px] xl:text-xs font-bold border transition-all flex flex-col 2xl:flex-row items-center justify-center gap-1 2xl:gap-1.5 cursor-pointer ${
                       metodoPago === 'YAPE_PLIN'
                         ? 'bg-purple-50/80 border-[#742384] text-purple-950 shadow-2xs ring-1 ring-[#742384]/40'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <LogosYapePlin />
-                    <span>Yape/Plin</span>
+                    <span className="whitespace-nowrap">Yape/Plin</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setMetodoPago('TRANSFERENCIA')}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-1.5 rounded-xl text-[11px] xl:text-xs font-bold border transition-all flex flex-col 2xl:flex-row items-center justify-center gap-1 2xl:gap-1.5 cursor-pointer ${
                       metodoPago === 'TRANSFERENCIA'
                         ? 'bg-blue-50/80 border-blue-600 text-blue-950 shadow-2xs ring-1 ring-blue-500/40'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <LogosBancos />
-                    <span>Transf.</span>
+                    <span className="whitespace-nowrap">Transf.</span>
                   </button>
                 </div>
               </div>
@@ -608,9 +612,9 @@ export default function Ventas() {
                 
                 {tipoComprobante !== 'FIADO' && (
                   <div>
-                    <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between gap-2">
                       <span>{tipoComprobante === 'FACTURA' ? 'Número de RUC *' : 'Número de DNI *'}</span>
-                      <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded">
+                      <span className="text-[10px] sm:text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded whitespace-nowrap">
                         Autocompletado SUNAT
                       </span>
                     </label>
@@ -622,7 +626,7 @@ export default function Ventas() {
                       onChange={e => {
                         const limit = tipoComprobante === 'FACTURA' ? 11 : 8;
                         const num = e.target.value.replace(/\D/g, '').slice(0, limit);
-                        setCliente({...cliente, documento: num});
+                        setCliente({ ...cliente, documento: num });
                         if (num.length === limit) {
                           buscarDocumento(num, tipoComprobante);
                         }
@@ -634,18 +638,18 @@ export default function Ventas() {
                 
                 {/* Campo de Nombre con Autocompletado si es FIADO */}
                 <div className="relative">
-                  <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between gap-2">
                     <span>
                       {tipoComprobante === 'FIADO' ? 'Nombre del Vecino / Cliente *' : (tipoComprobante === 'FACTURA' ? 'Razón Social *' : 'Nombre del Cliente *')}
                     </span>
                     {tipoComprobante === 'FIADO' && cliente.nombre.trim().length > 1 && (
                       vecinoCoincidente ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-verde-pastel/45 px-2 py-0.5 rounded-md">
+                        <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-emerald-800 bg-verde-pastel/45 px-2 py-0.5 rounded-md whitespace-nowrap">
                           <FaCheckCircle size={10} /> Vecino registrado
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
-                          <FaPlus size={9} /> Nuevo vecino (se guardará)
+                        <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md whitespace-nowrap">
+                          <FaPlus size={9} /> Nuevo vecino
                         </span>
                       )
                     )}
@@ -694,12 +698,13 @@ export default function Ventas() {
                               });
                               setShowVecinosDropdown(false);
                             }}
-                            className="px-3.5 py-2 hover:bg-verde-pastel/25 cursor-pointer flex justify-between items-center transition-colors"
+                            className="px-3.5 py-2 hover:bg-verde-pastel/25 cursor-pointer flex justify-between items-center transition-colors gap-2"
                           >
-                            <span className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
-                              <FaUser size={11} className="text-slate-400" /> {vecino.nombre}
+                            <span className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2 min-w-0 truncate">
+                              <FaUser size={11} className="text-slate-400 shrink-0" />
+                              <span className="truncate">{vecino.nombre}</span>
                             </span>
-                            <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                            <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shrink-0">
                               {vecino.telefono || 'Sin número'}
                             </span>
                           </div>
@@ -722,12 +727,11 @@ export default function Ventas() {
                       onChange={e => {
                         let num = e.target.value.replace(/\D/g, '');
                         if (num.length > 0 && !num.startsWith('9')) return; 
-                        setCliente({...cliente, telefono: num.slice(0, 9)});
+                        setCliente({ ...cliente, telefono: num.slice(0, 9) });
                       }}
                       className="w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/40 outline-none text-sm font-mono font-semibold text-slate-900 transition-all" 
                     />
 
-                    {/* Mensaje explicativo corto o aviso si se cambió el celular de un vecino */}
                     {vecinoCoincidente && vecinoCoincidente.telefono && cliente.telefono && vecinoCoincidente.telefono !== cliente.telefono ? (
                       <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1.5 rounded-lg mt-1.5 flex items-center gap-1.5">
                         <FaCheckCircle className="text-amber-600 shrink-0" size={12} />
@@ -748,21 +752,21 @@ export default function Ventas() {
                     </label>
                     <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/70">
                       <button type="button" onClick={() => setMetodoEnvio('NINGUNO')} 
-                        className={`py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                        className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'NINGUNO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         Impresión
                       </button>
                       <button type="button" onClick={() => setMetodoEnvio('CORREO')} 
-                        className={`py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                        className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'CORREO' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         Correo
                       </button>
                       <button type="button" onClick={() => setMetodoEnvio('WHATSAPP')} 
-                        className={`py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                        className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${metodoEnvio === 'WHATSAPP' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
                         WhatsApp
                       </button>
                     </div>
 
                     {metodoEnvio === 'CORREO' && (
-                      <input type="email" required placeholder="cliente@correo.com" value={cliente.correo} onChange={e => setCliente({...cliente, correo: e.target.value})}
+                      <input type="email" required placeholder="cliente@correo.com" value={cliente.correo} onChange={e => setCliente({ ...cliente, correo: e.target.value })}
                         className="mt-2 w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-medium" />
                     )}
                     {metodoEnvio === 'WHATSAPP' && (
@@ -771,7 +775,7 @@ export default function Ventas() {
                         onChange={e => {
                           let num = e.target.value.replace(/\D/g, '');
                           if (num.length > 0 && !num.startsWith('9')) return;
-                          setCliente({...cliente, telefono: num.slice(0, 9)});
+                          setCliente({ ...cliente, telefono: num.slice(0, 9) });
                         }}
                         className="mt-2 w-full px-3 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-sm font-mono font-semibold" />
                     )}
@@ -789,7 +793,7 @@ export default function Ventas() {
           </div>
 
           {/* 4. Pie Compacto de Totales y Botón de Cobro */}
-          <div className="px-5 py-3.5 border-t border-slate-200/80 bg-slate-50/70 shrink-0">
+          <div className="px-4 sm:px-5 py-3.5 border-t border-slate-200/80 bg-slate-50/70 shrink-0">
             {tipoComprobante !== 'TICKET' && (
               <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200/80 text-xs text-slate-600 font-medium">
                 <span>Gravada: <strong className="font-mono text-slate-800">S/ {subtotalBase.toFixed(2)}</strong></span>
@@ -844,7 +848,7 @@ export default function Ventas() {
                     Lector de Código de Barras
                   </h3>
                 </div>
-                <button onClick={() => setIsScannerOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <button type="button" onClick={() => setIsScannerOpen(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
                   <FaTimes size={18} />
                 </button>
               </div>

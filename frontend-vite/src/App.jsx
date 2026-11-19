@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster, ToastBar, useToasterStore } from 'react-hot-toast';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -52,44 +53,69 @@ axios.interceptors.response.use(
 
 const IAPlaceholder = () => <div className="text-white"><h1 className="text-3xl font-bold text-dorado mb-4">Panel de Asistente IA</h1></div>;
 
+// Evita que las notificaciones se apilen hacia abajo si alguien presiona un botón varias veces
+function LimitadorToasts({ max = 1 }) {
+  const { toasts } = useToasterStore();
+
+  useEffect(() => {
+    toasts
+      .filter((t) => t.visible)
+      .filter((_, i) => i >= max)
+      .forEach((t) => toast.dismiss(t.id));
+  }, [toasts, max]);
+
+  return null;
+}
+
 function App() {
   return (
   <BusinessProvider>
     {/* 2. Toaster Global: Funciona para toda la app, encima de todo */}
+    <LimitadorToasts max={1} />
     <Toaster 
       position="top-center" 
       reverseOrder={false}
+      gutter={8}
       containerStyle={{
-        top: 80, 
+        top: 24,
+        zIndex: 99999,
       }}
       toastOptions={{
+        duration: 5000,
         style: {
-          fontSize: '17px',
-          padding: '16px 32px',
-          maxWidth: '600px',
-          borderRadius: '16px',
+          fontSize: '15px',
+          padding: '14px 22px',
+          maxWidth: '520px',
+          borderRadius: '14px',
           fontWeight: '600',
-          textAlign: 'center',
-          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+          textAlign: 'left',
+          boxShadow: '0 10px 28px rgba(15, 23, 42, 0.18)',
+          cursor: 'pointer',
         },
         success: {
-          duration: 3000,
+          duration: 4500,
           style: {
             background: '#ecfdf5',
             color: '#065f46',
-            border: '1px solid #a7f3d0'
+            border: '1px solid #a7f3d0',
           },
         },
         error: {
-          duration: 3500,
+          duration: 6500,
           style: {
             background: '#fef2f2',
             color: '#991b1b',
-            border: '1px solid #fecaca'
+            border: '1px solid #fecaca',
           },
-        }
+        },
       }}
-    />
+    >
+      {(t) => (
+        <div onClick={() => toast.dismiss(t.id)} title="Clic para cerrar">
+          <ToastBar toast={t} />
+        </div>
+      )}
+    </Toaster>
     
     <Router>
       <Routes>
