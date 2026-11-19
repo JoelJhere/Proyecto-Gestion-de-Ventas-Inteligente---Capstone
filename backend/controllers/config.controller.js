@@ -71,3 +71,54 @@ export const actualizarConfiguracion = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar configuración' });
   }
 };
+
+// 3. Configurar porcentaje de ganancia automático para productos (SaaS)
+export const actualizarMargenGanancia = async (req, res) => {
+  const negocioId = req.user.negocioId;
+
+  if (!negocioId) {
+    return res.status(400).json({ message: 'Usuario no asociado a ningún negocio.' });
+  }
+
+  const { autoMargenActivo, porcentajeGanancia } = req.body;
+  const activar = Boolean(autoMargenActivo);
+  const porcentajeNum =
+    porcentajeGanancia !== '' && porcentajeGanancia !== null && porcentajeGanancia !== undefined
+      ? parseFloat(porcentajeGanancia)
+      : null;
+
+  if (activar) {
+    if (porcentajeNum === null || Number.isNaN(porcentajeNum) || porcentajeNum <= 0 || porcentajeNum > 500) {
+      return res.status(400).json({
+        message: 'Para activar el cálculo automático debes ingresar un porcentaje válido entre 1% y 500%.'
+      });
+    }
+  }
+
+  try {
+    const configActualizada = await prisma.negocio.update({
+      where: { id: negocioId },
+      data: {
+        autoMargenActivo: activar,
+        porcentajeGanancia:
+          porcentajeNum !== null && !Number.isNaN(porcentajeNum) && porcentajeNum > 0
+            ? porcentajeNum
+            : null
+      }
+    });
+
+    const { nubefactToken, ...configPublica } = configActualizada;
+    res.json({
+      message: activar
+        ? `Cálculo automático activado con ${porcentajeNum}% de ganancia.`
+        : 'Cálculo automático de precios desactivado.',
+      config: {
+        ...configPublica,
+        nubefactTokenGuardado: Boolean(nubefactToken)
+      }
+    });
+  } catch (error) {
+    console.error('Error al actualizar margen de ganancia:', error);
+    res.status(500).json({ message: 'Error al guardar el porcentaje de ganancia.' });
+  }
+};

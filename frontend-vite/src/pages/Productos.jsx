@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FaPlus, FaEdit, FaBox, FaBarcode, FaTimes, FaSearch, 
-  FaCheck, FaCamera, FaPrint, FaBoxOpen, FaExclamationTriangle 
+  FaCheck, FaCamera, FaPrint, FaBoxOpen, FaExclamationTriangle,
+  FaPercentage, FaChevronDown
 } from 'react-icons/fa';
+import { useBusiness } from '../context/BusinessContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Barcode from 'react-barcode';
@@ -140,6 +142,61 @@ export default function Productos() {
   const [modoPrecioCrear, setModoPrecioCrear] = useState(null);
   const [modoPrecioEditar, setModoPrecioEditar] = useState('ambos');
 
+  const { businessConfig, setBusinessConfig } = useBusiness();
+
+  // Paginación progresiva en bloques de 30 productos (mantiene rápida la tablet y el celular)
+  const BLOQUE_CARGA = 30;
+  const [limiteVisible, setLimiteVisible] = useState(BLOQUE_CARGA);
+
+  // Configuración del margen automático sincronizada desde la Base de Datos
+  const autoMargenActivo =
+    Boolean(businessConfig?.autoMargenActivo) && Number(businessConfig?.porcentajeGanancia) > 0;
+  const porcentajeGanancia = Number(businessConfig?.porcentajeGanancia) || 0;
+  const factorMargen = 1 + porcentajeGanancia / 100;
+
+  // Estados del Modal de Configuración de Margen
+  const [isMargenModalOpen, setIsMargenModalOpen] = useState(false);
+  const [formMargen, setFormMargen] = useState({ activo: false, porcentaje: '' });
+
+  const abrirModalMargen = () => {
+    setFormMargen({
+      activo: Boolean(businessConfig?.autoMargenActivo),
+      porcentaje: businessConfig?.porcentajeGanancia ? String(businessConfig.porcentajeGanancia) : ''
+    });
+    setIsMargenModalOpen(true);
+  };
+
+  const handleGuardarMargen = async (e) => {
+    e.preventDefault();
+    if (accionEnCursoRef.current) return;
+
+    const pct = parseFloat(formMargen.porcentaje);
+    if (formMargen.activo && (Number.isNaN(pct) || pct <= 0 || pct > 500)) {
+      return toast.error('Ingresa un porcentaje de ganancia válido entre 1% y 500%.', { id: 'margen-accion' });
+    }
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const res = await axios.put('/configuracion/margen', {
+        autoMargenActivo: formMargen.activo,
+        porcentajeGanancia: formMargen.porcentaje
+      });
+
+      if (res.data?.config) {
+        setBusinessConfig(res.data.config);
+        localStorage.setItem('pos_config', JSON.stringify(res.data.config));
+      }
+      toast.success(res.data?.message || 'Configuración guardada.', { id: 'margen-accion' });
+      setIsMargenModalOpen(false);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'No se pudo guardar la configuración.', { id: 'margen-accion' });
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
   const abrirModalCrear = () => {
     setFormData({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
     setOrigenAutocompletado(null);
@@ -157,6 +214,11 @@ export default function Productos() {
 
   // --- CÁLCULO AUTOMÁTICO BIDIRECCIONAL (CREAR) ---
   const handleCambioCompraCrear = (val) => {
+    if (!autoMargenActivo) {
+      setFormData(prev => ({ ...prev, precioCompra: val }));
+      return;
+    }
+
     if (val === '') {
       if (modoPrecioCrear === 'compra') {
         setModoPrecioCrear(null);
@@ -171,7 +233,7 @@ export default function Productos() {
     const num = parseFloat(val);
     if (modoPrecioCrear === null || modoPrecioCrear === 'compra') {
       setModoPrecioCrear('compra');
-      const ventaSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num * 1.2) : '';
+      const ventaSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num * factorMargen) : '';
       setFormData(prev => ({ ...prev, precioCompra: val, precioVenta: ventaSugerida }));
     } else {
       setModoPrecioCrear('ambos');
@@ -180,6 +242,11 @@ export default function Productos() {
   };
 
   const handleCambioVentaCrear = (val) => {
+    if (!autoMargenActivo) {
+      setFormData(prev => ({ ...prev, precioVenta: val }));
+      return;
+    }
+
     if (val === '') {
       if (modoPrecioCrear === 'venta') {
         setModoPrecioCrear(null);
@@ -194,7 +261,7 @@ export default function Productos() {
     const num = parseFloat(val);
     if (modoPrecioCrear === null || modoPrecioCrear === 'venta') {
       setModoPrecioCrear('venta');
-      const compraSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num / 1.2) : '';
+      const compraSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num / factorMargen) : '';
       setFormData(prev => ({ ...prev, precioVenta: val, precioCompra: compraSugerida }));
     } else {
       setModoPrecioCrear('ambos');
@@ -204,6 +271,11 @@ export default function Productos() {
 
   // --- CÁLCULO AUTOMÁTICO BIDIRECCIONAL (EDITAR) ---
   const handleCambioCompraEditar = (val) => {
+    if (!autoMargenActivo) {
+      setEditingProduct(prev => ({ ...prev, precioCompra: val }));
+      return;
+    }
+
     if (val === '') {
       if (modoPrecioEditar === 'compra') {
         setModoPrecioEditar(null);
@@ -218,7 +290,7 @@ export default function Productos() {
     const num = parseFloat(val);
     if (modoPrecioEditar === null || modoPrecioEditar === 'compra') {
       setModoPrecioEditar('compra');
-      const ventaSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num * 1.2) : '';
+      const ventaSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num * factorMargen) : '';
       setEditingProduct(prev => ({ ...prev, precioCompra: val, precioVenta: ventaSugerida }));
     } else {
       setModoPrecioEditar('ambos');
@@ -227,6 +299,11 @@ export default function Productos() {
   };
 
   const handleCambioVentaEditar = (val) => {
+    if (!autoMargenActivo) {
+      setEditingProduct(prev => ({ ...prev, precioVenta: val }));
+      return;
+    }
+
     if (val === '') {
       if (modoPrecioEditar === 'venta') {
         setModoPrecioEditar(null);
@@ -241,7 +318,7 @@ export default function Productos() {
     const num = parseFloat(val);
     if (modoPrecioEditar === null || modoPrecioEditar === 'venta') {
       setModoPrecioEditar('venta');
-      const compraSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num / 1.2) : '';
+      const compraSugerida = !Number.isNaN(num) && num > 0 ? redondearUnDecimal(num / factorMargen) : '';
       setEditingProduct(prev => ({ ...prev, precioVenta: val, precioCompra: compraSugerida }));
     } else {
       setModoPrecioEditar('ambos');
@@ -389,6 +466,7 @@ export default function Productos() {
                 toast.success('Código escaneado exitosamente');
               } else if (scannerTarget === 'busqueda') {
                 setBusqueda(decodedText);
+                setLimiteVisible(BLOQUE_CARGA);
                 toast.success('Buscando producto...');
               }
             },
@@ -529,6 +607,9 @@ export default function Productos() {
     prod.codigo?.toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  const productosVisibles = productosFiltrados.slice(0, limiteVisible);
+  const restantesPorCargar = productosFiltrados.length - productosVisibles.length;
+
   // Métricas en vivo para las tarjetas superiores estilo Figma
   const productosActivos = productos.filter(p => p.estado);
   const stockCriticoCount = productosActivos.filter(p => p.stock <= (p.stockMinimo || 5)).length;
@@ -582,7 +663,10 @@ export default function Productos() {
               type="text" 
               placeholder="Buscar por nombre o código..." 
               value={busqueda} 
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                setLimiteVisible(BLOQUE_CARGA);
+              }}
               className="w-full pl-11 pr-12 py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium placeholder:text-slate-400" 
             />
             
@@ -597,13 +681,29 @@ export default function Productos() {
           </div>
           
           {isAdmin && (
-            <button 
-              type="button"
-              onClick={abrirModalCrear} 
-              className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-2xs text-sm whitespace-nowrap cursor-pointer"
-            >
-              <FaPlus size={13} /> Nuevo Producto
-            </button>
+            <div className="flex gap-2.5 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={abrirModalMargen}
+                className={`flex-1 sm:flex-none py-2.5 px-3.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-xs sm:text-sm whitespace-nowrap cursor-pointer border ${
+                  autoMargenActivo
+                    ? 'bg-emerald-50 hover:bg-verde-pastel/40 text-emerald-900 border-emerald-300 shadow-2xs'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200/90 shadow-[0_2px_12px_rgba(15,23,42,0.04)]'
+                }`}
+                title="Configurar porcentaje automático de ganancia"
+              >
+                <FaPercentage size={12} className={autoMargenActivo ? 'text-emerald-700' : 'text-slate-400'} />
+                <span>{autoMargenActivo ? `Margen: ${porcentajeGanancia}%` : 'Margen Auto'}</span>
+              </button>
+
+              <button 
+                type="button"
+                onClick={abrirModalCrear} 
+                className="flex-1 sm:flex-none bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-2xs text-sm whitespace-nowrap cursor-pointer"
+              >
+                <FaPlus size={13} /> Nuevo Producto
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -665,7 +765,7 @@ export default function Productos() {
               {busqueda ? 'No se encontraron productos con ese criterio de búsqueda.' : 'Aún no hay productos registrados en el catálogo.'}
             </div>
           ) : (
-            productosFiltrados.map((prod) => {
+            productosVisibles.map((prod) => {
               const esStockBajo = prod.stock <= (prod.stockMinimo || 5);
               return (
                 <div key={prod.id} className={`p-4 space-y-3 ${prod.estado ? 'bg-white' : 'opacity-55 bg-slate-50/70'}`}>
@@ -804,7 +904,7 @@ export default function Productos() {
                   </td>
                 </tr>
               ) : (
-                productosFiltrados.map((prod) => {
+                productosVisibles.map((prod) => {
                   const esStockBajo = prod.stock <= (prod.stockMinimo || 5);
                   return (
                     <tr key={prod.id} className={`transition-colors ${prod.estado ? 'hover:bg-slate-50/80' : 'opacity-55 bg-slate-50/60'}`}>
@@ -899,6 +999,30 @@ export default function Productos() {
             </tbody>
           </table>
         </div>
+
+        {/* PIE DE PAGINACIÓN PROGRESIVA (30 EN 30) */}
+        {!isLoading && productosFiltrados.length > 0 && (
+          <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-slate-500">
+              Mostrando <strong className="text-slate-800">{productosVisibles.length}</strong> de{' '}
+              <strong className="text-slate-800">{productosFiltrados.length}</strong> producto(s)
+              {busqueda.trim() ? ' encontrados' : ''}
+            </p>
+
+            {restantesPorCargar > 0 && (
+              <button
+                type="button"
+                onClick={() => setLimiteVisible(prev => prev + BLOQUE_CARGA)}
+                className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs cursor-pointer"
+              >
+                <FaChevronDown size={11} />
+                <span>
+                  Cargar {Math.min(BLOQUE_CARGA, restantesPorCargar)} producto{Math.min(BLOQUE_CARGA, restantesPorCargar) === 1 ? '' : 's'} más
+                </span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* MODAL 0: CONFIRMAR ESTADO */}
@@ -1179,9 +1303,9 @@ export default function Productos() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Costo de Compra Unit. (S/)</label>
-                        {modoPrecioCrear === 'venta' && formData.precioCompra && (
+                        {autoMargenActivo && modoPrecioCrear === 'venta' && formData.precioCompra && (
                           <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-1.5 py-0.5 rounded">
-                            Auto ÷1.2
+                            Auto (-{porcentajeGanancia}%)
                           </span>
                         )}
                       </div>
@@ -1199,9 +1323,9 @@ export default function Productos() {
                     <div className="col-span-1 md:col-span-2">
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Precio de Venta al Público (S/) *</label>
-                        {modoPrecioCrear === 'compra' && formData.precioVenta && (
+                        {autoMargenActivo && modoPrecioCrear === 'compra' && formData.precioVenta && (
                           <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-2 py-0.5 rounded">
-                            Sugerido ×1.2 (editable)
+                            Sugerido +{porcentajeGanancia}% (editable)
                           </span>
                         )}
                       </div>
@@ -1333,16 +1457,16 @@ export default function Productos() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Costo Unitario (S/)</label>
-                        {editingProduct.precioVenta > 0 && (
+                        {autoMargenActivo && editingProduct.precioVenta > 0 && (
                           <button
                             type="button"
                             onClick={() => {
                               setModoPrecioEditar('ambos');
-                              setEditingProduct(prev => ({ ...prev, precioCompra: redondearUnDecimal(prev.precioVenta / 1.2) }));
+                              setEditingProduct(prev => ({ ...prev, precioCompra: redondearUnDecimal(prev.precioVenta / factorMargen) }));
                             }}
                             className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-2 py-0.5 rounded transition-colors cursor-pointer"
                           >
-                            Calcular ÷1.2
+                            Calcular (-{porcentajeGanancia}%)
                           </button>
                         )}
                       </div>
@@ -1358,16 +1482,16 @@ export default function Productos() {
                     <div className="col-span-1 md:col-span-2">
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Precio Unitario de Venta (S/) *</label>
-                        {editingProduct.precioCompra > 0 && (
+                        {autoMargenActivo && editingProduct.precioCompra > 0 && (
                           <button
                             type="button"
                             onClick={() => {
                               setModoPrecioEditar('ambos');
-                              setEditingProduct(prev => ({ ...prev, precioVenta: redondearUnDecimal(prev.precioCompra * 1.2) }));
+                              setEditingProduct(prev => ({ ...prev, precioVenta: redondearUnDecimal(prev.precioCompra * factorMargen) }));
                             }}
                             className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-2 py-0.5 rounded transition-colors cursor-pointer"
                           >
-                            Calcular ×1.2
+                            Calcular +{porcentajeGanancia}%
                           </button>
                         )}
                       </div>
@@ -1506,6 +1630,151 @@ export default function Productos() {
                 </div>
               </div>
 
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 5: CONFIGURACIÓN DE PORCENTAJE DE GANANCIA AUTOMÁTICO */}
+      <AnimatePresence>
+        {isMargenModalOpen && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden shadow-2xl border border-slate-200 flex flex-col"
+            >
+              <div className="px-6 py-4 bg-white border-b border-slate-100 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
+                    <FaPercentage size={17} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">Auto-ayuda de Precios</h3>
+                    <p className="text-xs text-slate-500 font-medium">Configura el margen de ganancia de tu bodega.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMargenModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                >
+                  <FaTimes size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleGuardarMargen} className="p-6 space-y-5 bg-white overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">                {/* Explicación clara para cualquier dueño de bodega */}
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs text-slate-600 leading-relaxed space-y-1.5">
+                  <p className="font-bold text-slate-800">¿Para qué sirve esta herramienta?</p>
+                  <p>
+                    Al registrar o editar un producto, te ayuda a calcular precios al instante usando el porcentaje de ganancia con el que trabaja tu bodega:
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1 text-slate-600">
+                    <li>Si ingresas primero tu <strong>Costo de Compra</strong>, calcula y sugiere el <strong>Precio de Venta</strong>.</li>
+                    <li>Si ingresas primero el <strong>Precio de Venta</strong>, calcula automáticamente tu <strong>Costo de Compra</strong>.</li>
+                  </ul>
+                  <p className="text-[11px] text-slate-500 pt-0.5">
+                    El resultado se redondea a un decimal y siempre podrás editar cualquier precio manualmente.
+                  </p>
+                </div>
+
+                {/* Interruptor Activar / Desactivar */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-white">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Activar cálculo automático</p>
+                    <p className="text-xs text-slate-500 font-medium">
+                      {formMargen.activo ? 'Activado para todos tus dispositivos' : 'Desactivado (ingreso manual libre)'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formMargen.activo}
+                    onClick={() => setFormMargen(prev => ({ ...prev, activo: !prev.activo }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer shrink-0 ${
+                      formMargen.activo ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        formMargen.activo ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Campo de porcentaje con símbolo % fijo */}
+                <div className={formMargen.activo ? 'opacity-100' : 'opacity-60'}>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    ¿Con qué porcentaje de ganancia trabaja tu bodega? {formMargen.activo ? '*' : ''}
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="500"
+                      disabled={!formMargen.activo}
+                      required={formMargen.activo}
+                      value={formMargen.porcentaje}
+                      onChange={e => setFormMargen(prev => ({ ...prev, porcentaje: e.target.value }))}
+                      placeholder="Ej: 20"
+                      className="w-full pl-4 pr-12 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-base font-extrabold font-mono disabled:bg-slate-100 disabled:cursor-not-allowed"
+                    />
+                    <span className="absolute right-0 inset-y-0 px-4 flex items-center bg-slate-100 border-l border-slate-200 rounded-r-xl text-sm font-extrabold text-slate-600 select-none">
+                      %
+                    </span>
+                  </div>
+                  {formMargen.activo && (!formMargen.porcentaje || parseFloat(formMargen.porcentaje) <= 0) && (
+                    <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
+                      Debes ingresar un porcentaje mayor a 0 para activar esta opción.
+                    </p>
+                  )}
+                </div>
+
+                {/* Ejemplo en vivo mientras el dueño escribe su porcentaje */}
+                {formMargen.activo && parseFloat(formMargen.porcentaje) > 0 && (() => {
+                  const pctEjemplo = parseFloat(formMargen.porcentaje);
+                  const factorEjemplo = 1 + pctEjemplo / 100;
+                  const ventaEjemplo = redondearUnDecimal(2.5 * factorEjemplo);
+                  const compraInversa = redondearUnDecimal(parseFloat(ventaEjemplo) / factorEjemplo);
+                  return (
+                    <div className="p-3.5 bg-verde-pastel/25 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 space-y-1">
+                      <p className="font-extrabold text-emerald-900">
+                        Ejemplo en vivo con {pctEjemplo}% de ganancia:
+                      </p>
+                      <p>
+                        • Si compras a <strong>S/ 2.50</strong> → sugerirá vender a <strong>S/ {ventaEjemplo}</strong>.
+                      </p>
+                      <p>
+                        • Si vendes a <strong>S/ {ventaEjemplo}</strong> → calculará tu compra en <strong>S/ {compraInversa}</strong>.
+                      </p>
+                    </div>
+                  );
+                })()}
+
+                <div className="pt-2 border-t border-slate-100 flex justify-end gap-2.5">
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => setIsMargenModalOpen(false)}
+                    className="px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={
+                      isSubmitting ||
+                      (formMargen.activo && (!formMargen.porcentaje || parseFloat(formMargen.porcentaje) <= 0 || parseFloat(formMargen.porcentaje) > 500))
+                    }
+                    className="px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {isSubmitting ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

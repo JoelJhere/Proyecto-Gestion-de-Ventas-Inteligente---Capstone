@@ -28,6 +28,10 @@ model Negocio {
 
   // Capital actual de la bodega en tiempo real
   saldoCaja          Float    @default(0.0)
+
+  // Auto-ayuda de cálculo de precios en Productos (desactivado por defecto)
+  autoMargenActivo   Boolean  @default(false)
+  porcentajeGanancia Float?
   
   // Credenciales SUNAT
   nubefactRuta       String?  @default("")
