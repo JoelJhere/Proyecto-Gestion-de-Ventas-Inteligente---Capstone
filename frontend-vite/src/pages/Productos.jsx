@@ -111,6 +111,206 @@ const SelectorCategoria = ({ categorias, valorActual, onChange }) => {
   );
 };
 
+// Buscador desplegable de proveedores para filtrar la tabla (optimizado para 50+ proveedores y tablets)
+const FiltroProveedorBuscable = ({
+  proveedores,
+  productos,
+  valorActual,
+  sinProveedorCount,
+  onChange
+}) => {
+  const [abierto, setAbierto] = useState(false);
+  const [textoBusqueda, setTextoBusqueda] = useState('');
+  const contenedorRef = useRef(null);
+
+  // Cerramos el menú al tocar o hacer clic fuera (más confiable en tablets que onBlur)
+  useEffect(() => {
+    const manejarClicExterno = (e) => {
+      if (contenedorRef.current && !contenedorRef.current.contains(e.target)) {
+        setAbierto(false);
+        setTextoBusqueda('');
+      }
+    };
+    document.addEventListener('mousedown', manejarClicExterno);
+    return () => document.removeEventListener('mousedown', manejarClicExterno);
+  }, []);
+
+  // Conteo optimizado en una sola pasada (evita recorrer todos los productos por cada proveedor)
+  const conteoPorProveedor = {};
+  for (const prod of productos) {
+    if (prod.proveedorId) {
+      conteoPorProveedor[prod.proveedorId] = (conteoPorProveedor[prod.proveedorId] || 0) + 1;
+    }
+  }
+
+  const obtenerEtiquetaActual = () => {
+    if (valorActual === 'TODOS') return `Todos los proveedores (${productos.length})`;
+    if (valorActual === 'SIN_PROVEEDOR') return `Sin proveedor asignado (${sinProveedorCount})`;
+    const prov = proveedores.find(p => String(p.id) === String(valorActual));
+    return prov ? `${prov.nombre} (${conteoPorProveedor[prov.id] || 0})` : `Todos los proveedores (${productos.length})`;
+  };
+
+  const etiquetaActual = obtenerEtiquetaActual();
+  const q = textoBusqueda.trim().toLowerCase();
+
+  const proveedoresCoincidentes = proveedores.filter(prov =>
+    prov.nombre.toLowerCase().includes(q) || (prov.ruc && prov.ruc.includes(q))
+  );
+
+  const mostrarOpcionTodos = !q || 'todos los proveedores'.includes(q);
+  const mostrarOpcionSinProv = sinProveedorCount > 0 && (!q || 'sin proveedor asignado'.includes(q));
+
+  const seleccionar = (nuevoValor) => {
+    onChange(nuevoValor);
+    setAbierto(false);
+    setTextoBusqueda('');
+  };
+
+  return (
+    <div ref={contenedorRef} className="relative w-full sm:w-80">
+      <div className="relative flex items-center">
+        <FaSearch className="absolute left-3.5 text-slate-400 pointer-events-none" size={12} />
+        <input
+          type="text"
+          value={abierto ? textoBusqueda : etiquetaActual}
+          placeholder={abierto ? 'Escribe para buscar proveedor...' : etiquetaActual}
+          onFocus={() => {
+            setAbierto(true);
+            setTextoBusqueda('');
+          }}
+          onChange={(e) => {
+            setTextoBusqueda(e.target.value);
+            if (!abierto) setAbierto(true);
+          }}
+          className={`w-full pl-9 pr-14 py-2 bg-slate-50/80 focus:bg-white border rounded-xl outline-none text-sm transition-all cursor-pointer focus:cursor-text ${
+            valorActual !== 'TODOS'
+              ? 'border-emerald-400 text-emerald-950 font-bold bg-emerald-50/40'
+              : 'border-slate-200 text-slate-800 font-semibold'
+          } focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30`}
+        />
+
+        <div className="absolute right-2.5 flex items-center gap-1">
+          {(valorActual !== 'TODOS' || (abierto && textoBusqueda)) && (
+            <button
+              type="button"
+              onClick={() => {
+                if (abierto && textoBusqueda) {
+                  setTextoBusqueda('');
+                } else {
+                  seleccionar('TODOS');
+                }
+              }}
+              className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              title="Restablecer a todos los proveedores"
+            >
+              <FaTimes size={12} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setAbierto(prev => !prev);
+              setTextoBusqueda('');
+            }}
+            className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+            title="Ver lista de proveedores"
+          >
+            <FaChevronDown
+              size={11}
+              className={`transition-transform duration-200 ${abierto ? 'rotate-180 text-emerald-700' : ''}`}
+            />
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {abierto && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            className="absolute left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.14)] z-30 max-h-60 overflow-y-auto divide-y divide-slate-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full"
+          >
+            {mostrarOpcionTodos && (
+              <button
+                type="button"
+                onClick={() => seleccionar('TODOS')}
+                className={`w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                  valorActual === 'TODOS'
+                    ? 'bg-verde-pastel/35 text-emerald-950 font-extrabold'
+                    : 'text-slate-700 hover:bg-slate-50 font-semibold'
+                }`}
+              >
+                <span className="flex items-center gap-2 truncate">
+                  {valorActual === 'TODOS' && <FaCheck size={11} className="text-emerald-700 shrink-0" />}
+                  <span className="truncate">Todos los proveedores</span>
+                </span>
+                <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md shrink-0">
+                  {productos.length}
+                </span>
+              </button>
+            )}
+
+            {mostrarOpcionSinProv && (
+              <button
+                type="button"
+                onClick={() => seleccionar('SIN_PROVEEDOR')}
+                className={`w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                  valorActual === 'SIN_PROVEEDOR'
+                    ? 'bg-amber-50 text-amber-900 font-extrabold'
+                    : 'text-slate-600 hover:bg-slate-50 font-semibold'
+                }`}
+              >
+                <span className="flex items-center gap-2 truncate">
+                  {valorActual === 'SIN_PROVEEDOR' && <FaCheck size={11} className="text-amber-700 shrink-0" />}
+                  <span className="truncate">Sin proveedor asignado</span>
+                </span>
+                <span className="text-xs font-mono font-bold bg-amber-100/70 text-amber-800 px-2 py-0.5 rounded-md shrink-0">
+                  {sinProveedorCount}
+                </span>
+              </button>
+            )}
+
+            {proveedoresCoincidentes.map(prov => {
+              const seleccionado = String(valorActual) === String(prov.id);
+              const cantidad = conteoPorProveedor[prov.id] || 0;
+              return (
+                <button
+                  key={prov.id}
+                  type="button"
+                  onClick={() => seleccionar(String(prov.id))}
+                  className={`w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                    seleccionado
+                      ? 'bg-verde-pastel/35 text-emerald-950 font-extrabold'
+                      : 'text-slate-800 hover:bg-verde-pastel/20 font-semibold'
+                  }`}
+                >
+                  <div className="min-w-0 flex items-center gap-2">
+                    {seleccionado && <FaCheck size={11} className="text-emerald-700 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="truncate">{prov.nombre}</p>
+                      {prov.ruc && <p className="text-[11px] font-mono text-slate-400">RUC: {prov.ruc}</p>}
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md shrink-0">
+                    {cantidad}
+                  </span>
+                </button>
+              );
+            })}
+
+            {!mostrarOpcionTodos && !mostrarOpcionSinProv && proveedoresCoincidentes.length === 0 && (
+              <div className="p-4 text-center text-xs font-medium text-slate-400">
+                No se encontraron proveedores para "{textoBusqueda}"
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export default function Productos() {
   const [productos, setProductos] = useState([]);
   const [proveedores, setProveedores] = useState([]);
@@ -795,27 +995,16 @@ export default function Productos() {
             <span>Proveedor:</span>
           </div>
 
-          <select
-            value={filtroProveedor}
-            onChange={(e) => {
-              setFiltroProveedor(e.target.value);
+          <FiltroProveedorBuscable
+            proveedores={proveedores}
+            productos={productos}
+            valorActual={filtroProveedor}
+            sinProveedorCount={sinProveedorCount}
+            onChange={(nuevoValor) => {
+              setFiltroProveedor(nuevoValor);
               setLimiteVisible(BLOQUE_CARGA);
             }}
-            className="w-full sm:w-72 px-3.5 py-2 bg-slate-50/80 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm font-semibold text-slate-800 cursor-pointer"
-          >
-            <option value="TODOS">Todos los proveedores ({productos.length})</option>
-            {sinProveedorCount > 0 && (
-              <option value="SIN_PROVEEDOR">Sin proveedor asignado ({sinProveedorCount})</option>
-            )}
-            {proveedores.map(prov => {
-              const cantidadProv = productos.filter(p => p.proveedorId === prov.id).length;
-              return (
-                <option key={prov.id} value={String(prov.id)}>
-                  {prov.nombre} ({cantidadProv})
-                </option>
-              );
-            })}
-          </select>
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
