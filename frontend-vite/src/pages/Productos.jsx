@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FaPlus, FaEdit, FaBox, FaBarcode, FaTimes, FaSearch, 
   FaCheck, FaCamera, FaPrint, FaBoxOpen, FaExclamationTriangle,
-  FaPercentage, FaChevronDown
+  FaPercentage, FaChevronDown, FaTruck
 } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
 import axios from 'axios';
@@ -117,6 +117,8 @@ export default function Productos() {
   const [categoriasGlobales, setCategoriasGlobales] = useState([]);
   const [productosGlobales, setProductosGlobales] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [filtroProveedor, setFiltroProveedor] = useState('TODOS');
+  const [soloStockBajo, setSoloStockBajo] = useState(false);
   
   // Estados de carga (Skeleton)
   const [isLoading, setIsLoading] = useState(true);
@@ -602,11 +604,30 @@ export default function Productos() {
     }
   };
 
-  const productosFiltrados = productos.filter(prod => 
-    prod.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || 
-    prod.codigo?.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const productosFiltrados = productos.filter(prod => {
+    // 1. Filtro por proveedor seleccionado
+    if (filtroProveedor === 'SIN_PROVEEDOR') {
+      if (prod.proveedorId) return false;
+    } else if (filtroProveedor !== 'TODOS') {
+      if (String(prod.proveedorId) !== String(filtroProveedor)) return false;
+    }
 
+    // 2. Filtro opcional de solo stock bajo (productos activos)
+    if (soloStockBajo) {
+      if (!prod.estado || prod.stock > (prod.stockMinimo || 5)) return false;
+    }
+
+    // 3. Buscador por nombre o código dentro de la selección actual
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      prod.nombre?.toLowerCase().includes(q) ||
+      prod.codigo?.toLowerCase().includes(q)
+    );
+  });
+
+  const sinProveedorCount = productos.filter(p => !p.proveedorId).length;
+  const hayFiltrosActivos = filtroProveedor !== 'TODOS' || soloStockBajo || busqueda.trim() !== '';
   const productosVisibles = productosFiltrados.slice(0, limiteVisible);
   const restantesPorCargar = productosFiltrados.length - productosVisibles.length;
 
@@ -640,8 +661,8 @@ export default function Productos() {
   ).sort();
 
   return (
-    <div className="flex flex-col gap-6 text-slate-800 pb-20 lg:pb-4 font-sans antialiased">
-      
+    <div className="flex flex-col gap-6 text-slate-800 pb-24 lg:pb-6 font-sans antialiased">      
+
       {/* CABECERA PRINCIPAL (Jerarquía limpia estilo Figma) */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
@@ -661,23 +682,42 @@ export default function Productos() {
             
             <input 
               type="text" 
-              placeholder="Buscar por nombre o código..." 
+              placeholder={
+                filtroProveedor === 'TODOS'
+                  ? 'Buscar por nombre o código...'
+                  : 'Buscar en este proveedor...'
+              }
               value={busqueda} 
               onChange={(e) => {
                 setBusqueda(e.target.value);
                 setLimiteVisible(BLOQUE_CARGA);
               }}
-              className="w-full pl-11 pr-12 py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium placeholder:text-slate-400" 
+              className={`w-full pl-11 ${busqueda ? 'pr-20' : 'pr-12'} py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium placeholder:text-slate-400`} 
             />
-            
-            <button 
-              type="button"
-              onClick={() => setScannerTarget('busqueda')}
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-emerald-700 transition-colors cursor-pointer"
-              title="Escanear código con cámara"
-            >
-              <FaCamera size={17} />
-            </button>
+
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-2">
+              {busqueda && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusqueda('');
+                    setLimiteVisible(BLOQUE_CARGA);
+                  }}
+                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                  title="Limpiar búsqueda"
+                >
+                  <FaTimes size={13} />
+                </button>
+              )}
+              <button 
+                type="button"
+                onClick={() => setScannerTarget('busqueda')}
+                className="text-slate-400 hover:text-emerald-700 transition-colors p-1 cursor-pointer"
+                title="Escanear código con cámara"
+              >
+                <FaCamera size={17} />
+              </button>
+            </div>
           </div>
           
           {isAdmin && (
@@ -747,75 +787,144 @@ export default function Productos() {
         </div>
       </div>
 
-      {/* LISTADO RESPONSIVE */}
-      <div className="md:bg-white md:border md:border-slate-200/90 md:rounded-2xl md:shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
+      {/* BARRA DE FILTROS: PROVEEDOR + SOLO STOCK BAJO */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/90 shadow-[0_4px_18px_rgba(15,23,42,0.04)] flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">
+            <FaTruck className="text-emerald-700" size={13} />
+            <span>Proveedor:</span>
+          </div>
+
+          <select
+            value={filtroProveedor}
+            onChange={(e) => {
+              setFiltroProveedor(e.target.value);
+              setLimiteVisible(BLOQUE_CARGA);
+            }}
+            className="w-full sm:w-72 px-3.5 py-2 bg-slate-50/80 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm font-semibold text-slate-800 cursor-pointer"
+          >
+            <option value="TODOS">Todos los proveedores ({productos.length})</option>
+            {sinProveedorCount > 0 && (
+              <option value="SIN_PROVEEDOR">Sin proveedor asignado ({sinProveedorCount})</option>
+            )}
+            {proveedores.map(prov => {
+              const cantidadProv = productos.filter(p => p.proveedorId === prov.id).length;
+              return (
+                <option key={prov.id} value={String(prov.id)}>
+                  {prov.nombre} ({cantidadProv})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setSoloStockBajo(prev => !prev);
+              setLimiteVisible(BLOQUE_CARGA);
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all inline-flex items-center gap-1.5 cursor-pointer ${
+              soloStockBajo
+                ? 'bg-red-50 text-red-700 border-red-300 shadow-2xs'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <FaExclamationTriangle size={11} className={soloStockBajo ? 'text-red-600' : 'text-slate-400'} />
+            <span>Solo Stock Bajo ({stockCriticoCount})</span>
+          </button>
+
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroProveedor('TODOS');
+                setSoloStockBajo(false);
+                setBusqueda('');
+                setLimiteVisible(BLOQUE_CARGA);
+              }}
+              className="px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <FaTimes size={11} /> Limpiar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* LISTADO RESPONSIVE: TARJETAS EN CELULAR/TABLET (< 1024px) + TABLA EN ESCRITORIO (>= 1024px) */}
+      <div className="lg:bg-white lg:border lg:border-slate-200/90 lg:rounded-2xl lg:shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
         
-        {/* VISTA MÓVIL */}
-        <div className="md:hidden space-y-3.5">
+        {/* VISTA CELULAR (1 col) Y TABLET VERTICAL (2 cols) */}
+        <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {isLoading ? (
             [...Array(4)].map((_, i) => (
-              <div key={i} className="p-4 animate-pulse space-y-2.5">
+              <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200/90 animate-pulse space-y-2.5">
                 <div className="h-4 bg-slate-200 rounded w-3/4"></div>
                 <div className="h-3 bg-slate-100 rounded w-1/2"></div>
                 <div className="h-8 bg-slate-100 rounded-lg w-full"></div>
               </div>
             ))
           ) : productosFiltrados.length === 0 ? (
-            <div className="p-10 text-center text-slate-500 font-medium text-sm">
-              {busqueda ? 'No se encontraron productos con ese criterio de búsqueda.' : 'Aún no hay productos registrados en el catálogo.'}
+            <div className="col-span-full bg-white rounded-2xl border border-slate-200/90 p-10 text-center text-slate-500 font-medium text-sm">
+              {hayFiltrosActivos
+                ? 'No se encontraron productos con los filtros seleccionados.'
+                : 'Aún no hay productos registrados en el catálogo.'}
             </div>
           ) : (
             productosVisibles.map((prod) => {
               const esStockBajo = prod.stock <= (prod.stockMinimo || 5);
               return (
-                <div key={prod.id} className={`p-4 space-y-3 rounded-2xl border border-slate-200/90 shadow-2xs ${prod.estado ? 'bg-white' : 'opacity-55 bg-slate-50/70'}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug" title={prod.nombre}>
-                        {prod.nombre}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                        <span className="font-mono text-[11px] font-semibold text-slate-500">{prod.codigo}</span>
-                        {prod.categoria && (
-                          <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                            {prod.categoria}
-                          </span>
-                        )}
+                <div key={prod.id} className={`p-4 space-y-3 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between ${prod.estado ? 'bg-white' : 'opacity-55 bg-slate-50/70'}`}>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug" title={prod.nombre}>
+                          {prod.nombre}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className="font-mono text-[11px] font-semibold text-slate-500">{prod.codigo}</span>
+                          {prod.categoria && (
+                            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                              {prod.categoria}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shrink-0 ${
-                      esStockBajo 
-                        ? 'bg-red-50 text-red-700 border-red-200' 
-                        : 'bg-verde-pastel/35 text-emerald-900 border-emerald-200'
-                    }`}>
-                      {prod.stock} un.
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs bg-slate-50/90 px-3 py-2 rounded-xl border border-slate-100">
-                    <div className="min-w-0 pr-2">
-                      <span className="text-slate-400 font-semibold block">Proveedor</span>
-                      <span className="text-slate-700 font-semibold truncate block">
-                        {prod.proveedor?.nombre || 'Sin asignar'}
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shrink-0 ${
+                        esStockBajo 
+                          ? 'bg-red-50 text-red-700 border-red-200' 
+                          : 'bg-verde-pastel/35 text-emerald-900 border-emerald-200'
+                      }`}>
+                        {prod.stock} un.
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0 text-right">
-                      <div>
-                        <span className="text-slate-400 font-semibold block">Compra</span>
-                        <span className="font-mono font-semibold text-slate-600">
-                          {prod.precioCompra ? `S/ ${prod.precioCompra.toFixed(2)}` : '-'}
+
+                    <div className="flex items-center justify-between text-xs bg-slate-50/90 px-3 py-2 rounded-xl border border-slate-100 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-slate-400 font-semibold block">Proveedor</span>
+                        <span className="text-slate-700 font-semibold truncate block" title={prod.proveedor?.nombre || ''}>
+                          {prod.proveedor?.nombre || 'Sin asignar'}
                         </span>
                       </div>
-                      <div>
-                        <span className="text-slate-400 font-semibold block">Venta</span>
-                        <span className="font-mono font-extrabold text-slate-900 text-sm">
-                          S/ {prod.precioVenta.toFixed(2)}
-                        </span>
+                      <div className="flex items-center gap-3 shrink-0 text-right">
+                        <div>
+                          <span className="text-slate-400 font-semibold block">Compra</span>
+                          <span className="font-mono font-semibold text-slate-600">
+                            {prod.precioCompra ? `S/ ${prod.precioCompra.toFixed(2)}` : '-'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-semibold block">Venta</span>
+                          <span className="font-mono font-extrabold text-slate-900 text-sm">
+                            S/ {prod.precioVenta.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                  <div className="flex items-center justify-end gap-2 pt-1">
                     <button 
                       type="button"
                       onClick={() => setBarcodeView(prod)} 
@@ -866,8 +975,8 @@ export default function Productos() {
           )}
         </div>
 
-        {/* VISTA TABLET Y ESCRITORIO (>= 768px): Tabla ordenada con control de textos largos */}
-        <div className="hidden md:block overflow-x-auto">
+        {/* VISTA ESCRITORIO (>= 1024px): Tabla completa */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[740px]">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
@@ -900,7 +1009,9 @@ export default function Productos() {
               ) : productosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="p-12 text-center text-slate-500 font-medium text-sm">
-                    {busqueda ? 'No se encontraron productos con ese criterio de búsqueda.' : 'Aún no hay productos registrados en el catálogo.'}
+                    {hayFiltrosActivos
+                      ? 'No se encontraron productos con los filtros seleccionados.'
+                      : 'Aún no hay productos registrados en el catálogo.'}
                   </td>
                 </tr>
               ) : (
@@ -1000,22 +1111,22 @@ export default function Productos() {
           </table>
         </div>
 
-        {/* PIE DE PAGINACIÓN PROGRESIVA (30 EN 30) */}
+        {/* PIE DE PAGINACIÓN PROGRESIVA CENTRADO Y CON ESPACIO (30 EN 30) */}
         {!isLoading && productosFiltrados.length > 0 && (
-          <div className="mt-3.5 md:mt-0 rounded-2xl md:rounded-none border border-slate-200/90 md:border-0 md:border-t">
-            <p className="text-xs font-semibold text-slate-500">
+          <div className="mt-4 lg:mt-0 px-5 py-5 bg-white lg:bg-slate-50/80 border border-slate-200/90 lg:border-0 lg:border-t lg:border-slate-100 rounded-2xl lg:rounded-none shadow-2xs lg:shadow-none flex flex-col items-center justify-center gap-3 text-center">
+            <p className="text-xs sm:text-sm font-semibold text-slate-500">
               Mostrando <strong className="text-slate-800">{productosVisibles.length}</strong> de{' '}
               <strong className="text-slate-800">{productosFiltrados.length}</strong> producto(s)
-              {busqueda.trim() ? ' encontrados' : ''}
+              {hayFiltrosActivos ? ' filtrados' : ''}
             </p>
 
             {restantesPorCargar > 0 && (
               <button
                 type="button"
                 onClick={() => setLimiteVisible(prev => prev + BLOQUE_CARGA)}
-                className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-6 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
               >
-                <FaChevronDown size={11} />
+                <FaChevronDown size={12} />
                 <span>
                   Cargar {Math.min(BLOQUE_CARGA, restantesPorCargar)} producto{Math.min(BLOQUE_CARGA, restantesPorCargar) === 1 ? '' : 's'} más
                 </span>
