@@ -2,22 +2,37 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   FaFileInvoice, FaSave, FaBuilding, FaPercentage, 
   FaEnvelope, FaPhone, FaReceipt, FaImage, 
-  FaUpload, FaMapMarkerAlt, FaKey, FaLink 
+  FaUpload, FaMapMarkerAlt, FaKey, FaLink,
+  FaEye, FaEyeSlash
 } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useBusiness } from '../context/BusinessContext';
 
 export default function Configuracion() {
-  const { setBusinessConfig } = useBusiness(); 
+  const { setBusinessConfig } = useBusiness();
   const [loading, setLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  
+  const [mostrarToken, setMostrarToken] = useState(false);
+
   const fileInputRef = useRef(null);
-  
+  const guardandoRef = useRef(false);
+
   const [formData, setFormData] = useState({
-    razonSocial: '', nombre: '', ruc: '', direccionFiscal: '', ciudad: '', departamento: '', telefono: '', email: '', mensajeTicket: '', impuestoPorcentaje: 18, logo: null,
-    nubefactRuta: '', nubefactToken: ''
+    razonSocial: '',
+    nombre: '',
+    ruc: '',
+    direccionFiscal: '',
+    ciudad: '',
+    departamento: '',
+    telefono: '',
+    email: '',
+    mensajeTicket: '',
+    impuestoPorcentaje: 18,
+    logo: null,
+    nubefactRuta: '',
+    nubefactToken: '',
+    nubefactTokenGuardado: false
   });
 
   const [previewLogo, setPreviewLogo] = useState(null);
@@ -27,14 +42,20 @@ export default function Configuracion() {
       setIsLoadingData(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/configuracion', { headers: { Authorization: `Bearer ${token}` } });
-        setFormData(res.data);
+        const res = await axios.get('/configuracion', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setFormData({
+          ...res.data,
+          nubefactToken: '',
+          nubefactTokenGuardado: Boolean(res.data.nubefactTokenGuardado)
+        });
         if (res.data.logo) {
           setPreviewLogo(res.data.logo);
         }
       } catch (error) {
-        console.error("Error al cargar configuración:", error);
-        toast.error('Ocurrió un problema al cargar la configuración.');
+        console.error('Error al cargar configuración:', error);
+        toast.error('Ocurrió un problema al cargar la configuración.', { id: 'config-carga' });
       } finally {
         setIsLoadingData(false);
       }
@@ -43,50 +64,61 @@ export default function Configuracion() {
   }, []);
 
   const handleLogoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('El logo no debe superar los 2MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewLogo(reader.result);
-        setFormData({ ...formData, logo: reader.result }); 
-      };
-      reader.readAsDataURL(file);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('El logo no debe superar los 2MB.', { id: 'config-accion' });
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreviewLogo(reader.result);
+      setFormData(prev => ({ ...prev, logo: reader.result }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const validarConfiguracion = (datos) => {
-    // Validación estricta SUNAT: RUC de 11 dígitos, empieza con 10 o 20
-    const rucStr = String(datos.ruc);
+    const rucStr = String(datos.ruc || '').trim();
     if (rucStr.length !== 11) {
-      toast.error('El RUC debe tener exactamente 11 dígitos.');
+      toast.error('El RUC debe tener exactamente 11 dígitos.', { id: 'config-accion' });
       return false;
     }
     if (!rucStr.startsWith('10') && !rucStr.startsWith('20')) {
-      toast.error('El RUC de la empresa debe iniciar con 10 o 20.');
+      toast.error('El RUC de la empresa debe iniciar con 10 o 20.', { id: 'config-accion' });
       return false;
     }
 
-    if (!datos.razonSocial.trim()) {
-      toast.error('La Razón Social es obligatoria para la facturación electrónica.');
+    if (!datos.nombre?.trim()) {
+      toast.error('El Nombre Comercial es obligatorio.', { id: 'config-accion' });
       return false;
     }
 
-    if (!datos.telefono || !datos.email) {
-      toast.error('El teléfono y correo son obligatorios como datos de contacto en la factura.');
+    if (!datos.razonSocial?.trim()) {
+      toast.error('La Razón Social es obligatoria para la facturación electrónica.', { id: 'config-accion' });
       return false;
     }
 
-    if (!datos.departamento || !datos.ciudad || !datos.direccionFiscal) {
-      toast.error('Debe completar todos los datos de ubicación (Departamento, Ciudad y Dirección).');
+    if (!datos.telefono?.trim() || !datos.email?.trim()) {
+      toast.error('El teléfono y correo son obligatorios como datos de contacto en la factura.', { id: 'config-accion' });
       return false;
     }
 
-    if (datos.impuestoPorcentaje < 0 || datos.impuestoPorcentaje > 100) {
-      toast.error('El impuesto IGV debe ser un valor válido.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email.trim())) {
+      toast.error('Ingresa un correo electrónico válido.', { id: 'config-accion' });
+      return false;
+    }
+
+    if (!datos.departamento?.trim() || !datos.ciudad?.trim() || !datos.direccionFiscal?.trim()) {
+      toast.error('Debe completar todos los datos de ubicación (Departamento, Ciudad y Dirección).', { id: 'config-accion' });
+      return false;
+    }
+
+    const igv = parseFloat(datos.impuestoPorcentaje);
+    if (Number.isNaN(igv) || igv < 0 || igv > 100) {
+      toast.error('El impuesto IGV debe ser un valor válido entre 0 y 100.', { id: 'config-accion' });
       return false;
     }
 
@@ -95,27 +127,66 @@ export default function Configuracion() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (guardandoRef.current) return;
     if (!validarConfiguracion(formData)) return;
 
+    const payload = {
+      ...formData,
+      nombre: formData.nombre.trim(),
+      razonSocial: formData.razonSocial.trim().toUpperCase(),
+      ruc: String(formData.ruc).trim(),
+      telefono: String(formData.telefono).trim(),
+      email: formData.email.trim(),
+      departamento: formData.departamento.trim(),
+      ciudad: formData.ciudad.trim(),
+      direccionFiscal: formData.direccionFiscal.trim(),
+      mensajeTicket: (formData.mensajeTicket || '').trim(),
+      nubefactRuta: (formData.nubefactRuta || '').trim(),
+      nubefactToken: (formData.nubefactToken || '').trim()
+    };
+
+    guardandoRef.current = true;
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.put('/configuracion', formData, { headers: { Authorization: `Bearer ${token}` } });
-      setBusinessConfig(res.data.config || res.data); 
-      toast.success('¡Configuración actualizada y lista para SUNAT!', { icon: '🏛️' });
+      const res = await axios.put('/configuracion', payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const configActualizada = res.data.config || res.data;
+      const tokenQuedoGuardado = Boolean(payload.nubefactToken || formData.nubefactTokenGuardado);
+      const configFinal = {
+        ...configActualizada,
+        nubefactTokenGuardado: tokenQuedoGuardado
+      };
+
+      setBusinessConfig(configFinal);
+      localStorage.setItem('pos_config', JSON.stringify(configFinal));
+      setFormData(prev => ({
+        ...prev,
+        ...configFinal,
+        nubefactToken: '',
+        nubefactTokenGuardado: tokenQuedoGuardado
+      }));
+      setMostrarToken(false);
+
+      toast.success('Configuración actualizada y lista para SUNAT.', { id: 'config-accion' });
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Error al actualizar configuración');
+      toast.error(error.response?.data?.message || 'Error al actualizar configuración.', { id: 'config-accion' });
     } finally {
+      guardandoRef.current = false;
       setLoading(false);
     }
   };
 
-  const tieneCredencialesSunat = Boolean(formData.nubefactRuta?.trim() && formData.nubefactToken?.trim());
+  const tieneCredencialesSunat = Boolean(
+    formData.nubefactRuta?.trim() && (formData.nubefactToken?.trim() || formData.nubefactTokenGuardado)
+  );
 
   return (
-    <div className="flex flex-col gap-6 text-slate-800 pb-20 lg:pb-6 font-sans antialiased max-w-6xl mx-auto">
+    <div className="flex flex-col gap-6 text-slate-800 pb-24 lg:pb-6 font-sans antialiased max-w-6xl mx-auto">
       
-      {/* CABECERA PRINCIPAL (Jerarquía estilo Figma) */}
+      {/* CABECERA PRINCIPAL */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -126,8 +197,8 @@ export default function Configuracion() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 text-xs sm:text-sm bg-white px-4 py-2.5 rounded-xl border border-slate-200/90 shadow-[0_2px_12px_rgba(15,23,42,0.04)] self-start sm:self-auto shrink-0">
-          <span className={`w-2.5 h-2.5 rounded-full ${tieneCredencialesSunat ? 'bg-emerald-500 ring-4 ring-emerald-500/15' : 'bg-amber-500 ring-4 ring-amber-500/15'}`}></span>
+        <div className="inline-flex items-center gap-2.5 text-xs sm:text-sm bg-white px-4 py-2.5 rounded-xl border border-slate-200/90 shadow-[0_2px_12px_rgba(15,23,42,0.04)] self-start sm:self-auto shrink-0 whitespace-nowrap">
+          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${tieneCredencialesSunat ? 'bg-emerald-500 ring-4 ring-emerald-500/15' : 'bg-amber-500 ring-4 ring-amber-500/15'}`}></span>
           <span className="font-bold text-slate-800">
             {tieneCredencialesSunat ? 'Facturación SUNAT Configurada' : 'Token SUNAT Pendiente'}
           </span>
@@ -147,11 +218,11 @@ export default function Configuracion() {
             
             {/* TARJETA 1: IDENTIDAD LEGAL Y CONTACTO */}
             <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col">
-              <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0">
+              <div className="px-5 sm:px-6 py-4 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0">
                 <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
                   <FaBuilding size={18} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-slate-900 font-bold text-base sm:text-lg tracking-tight">
                     Identidad Legal y Contacto
                   </h2>
@@ -159,13 +230,13 @@ export default function Configuracion() {
                 </div>
               </div>
               
-              <div className="p-6 space-y-4 bg-white flex-1 flex flex-col justify-between">
+              <div className="p-5 sm:p-6 space-y-4 bg-white flex-1 flex flex-col justify-between">
                 
-                {/* SECCIÓN DEL LOGO COMPACTA Y HORIZONTAL */}
-                <div className="flex items-center gap-4 p-4 border border-dashed border-slate-300 rounded-xl bg-slate-50/70 hover:bg-slate-50 transition-colors">
+                {/* SECCIÓN DEL LOGO COMPACTA Y RESPONSIVE */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 border border-dashed border-slate-300 rounded-xl bg-slate-50/70 hover:bg-slate-50 transition-colors">
                   <div 
                     className="relative group cursor-pointer shrink-0" 
-                    onClick={() => fileInputRef.current.click()}
+                    onClick={() => fileInputRef.current?.click()}
                   >
                     <div className="w-16 h-16 rounded-2xl border-2 border-white shadow-sm overflow-hidden bg-white flex items-center justify-center">
                       {previewLogo ? (
@@ -185,9 +256,10 @@ export default function Configuracion() {
                       Se mostrará en el menú lateral y comprobantes (PNG o JPG, máx. 2MB).
                     </p>
                     <button 
-                      type="button" 
-                      onClick={() => fileInputRef.current.click()} 
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      type="button"
+                      disabled={loading}
+                      onClick={() => fileInputRef.current?.click()} 
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                     >
                       <FaUpload size={11} /> {previewLogo ? 'Cambiar imagen' : 'Seleccionar archivo'}
                     </button>
@@ -204,8 +276,8 @@ export default function Configuracion() {
                     <input 
                       type="text" 
                       required 
-                      value={formData.ruc} 
-                      onChange={e => setFormData({...formData, ruc: e.target.value.replace(/\D/g, '').slice(0, 11)})} 
+                      value={formData.ruc || ''} 
+                      onChange={e => setFormData({ ...formData, ruc: e.target.value.replace(/\D/g, '').slice(0, 11) })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono font-bold text-sm transition-all" 
                       placeholder="Ej: 20123456789" 
                     />
@@ -219,8 +291,8 @@ export default function Configuracion() {
                     <input 
                       type="text" 
                       required 
-                      value={formData.nombre} 
-                      onChange={e => setFormData({...formData, nombre: e.target.value})} 
+                      value={formData.nombre || ''} 
+                      onChange={e => setFormData({ ...formData, nombre: e.target.value })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-semibold text-sm transition-all" 
                       placeholder="Ej: Bodega NOVA" 
                     />
@@ -236,8 +308,8 @@ export default function Configuracion() {
                   <input 
                     type="text" 
                     required 
-                    value={formData.razonSocial} 
-                    onChange={e => setFormData({...formData, razonSocial: e.target.value.toUpperCase()})} 
+                    value={formData.razonSocial || ''} 
+                    onChange={e => setFormData({ ...formData, razonSocial: e.target.value.toUpperCase() })} 
                     className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-bold text-sm transition-all" 
                     placeholder="Ej: BODEGA NOVA S.A.C." 
                   />
@@ -252,8 +324,8 @@ export default function Configuracion() {
                     <input 
                       type="text" 
                       required 
-                      value={formData.telefono} 
-                      onChange={e => setFormData({...formData, telefono: e.target.value.replace(/\D/g, '').slice(0, 9)})} 
+                      value={formData.telefono || ''} 
+                      onChange={e => setFormData({ ...formData, telefono: e.target.value.replace(/\D/g, '').slice(0, 9) })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono font-semibold text-sm transition-all" 
                       placeholder="Celular o Fijo (9 dígitos)" 
                     />
@@ -265,8 +337,8 @@ export default function Configuracion() {
                     <input 
                       type="email" 
                       required 
-                      value={formData.email} 
-                      onChange={e => setFormData({...formData, email: e.target.value})} 
+                      value={formData.email || ''} 
+                      onChange={e => setFormData({ ...formData, email: e.target.value })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-medium text-sm transition-all" 
                       placeholder="contacto@empresa.com" 
                     />
@@ -278,11 +350,11 @@ export default function Configuracion() {
 
             {/* TARJETA 2: UBICACIÓN FISCAL Y PARÁMETROS DE EMISIÓN */}
             <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col">
-              <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0">
+              <div className="px-5 sm:px-6 py-4 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0">
                 <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
                   <FaFileInvoice size={18} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-slate-900 font-bold text-base sm:text-lg tracking-tight">
                     Ubicación Fiscal y Emisión
                   </h2>
@@ -290,7 +362,7 @@ export default function Configuracion() {
                 </div>
               </div>
               
-              <div className="p-6 space-y-4 bg-white flex-1 flex flex-col justify-between">
+              <div className="p-5 sm:p-6 space-y-4 bg-white flex-1 flex flex-col justify-between">
                 
                 {/* AVISO INFORMATIVO EN VERDE PASTEL */}
                 <div className="bg-verde-pastel/20 border border-emerald-200/80 rounded-xl p-3.5">
@@ -311,8 +383,8 @@ export default function Configuracion() {
                     <input 
                       type="text" 
                       required 
-                      value={formData.departamento} 
-                      onChange={e => setFormData({...formData, departamento: e.target.value})} 
+                      value={formData.departamento || ''} 
+                      onChange={e => setFormData({ ...formData, departamento: e.target.value })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-medium text-sm transition-all" 
                       placeholder="Ej: Cajamarca" 
                     />
@@ -324,8 +396,8 @@ export default function Configuracion() {
                     <input 
                       type="text" 
                       required 
-                      value={formData.ciudad} 
-                      onChange={e => setFormData({...formData, ciudad: e.target.value})} 
+                      value={formData.ciudad || ''} 
+                      onChange={e => setFormData({ ...formData, ciudad: e.target.value })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-medium text-sm transition-all" 
                       placeholder="Ej: Cajamarca" 
                     />
@@ -340,8 +412,8 @@ export default function Configuracion() {
                   <input 
                     type="text" 
                     required 
-                    value={formData.direccionFiscal} 
-                    onChange={e => setFormData({...formData, direccionFiscal: e.target.value})} 
+                    value={formData.direccionFiscal || ''} 
+                    onChange={e => setFormData({ ...formData, direccionFiscal: e.target.value })} 
                     className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-medium text-sm transition-all" 
                     placeholder="Ej: Jr. Los Pinos 123 - Urb. El Bosque" 
                   />
@@ -356,9 +428,11 @@ export default function Configuracion() {
                     <input 
                       type="number" 
                       step="0.1" 
+                      min="0"
+                      max="100"
                       required 
-                      value={formData.impuestoPorcentaje} 
-                      onChange={e => setFormData({...formData, impuestoPorcentaje: e.target.value})} 
+                      value={formData.impuestoPorcentaje ?? 18} 
+                      onChange={e => setFormData({ ...formData, impuestoPorcentaje: e.target.value })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-800 font-extrabold text-sm transition-all" 
                       placeholder="18" 
                     />
@@ -371,7 +445,7 @@ export default function Configuracion() {
                     <input 
                       type="text" 
                       value={formData.mensajeTicket || ''} 
-                      onChange={e => setFormData({...formData, mensajeTicket: e.target.value})} 
+                      onChange={e => setFormData({ ...formData, mensajeTicket: e.target.value })} 
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-medium text-sm transition-all" 
                       placeholder="Ej: ¡Gracias por su compra! Revise su vuelto." 
                     />
@@ -385,12 +459,12 @@ export default function Configuracion() {
 
           {/* TARJETA INFERIOR SIMÉTRICA: INTEGRACIÓN NUBEFACT API + BOTÓN GUARDAR */}
           <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
-            <div className="px-6 py-4 bg-white border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-3">
+            <div className="px-5 sm:px-6 py-4 bg-white border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                   <FaKey size={17} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-slate-900 font-bold text-base sm:text-lg tracking-tight">
                     Credenciales de Facturación Electrónica (Nubefact / OSE SUNAT)
                   </h2>
@@ -401,7 +475,7 @@ export default function Configuracion() {
               </div>
             </div>
 
-            <div className="p-6 bg-white grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="p-5 sm:p-6 bg-white grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
                   <FaLink className="text-slate-400" size={11} /> Ruta (URL) de la API
@@ -409,35 +483,52 @@ export default function Configuracion() {
                 <input 
                   type="text" 
                   value={formData.nubefactRuta || ''} 
-                  onChange={e => setFormData({...formData, nubefactRuta: e.target.value})} 
+                  onChange={e => setFormData({ ...formData, nubefactRuta: e.target.value })} 
                   className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-800 text-xs sm:text-sm transition-all font-mono" 
                   placeholder="https://api.nubefact.com/api/v1/..." 
                 />
               </div>
 
               <div>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                  <FaKey className="text-slate-400" size={11} /> Token de Seguridad
-                </label>
-                <input 
-                  type="password" 
-                  value={formData.nubefactToken || ''} 
-                  onChange={e => setFormData({...formData, nubefactToken: e.target.value})} 
-                  className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-800 text-xs sm:text-sm transition-all font-mono" 
-                  placeholder="••••••••••••••••••••••••••••••••••••" 
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <FaKey className="text-slate-400" size={11} /> Token de Seguridad
+                  </label>
+                  {formData.nubefactTokenGuardado && !formData.nubefactToken && (
+                    <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-2 py-0.5 rounded">
+                      Token guardado
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input 
+                    type={mostrarToken ? 'text' : 'password'} 
+                    value={formData.nubefactToken || ''} 
+                    onChange={e => setFormData({ ...formData, nubefactToken: e.target.value })} 
+                    className="w-full pl-3.5 pr-11 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-800 text-xs sm:text-sm transition-all font-mono" 
+                    placeholder={formData.nubefactTokenGuardado ? 'Dejar vacío para mantener el token actual' : 'Ingresa tu token de Nubefact'} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarToken(prev => !prev)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                    title={mostrarToken ? 'Ocultar token' : 'Ver token'}
+                  >
+                    {mostrarToken ? <FaEyeSlash size={15} /> : <FaEye size={15} />}
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* PIE DE TARJETA CON EL BOTÓN DE GUARDAR */}
-            <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-xs text-slate-500 font-medium">
+            <div className="px-5 sm:px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-xs text-slate-500 font-medium text-center sm:text-left">
                 Los cambios se aplicarán de inmediato en todos los comprobantes y terminales de tu bodega.
               </p>
               <button 
                 type="submit" 
                 disabled={loading} 
-                className="w-full sm:w-auto min-w-[220px] bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-3 px-6 rounded-xl transition-all shadow-2xs flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-sm cursor-pointer"
+                className="w-full sm:w-auto min-w-[220px] bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-3 px-6 rounded-xl transition-all shadow-2xs flex justify-center items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed text-sm cursor-pointer"
               >
                 <FaSave size={16} /> {loading ? 'Guardando cambios...' : 'Guardar Configuración'}
               </button>

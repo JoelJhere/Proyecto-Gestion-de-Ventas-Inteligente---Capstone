@@ -748,10 +748,10 @@ export default function Productos() {
       </div>
 
       {/* LISTADO RESPONSIVE */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
+      <div className="md:bg-white md:border md:border-slate-200/90 md:rounded-2xl md:shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
         
         {/* VISTA MÓVIL */}
-        <div className="md:hidden divide-y divide-slate-100">
+        <div className="md:hidden space-y-3.5">
           {isLoading ? (
             [...Array(4)].map((_, i) => (
               <div key={i} className="p-4 animate-pulse space-y-2.5">
@@ -768,7 +768,7 @@ export default function Productos() {
             productosVisibles.map((prod) => {
               const esStockBajo = prod.stock <= (prod.stockMinimo || 5);
               return (
-                <div key={prod.id} className={`p-4 space-y-3 ${prod.estado ? 'bg-white' : 'opacity-55 bg-slate-50/70'}`}>
+                <div key={prod.id} className={`p-4 space-y-3 rounded-2xl border border-slate-200/90 shadow-2xs ${prod.estado ? 'bg-white' : 'opacity-55 bg-slate-50/70'}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug" title={prod.nombre}>
@@ -1002,7 +1002,7 @@ export default function Productos() {
 
         {/* PIE DE PAGINACIÓN PROGRESIVA (30 EN 30) */}
         {!isLoading && productosFiltrados.length > 0 && (
-          <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="mt-3.5 md:mt-0 rounded-2xl md:rounded-none border border-slate-200/90 md:border-0 md:border-t">
             <p className="text-xs font-semibold text-slate-500">
               Mostrando <strong className="text-slate-800">{productosVisibles.length}</strong> de{' '}
               <strong className="text-slate-800">{productosFiltrados.length}</strong> producto(s)
