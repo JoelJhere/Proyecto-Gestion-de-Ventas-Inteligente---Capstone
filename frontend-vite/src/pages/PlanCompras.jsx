@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  FaPlus, FaCheck, FaTimes, FaClipboardList, FaTruck, 
+  FaPlus, FaMinus, FaCheck, FaTimes, FaClipboardList, FaTruck, 
   FaCalendarAlt, FaTrash, FaSearch, FaInfoCircle, 
-  FaExclamationTriangle, FaMoneyBillWave, FaChevronDown 
+  FaExclamationTriangle, FaMoneyBillWave, FaChevronDown,
+  FaGift, FaBan, FaUndo
 } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -33,8 +34,14 @@ const LogosBancos = () => (
   </div>
 );
 
+const obtenerFechaHoyLocal = () => {
+  const hoy = new Date();
+  return new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+};
+
 export default function PlanCompras() {
   const BLOQUE_CARGA = 30;
+  const LIMITE_DROPDOWN = 30;
 
   const [planes, setPlanes] = useState([]);
   const [proveedores, setProveedores] = useState([]);
@@ -49,6 +56,10 @@ export default function PlanCompras() {
   // Candado síncrono anti-spam / doble clic
   const [isSubmitting, setIsSubmitting] = useState(false);
   const accionEnCursoRef = useRef(false);
+
+  // Refs para cierre táctil confiable de desplegables en tablets
+  const provDropdownRef = useRef(null);
+  const prodDropdownRef = useRef(null);
 
   // Control de Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -70,7 +81,13 @@ export default function PlanCompras() {
     detalles: []
   });
 
-  const [itemTemp, setItemTemp] = useState({ productoId: '', cantidadEsperada: '', precioCompra: '' });
+  // itemTemp ahora incluye esRegalo para registrar ofertas/bonificaciones a S/ 0.00
+  const [itemTemp, setItemTemp] = useState({
+    productoId: '',
+    cantidadEsperada: '',
+    precioCompra: '',
+    esRegalo: false
+  });
 
   // Formulario de Recepción
   const [detallesRecibidos, setDetallesRecibidos] = useState([]);
@@ -101,33 +118,53 @@ export default function PlanCompras() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargarDatos(); }, []);
 
-  // --- LÓGICA DE FILTROS INTELIGENTES EN MODAL CREAR ---
-  const proveedoresFiltrados = proveedores.filter(p => 
-    p.nombre.toLowerCase().includes(busquedaProv.toLowerCase()) || 
-    (p.ruc && p.ruc.includes(busquedaProv))
-  );
+  // Cierre confiable de desplegables al tocar fuera (evita fallos en tablets)
+  useEffect(() => {
+    const manejarClicExterno = (e) => {
+      if (provDropdownRef.current && !provDropdownRef.current.contains(e.target)) {
+        setShowProvDropdown(false);
+      }
+      if (prodDropdownRef.current && !prodDropdownRef.current.contains(e.target)) {
+        setShowProdDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', manejarClicExterno);
+    return () => document.removeEventListener('mousedown', manejarClicExterno);
+  }, []);
 
-  // 1. Si hay un proveedor seleccionado, mostramos SOLO sus productos. Si no, mostramos todos.
-  const productosDelProveedor = formData.proveedorId 
+  // --- LÓGICA DE FILTROS INTELIGENTES EN MODAL CREAR ---
+  const qProv = busquedaProv.trim().toLowerCase();
+  const proveedoresFiltrados = proveedores.filter(p =>
+    p.nombre.toLowerCase().includes(qProv) ||
+    (p.ruc && p.ruc.includes(qProv))
+  ).slice(0, LIMITE_DROPDOWN);
+
+  // Si es regalo/oferta, permitimos elegir cualquier producto del catálogo (ej. compras aguas y te regalan gaseosas)
+  const productosBaseModal = (formData.proveedorId && !itemTemp.esRegalo)
     ? productos.filter(p => p.proveedorId === parseInt(formData.proveedorId, 10))
     : productos;
 
-  // 2. Aplicamos la búsqueda de texto sobre la lista resultante
-  const productosFiltrados = productosDelProveedor.filter(p => 
-    p.nombre.toLowerCase().includes(busquedaProd.toLowerCase()) || 
-    (p.codigo && p.codigo.toLowerCase().includes(busquedaProd.toLowerCase()))
+  const qProd = busquedaProd.trim().toLowerCase();
+  const productosFiltrados = productosBaseModal.filter(p =>
+    p.nombre.toLowerCase().includes(qProd) ||
+    (p.codigo && p.codigo.toLowerCase().includes(qProd))
   );
+  const productosDropdown = productosFiltrados.slice(0, LIMITE_DROPDOWN);
 
   const handleSelectProvider = (prov) => {
     setFormData(prev => ({ ...prev, proveedorId: prov.id }));
     setBusquedaProv(prov.nombre);
     setShowProvDropdown(false);
     setBusquedaProd('');
-    setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '' });
+    setItemTemp(prev => ({ ...prev, productoId: '', cantidadEsperada: '', precioCompra: prev.esRegalo ? '0' : '' }));
   };
 
   const handleSelectProduct = (prod) => {
-    setItemTemp(prev => ({ ...prev, productoId: prod.id, precioCompra: prod.precioCompra || '' }));
+    setItemTemp(prev => ({
+      ...prev,
+      productoId: prod.id,
+      precioCompra: prev.esRegalo ? '0' : (prod.precioCompra ?? '')
+    }));
     setBusquedaProd(prod.nombre);
     setShowProdDropdown(false);
 
@@ -142,11 +179,22 @@ export default function PlanCompras() {
     }
   };
 
+  const toggleModoRegalo = () => {
+    setItemTemp(prev => {
+      const nuevoEsRegalo = !prev.esRegalo;
+      const nuevoCosto = nuevoEsRegalo
+        ? '0'
+        : (productos.find(p => p.id === parseInt(prev.productoId, 10))?.precioCompra ?? '');
+      return { ...prev, esRegalo: nuevoEsRegalo, precioCompra: nuevoCosto };
+    });
+  };
+
   // --- LÓGICA DE CREACIÓN ---
   const agregarItemAlPlan = () => {
     const prodIdNum = parseInt(itemTemp.productoId, 10);
     const cantNum = parseInt(itemTemp.cantidadEsperada, 10);
-    const costoNum = parseFloat(itemTemp.precioCompra);
+    const esRegalo = Boolean(itemTemp.esRegalo);
+    const costoNum = esRegalo ? 0 : parseFloat(itemTemp.precioCompra);
 
     if (!prodIdNum) {
       return toast.error('Selecciona un producto de la lista desplegable.', { id: 'plan-item' });
@@ -154,20 +202,24 @@ export default function PlanCompras() {
     if (Number.isNaN(cantNum) || cantNum <= 0) {
       return toast.error('Ingresa una cantidad válida mayor a 0.', { id: 'plan-item' });
     }
-    if (Number.isNaN(costoNum) || costoNum < 0) {
-      return toast.error('Ingresa un costo unitario válido.', { id: 'plan-item' });
+    if (!esRegalo && (Number.isNaN(costoNum) || costoNum <= 0)) {
+      return toast.error('Ingresa un costo unitario mayor a 0 (o marca "Oferta / Gratis").', { id: 'plan-item' });
     }
 
     const prodSeleccionado = productos.find(p => p.id === prodIdNum);
 
     setFormData(prev => {
-      const yaExiste = prev.detalles.some(d => d.productoId === prodIdNum);
+      // Solo suma si coincide producto Y el mismo tipo (pagado con pagado, regalo con regalo)
+      const yaExiste = prev.detalles.some(d => d.productoId === prodIdNum && Boolean(d.esRegalo) === esRegalo);
       if (yaExiste) {
-        toast.success('Cantidad sumada al producto ya agregado en la orden.', { id: 'plan-item' });
+        toast.success(
+          esRegalo ? 'Cantidad sumada a la bonificación ya agregada.' : 'Cantidad sumada al producto ya agregado en la orden.',
+          { id: 'plan-item' }
+        );
         return {
           ...prev,
           detalles: prev.detalles.map(d =>
-            d.productoId === prodIdNum
+            d.productoId === prodIdNum && Boolean(d.esRegalo) === esRegalo
               ? { ...d, cantidadEsperada: d.cantidadEsperada + cantNum, precioCompra: costoNum }
               : d
           )
@@ -182,13 +234,14 @@ export default function PlanCompras() {
             productoId: prodIdNum,
             nombre: prodSeleccionado?.nombre || 'Producto',
             cantidadEsperada: cantNum,
-            precioCompra: costoNum
+            precioCompra: costoNum,
+            esRegalo
           }
         ]
       };
     });
 
-    setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '' });
+    setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '', esRegalo: false });
     setBusquedaProd('');
   };
 
@@ -200,7 +253,7 @@ export default function PlanCompras() {
   };
 
   const totalEstimadoNuevoPlan = formData.detalles.reduce(
-    (sum, d) => sum + d.cantidadEsperada * d.precioCompra,
+    (sum, d) => sum + (d.esRegalo ? 0 : d.cantidadEsperada * d.precioCompra),
     0
   );
 
@@ -210,7 +263,7 @@ export default function PlanCompras() {
     setFormData({ proveedorId: '', fechaEsperada: '', detalles: [] });
     setBusquedaProv('');
     setBusquedaProd('');
-    setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '' });
+    setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '', esRegalo: false });
   };
 
   const handleCrearPlan = async (e) => {
@@ -224,16 +277,26 @@ export default function PlanCompras() {
       return toast.error('Agrega al menos un producto a la orden.', { id: 'plan-accion' });
     }
 
+    const payload = {
+      proveedorId: formData.proveedorId,
+      fechaEsperada: formData.fechaEsperada,
+      detalles: formData.detalles.map(d => ({
+        productoId: d.productoId,
+        cantidadEsperada: d.cantidadEsperada,
+        precioCompra: d.esRegalo ? 0 : d.precioCompra
+      }))
+    };
+
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
     try {
-      await axios.post('/planes-compra', formData);
+      await axios.post('/planes-compra', payload);
       toast.success('Plan de compra creado exitosamente.', { id: 'plan-accion' });
       setIsCreateModalOpen(false);
       setFormData({ proveedorId: '', fechaEsperada: '', detalles: [] });
       setBusquedaProv('');
       setBusquedaProd('');
-      setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '' });
+      setItemTemp({ productoId: '', cantidadEsperada: '', precioCompra: '', esRegalo: false });
       cargarDatos();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error al guardar el plan de compra.', { id: 'plan-accion' });
@@ -243,7 +306,7 @@ export default function PlanCompras() {
     }
   };
 
-  // --- LÓGICA DE RECEPCIÓN ---
+  // --- LÓGICA DE RECEPCIÓN (SOLO DISMINUIR O MARCAR SIN STOCK) ---
   const abrirModalRecibir = (plan) => {
     if (accionEnCursoRef.current) return;
     setReceivingPlan(plan);
@@ -255,25 +318,84 @@ export default function PlanCompras() {
         nombre: d.producto?.nombre || 'Producto',
         cantidadEsperada: d.cantidadEsperada,
         cantidadRecibida: d.cantidadEsperada,
-        precioCompra: d.precioCompra
+        precioCompra: Number(d.precioCompra || 0),
+        esRegalo: Number(d.precioCompra || 0) === 0
       }))
     );
   };
 
+  // Clamped estrictamente entre 0 y cantidadEsperada (no se puede aumentar sobre lo pedido)
   const actualizarCantidadRecibida = (detalleId, valor) => {
     setDetallesRecibidos(prev => prev.map(item => {
-      if (item.detalleId === detalleId) {
-        if (valor === '') return { ...item, cantidadRecibida: '' };
-        return { ...item, cantidadRecibida: Math.max(0, parseInt(valor, 10) || 0) };
+      if (item.detalleId !== detalleId) return item;
+      if (valor === '') return { ...item, cantidadRecibida: '' };
+      const parsed = parseInt(valor, 10);
+      if (Number.isNaN(parsed)) return { ...item, cantidadRecibida: 0 };
+      const limitado = Math.max(0, Math.min(item.cantidadEsperada, parsed));
+      if (parsed > item.cantidadEsperada) {
+        toast.error(`Máximo permitido: ${item.cantidadEsperada} un. (lo solicitado en la orden).`, { id: 'plan-max' });
       }
-      return item;
+      return { ...item, cantidadRecibida: limitado };
     }));
   };
 
-  // Total en tiempo real de lo que realmente llegó
+  const ajustarCantidadRecibida = (detalleId, delta) => {
+    setDetallesRecibidos(prev => prev.map(item => {
+      if (item.detalleId !== detalleId) return item;
+      const actual = parseInt(item.cantidadRecibida, 10) || 0;
+      const nueva = Math.max(0, Math.min(item.cantidadEsperada, actual + delta));
+      return { ...item, cantidadRecibida: nueva };
+    }));
+  };
+
+  const marcarSinStockItem = (detalleId) => {
+    setDetallesRecibidos(prev => prev.map(item => {
+      if (item.detalleId !== detalleId) return item;
+      const actual = parseInt(item.cantidadRecibida, 10) || 0;
+      return {
+        ...item,
+        cantidadRecibida: actual === 0 ? item.cantidadEsperada : 0
+      };
+    }));
+  };
+
+  const marcarMitadItem = (detalleId) => {
+    setDetallesRecibidos(prev => prev.map(item => {
+      if (item.detalleId !== detalleId) return item;
+      const mitad = Math.floor(item.cantidadEsperada / 2);
+      return { ...item, cantidadRecibida: mitad };
+    }));
+  };
+
+  const restaurarTodoCompleto = () => {
+    setDetallesRecibidos(prev => prev.map(item => ({
+      ...item,
+      cantidadRecibida: item.cantidadEsperada
+    })));
+  };
+
+  // Totales en tiempo real de lo que realmente llegó
   const totalRealCalculado = detallesRecibidos.reduce(
     (sum, item) => sum + ((parseInt(item.cantidadRecibida, 10) || 0) * parseFloat(item.precioCompra || 0)),
     0
+  );
+  const totalEsperadoModal = detallesRecibidos.reduce(
+    (sum, item) => sum + (item.cantidadEsperada * parseFloat(item.precioCompra || 0)),
+    0
+  );
+  const unidadesRecibidasTotal = detallesRecibidos.reduce(
+    (sum, item) => sum + (parseInt(item.cantidadRecibida, 10) || 0),
+    0
+  );
+  const unidadesSolicitadasTotal = detallesRecibidos.reduce(
+    (sum, item) => sum + item.cantidadEsperada,
+    0
+  );
+  const itemsSinStockCount = detallesRecibidos.filter(
+    item => (parseInt(item.cantidadRecibida, 10) || 0) === 0
+  ).length;
+  const huboReducciones = detallesRecibidos.some(
+    item => (parseInt(item.cantidadRecibida, 10) || 0) < item.cantidadEsperada
   );
 
   const confirmarRecepcion = async () => {
@@ -281,7 +403,7 @@ export default function PlanCompras() {
 
     const detallesNormalizados = detallesRecibidos.map(item => ({
       ...item,
-      cantidadRecibida: parseInt(item.cantidadRecibida, 10) || 0
+      cantidadRecibida: Math.max(0, Math.min(item.cantidadEsperada, parseInt(item.cantidadRecibida, 10) || 0))
     }));
 
     accionEnCursoRef.current = true;
@@ -304,19 +426,20 @@ export default function PlanCompras() {
   };
 
   // Filtros y paginación progresiva de los planes (30 en 30)
+  const qPlan = busquedaPlan.trim().toLowerCase();
   const planesFiltrados = planes.filter(plan => {
     if (filtroEstado !== 'TODOS' && plan.estado !== filtroEstado) return false;
-    const q = busquedaPlan.trim().toLowerCase();
-    if (!q) return true;
+    if (!qPlan) return true;
     return (
-      String(plan.id).includes(q) ||
-      (plan.proveedor?.nombre || '').toLowerCase().includes(q) ||
-      (plan.detalles || []).some(d => (d.producto?.nombre || '').toLowerCase().includes(q))
+      String(plan.id).includes(qPlan) ||
+      (plan.proveedor?.nombre || '').toLowerCase().includes(qPlan) ||
+      (plan.detalles || []).some(d => (d.producto?.nombre || '').toLowerCase().includes(qPlan))
     );
   });
 
   const planesVisibles = planesFiltrados.slice(0, limiteVisible);
   const restantesPorCargar = planesFiltrados.length - planesVisibles.length;
+  const hayFiltrosActivos = Boolean(qPlan) || filtroEstado !== 'TODOS';
 
   // Métricas en vivo para las tarjetas superiores estilo Figma
   const planesPendientes = planes.filter(p => p.estado === 'PENDIENTE').length;
@@ -336,7 +459,7 @@ export default function PlanCompras() {
             Plan de Compras
           </h1>
           <p className="text-sm text-slate-600 font-medium mt-1">
-            Gestiona las órdenes de pedido a tus proveedores y el ingreso de mercadería al almacén.
+            Gestiona las órdenes de pedido a tus proveedores, bonificaciones y el ingreso real al almacén.
           </p>
         </div>
         
@@ -411,7 +534,7 @@ export default function PlanCompras() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs sm:text-sm font-semibold text-slate-500 truncate">Inversión en Compras</p>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight font-mono">
               S/ {inversionTotal.toFixed(2)}
             </p>
           </div>
@@ -445,10 +568,24 @@ export default function PlanCompras() {
               {tab.label}
             </button>
           ))}
+
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroEstado('TODOS');
+                setBusquedaPlan('');
+                setLimiteVisible(BLOQUE_CARGA);
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <FaTimes size={10} /> Limpiar
+            </button>
+          )}
         </div>
       )}
 
-      {/* LISTADO DE PLANES EN TARJETAS SIMÉTRICAS */}
+      {/* LISTADO DE PLANES EN TARJETAS (1 col celular / 2 cols tablet / 3 cols PC) */}
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
           {isLoading ? (
@@ -480,12 +617,12 @@ export default function PlanCompras() {
                 <FaClipboardList className="text-3xl" />
               </div>
               <p className="text-base font-bold text-slate-800">
-                {busquedaPlan.trim() || filtroEstado !== 'TODOS'
+                {hayFiltrosActivos
                   ? 'No se encontraron pedidos con ese filtro'
                   : 'No hay planes de compra registrados'}
               </p>
               <p className="text-sm text-slate-500 font-medium mt-1">
-                {busquedaPlan.trim() || filtroEstado !== 'TODOS'
+                {hayFiltrosActivos
                   ? 'Prueba limpiar el buscador o cambiar el filtro de estado.'
                   : 'Comienza creando una nueva orden de pedido para abastecer tu inventario.'}
               </p>
@@ -540,18 +677,55 @@ export default function PlanCompras() {
                     )}
                   </div>
 
-                  {/* Lista de productos del pedido */}
-                  <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/70 mb-4 space-y-2 max-h-32 overflow-y-auto pr-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
-                    {(plan.detalles || []).map((det) => (
-                      <div key={det.id} className="flex justify-between text-xs sm:text-sm items-start gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200/60 shadow-2xs">
-                        <span className="text-slate-800 font-semibold line-clamp-2 leading-snug min-w-0" title={det.producto?.nombre}>
-                          {det.producto?.nombre || 'Producto'}
-                        </span>
-                        <span className="text-slate-700 font-mono font-bold whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded text-xs shrink-0">
-                          {det.cantidadRecibida > 0 ? `${det.cantidadRecibida}/` : ''}{det.cantidadEsperada} un.
-                        </span>
-                      </div>
-                    ))}
+                  {/* Lista de productos del pedido (con badges de Gratis y faltantes) */}
+                  <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/70 mb-4 space-y-2 max-h-36 overflow-y-auto pr-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                    {(plan.detalles || []).map((det) => {
+                      const esGratis = Number(det.precioCompra || 0) === 0;
+                      const noLlego = plan.estado === 'RECIBIDO' && Number(det.cantidadRecibida || 0) === 0;
+                      const llegoParcial =
+                        plan.estado === 'RECIBIDO' &&
+                        Number(det.cantidadRecibida || 0) > 0 &&
+                        Number(det.cantidadRecibida || 0) < det.cantidadEsperada;
+
+                      return (
+                        <div
+                          key={det.id}
+                          className={`flex justify-between text-xs sm:text-sm items-start gap-2 px-3 py-1.5 rounded-lg border shadow-2xs ${
+                            noLlego
+                              ? 'bg-red-50/50 border-red-200/70'
+                              : 'bg-white border-slate-200/60'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className={`font-semibold line-clamp-2 leading-snug ${noLlego ? 'text-slate-500 line-through' : 'text-slate-800'}`}
+                              title={det.producto?.nombre}
+                            >
+                              {det.producto?.nombre || 'Producto'}
+                            </span>
+                            {esGratis && (
+                              <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-extrabold text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                                <FaGift size={9} /> GRATIS
+                              </span>
+                            )}
+                          </div>
+
+                          <span
+                            className={`font-mono font-bold whitespace-nowrap px-2 py-0.5 rounded text-xs shrink-0 ${
+                              noLlego
+                                ? 'bg-red-100 text-red-700'
+                                : llegoParcial
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {plan.estado === 'RECIBIDO'
+                              ? (noLlego ? `0/${det.cantidadEsperada} (Sin stock)` : `${det.cantidadRecibida}/${det.cantidadEsperada} un.`)
+                              : `${det.cantidadEsperada} un.`}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -582,22 +756,22 @@ export default function PlanCompras() {
           )}
         </div>
 
-        {/* PIE DE PAGINACIÓN PROGRESIVA (30 EN 30) */}
+        {/* PIE DE PAGINACIÓN PROGRESIVA CENTRADO Y CON ESPACIO (30 EN 30) */}
         {!isLoading && planesFiltrados.length > 0 && (
-          <div className="px-5 py-3.5 bg-white border border-slate-200/90 rounded-2xl shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-slate-500">
+          <div className="px-5 py-5 bg-white border border-slate-200/90 rounded-2xl shadow-2xs flex flex-col items-center justify-center gap-3 text-center">
+            <p className="text-xs sm:text-sm font-semibold text-slate-500">
               Mostrando <strong className="text-slate-800">{planesVisibles.length}</strong> de{' '}
               <strong className="text-slate-800">{planesFiltrados.length}</strong> pedido(s)
-              {busquedaPlan.trim() || filtroEstado !== 'TODOS' ? ' filtrados' : ''}
+              {hayFiltrosActivos ? ' filtrados' : ''}
             </p>
 
             {restantesPorCargar > 0 && (
               <button
                 type="button"
                 onClick={() => setLimiteVisible(prev => prev + BLOQUE_CARGA)}
-                className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-6 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
               >
-                <FaChevronDown size={11} />
+                <FaChevronDown size={12} />
                 <span>
                   Cargar {Math.min(BLOQUE_CARGA, restantesPorCargar)} pedido{Math.min(BLOQUE_CARGA, restantesPorCargar) === 1 ? '' : 's'} más
                 </span>
@@ -607,7 +781,7 @@ export default function PlanCompras() {
         )}
       </div>
 
-      {/* MODAL 1: CREAR PLAN DE COMPRA */}
+      {/* MODAL 1: CREAR PLAN DE COMPRA (CON OPCIÓN DE OFERTA / PRODUCTO DE REGALO) */}
       <AnimatePresence>
         {isCreateModalOpen && (
           <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[80] flex items-center justify-center p-4">
@@ -624,7 +798,7 @@ export default function PlanCompras() {
                   </div>
                   <div className="min-w-0">
                     <h2 className="text-lg font-extrabold text-slate-900">Nuevo Plan de Compra</h2>
-                    <p className="text-xs text-slate-500 font-medium truncate">Selecciona el proveedor y agrega los productos a solicitar.</p>
+                    <p className="text-xs text-slate-500 font-medium truncate">Selecciona el proveedor y agrega los productos u ofertas del pedido.</p>
                   </div>
                 </div>
                 <button
@@ -643,8 +817,8 @@ export default function PlanCompras() {
                   {/* SECCIÓN 1: DATOS DEL PEDIDO */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
-                    {/* Buscador Dinámico de Proveedores */}
-                    <div className="relative">
+                    {/* Buscador Dinámico de Proveedores (cierre confiable por clic externo) */}
+                    <div ref={provDropdownRef} className="relative">
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Proveedor *</label>
                       <div className="relative">
                         <FaSearch className="absolute left-3.5 top-3 text-slate-400" size={14} />
@@ -661,7 +835,6 @@ export default function PlanCompras() {
                             }
                           }}
                           onFocus={() => setShowProvDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowProvDropdown(false), 200)}
                           className="w-full pl-10 pr-8 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm font-medium transition-all" 
                         />
                         {busquedaProv && (
@@ -690,11 +863,15 @@ export default function PlanCompras() {
                               <div className="p-3 text-xs text-slate-500 text-center">No se encontraron proveedores</div>
                             ) : (
                               proveedoresFiltrados.map(p => (
-                                <div key={p.id} onMouseDown={() => handleSelectProvider(p)} 
-                                  className="px-3.5 py-2.5 hover:bg-verde-pastel/25 cursor-pointer transition-colors">
+                                <button
+                                  type="button"
+                                  key={p.id}
+                                  onClick={() => handleSelectProvider(p)} 
+                                  className="w-full text-left px-3.5 py-2.5 hover:bg-verde-pastel/25 cursor-pointer transition-colors"
+                                >
                                   <p className="text-sm font-bold text-slate-900 truncate">{p.nombre}</p>
                                   <p className="text-xs font-mono text-slate-500">RUC: {p.ruc || 'N/A'}</p>
-                                </div>
+                                </button>
                               ))
                             )}
                           </motion.div>
@@ -706,6 +883,7 @@ export default function PlanCompras() {
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Fecha Esperada de Llegada</label>
                       <input 
                         type="date" 
+                        min={obtenerFechaHoyLocal()}
                         value={formData.fechaEsperada} 
                         onChange={e => setFormData({ ...formData, fechaEsperada: e.target.value })} 
                         className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm font-medium transition-all" 
@@ -714,21 +892,48 @@ export default function PlanCompras() {
                     </div>
                   </div>
 
-                  {/* SECCIÓN 2: AGREGAR PRODUCTOS */}
+                  {/* SECCIÓN 2: AGREGAR PRODUCTOS Y OFERTAS */}
                   <div className="p-4 sm:p-5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-4">
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Productos del Pedido</h3>
-                      <p className="text-xs text-slate-500 mt-0.5 font-medium">Busca el producto, define la cantidad solicitada y el costo unitario de compra.</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Productos del Pedido</h3>
+                        <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                          Agrega los productos comprados o marca si es una bonificación gratis del proveedor.
+                        </p>
+                      </div>
+
+                      {/* Interruptor de Oferta / Regalo (Gratis S/ 0.00) */}
+                      <button
+                        type="button"
+                        onClick={toggleModoRegalo}
+                        className={`self-start sm:self-auto px-3 py-1.5 rounded-xl text-xs font-bold border transition-all inline-flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                          itemTemp.esRegalo
+                            ? 'bg-purple-100 text-purple-900 border-purple-300 shadow-2xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-purple-50/60 hover:text-purple-800'
+                        }`}
+                      >
+                        <FaGift size={12} className={itemTemp.esRegalo ? 'text-purple-700' : 'text-slate-400'} />
+                        <span>{itemTemp.esRegalo ? 'Oferta / Gratis Activado' : 'Agregar como Oferta / Gratis'}</span>
+                      </button>
                     </div>
+
+                    {itemTemp.esRegalo && (
+                      <div className="px-3 py-2 bg-purple-50 border border-purple-200/80 rounded-xl text-xs text-purple-900 font-medium flex items-center gap-2">
+                        <FaGift className="text-purple-600 shrink-0" size={13} />
+                        <span>
+                          Este producto se registrará a <strong>S/ 0.00 (Bonificación)</strong>: sumará stock al llegar sin cobrar en tu caja.
+                        </span>
+                      </div>
+                    )}
                     
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 relative">
                       
                       {/* Buscador Dinámico de Productos */}
-                      <div className="md:col-span-5 relative">
+                      <div ref={prodDropdownRef} className="md:col-span-5 relative">
                         <FaSearch className="absolute left-3.5 top-3 text-slate-400" size={13} />
                         <input 
                           type="text" 
-                          placeholder="Buscar producto..." 
+                          placeholder={itemTemp.esRegalo ? 'Buscar producto de regalo...' : 'Buscar producto...'} 
                           value={busquedaProd}
                           onChange={(e) => {
                             setBusquedaProd(e.target.value);
@@ -736,7 +941,6 @@ export default function PlanCompras() {
                             setShowProdDropdown(true);
                           }}
                           onFocus={() => setShowProdDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowProdDropdown(false), 200)}
                           className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30" 
                         />
                         {busquedaProd && (
@@ -756,21 +960,32 @@ export default function PlanCompras() {
                           {showProdDropdown && (
                             <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} 
                               className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.14)] max-h-48 overflow-y-auto divide-y divide-slate-100">
-                              {productosFiltrados.length === 0 ? (
+                              {productosDropdown.length === 0 ? (
                                 <div className="p-3 text-xs text-slate-500 text-center">No se encontró producto</div>
                               ) : (
-                                productosFiltrados.map(p => (
-                                  <div key={p.id} onMouseDown={() => handleSelectProduct(p)} 
-                                    className="px-3.5 py-2.5 hover:bg-verde-pastel/25 cursor-pointer flex justify-between items-center gap-2 transition-colors">
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{p.nombre}</p>
-                                      <p className="text-xs text-slate-500 font-mono">{p.codigo}</p>
+                                <>
+                                  {productosDropdown.map(p => (
+                                    <button
+                                      type="button"
+                                      key={p.id}
+                                      onClick={() => handleSelectProduct(p)} 
+                                      className="w-full text-left px-3.5 py-2.5 hover:bg-verde-pastel/25 cursor-pointer flex justify-between items-center gap-2 transition-colors"
+                                    >
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{p.nombre}</p>
+                                        <p className="text-xs text-slate-500 font-mono">{p.codigo}</p>
+                                      </div>
+                                      <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-md text-slate-700 font-bold shrink-0">
+                                        Stock: {p.stock}
+                                      </span>
+                                    </button>
+                                  ))}
+                                  {productosFiltrados.length > LIMITE_DROPDOWN && (
+                                    <div className="px-3 py-2 bg-slate-50 text-center text-[11px] font-semibold text-slate-500">
+                                      Mostrando {LIMITE_DROPDOWN} de {productosFiltrados.length}. Escribe para precisar.
                                     </div>
-                                    <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-md text-slate-700 font-bold shrink-0">
-                                      Stock: {p.stock}
-                                    </span>
-                                  </div>
-                                ))
+                                  )}
+                                </>
                               )}
                             </motion.div>
                           )}
@@ -781,7 +996,7 @@ export default function PlanCompras() {
                         <div className="md:col-span-3">
                           <input 
                             type="number" 
-                            placeholder="Cantidad" 
+                            placeholder="Cantidad (un.)" 
                             min="1" 
                             value={itemTemp.cantidadEsperada} 
                             onChange={e => setItemTemp({ ...itemTemp, cantidadEsperada: e.target.value })} 
@@ -792,11 +1007,12 @@ export default function PlanCompras() {
                           <input 
                             type="number" 
                             step="0.01" 
-                            placeholder="Costo Unit. (S/)" 
+                            placeholder={itemTemp.esRegalo ? 'Gratis (S/ 0.00)' : 'Costo Unit. (S/)'}
                             min="0" 
-                            value={itemTemp.precioCompra} 
+                            disabled={itemTemp.esRegalo}
+                            value={itemTemp.esRegalo ? '0.00' : itemTemp.precioCompra} 
                             onChange={e => setItemTemp({ ...itemTemp, precioCompra: e.target.value })} 
-                            className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30" 
+                            className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30 disabled:bg-purple-50 disabled:text-purple-800 disabled:font-bold disabled:border-purple-200 disabled:cursor-not-allowed" 
                           />
                         </div>
                       </div>
@@ -805,11 +1021,15 @@ export default function PlanCompras() {
                         <button 
                           type="button" 
                           onClick={agregarItemAlPlan} 
-                          className="w-full h-full min-h-[42px] bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer text-sm"
-                          title="Agregar producto a la lista"
+                          className={`w-full h-full min-h-[42px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer text-sm ${
+                            itemTemp.esRegalo
+                              ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                              : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950'
+                          }`}
+                          title={itemTemp.esRegalo ? 'Agregar regalo a la orden' : 'Agregar producto a la lista'}
                         >
-                          <FaPlus />
-                          <span className="md:hidden">Agregar producto</span>
+                          {itemTemp.esRegalo ? <FaGift /> : <FaPlus />}
+                          <span className="md:hidden">{itemTemp.esRegalo ? 'Agregar oferta gratis' : 'Agregar producto'}</span>
                         </button>
                       </div>
                     </div>
@@ -824,11 +1044,25 @@ export default function PlanCompras() {
                           </p>
                         </div>
                         {formData.detalles.map((det, idx) => (
-                          <div key={idx} className="flex justify-between items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl text-sm border border-slate-200/80 shadow-2xs">
-                            <span className="text-slate-900 font-bold line-clamp-2 leading-snug min-w-0">{det.nombre}</span>
+                          <div
+                            key={idx}
+                            className={`flex justify-between items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm border shadow-2xs ${
+                              det.esRegalo ? 'bg-purple-50/50 border-purple-200/80' : 'bg-white border-slate-200/80'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="text-slate-900 font-bold line-clamp-2 leading-snug">{det.nombre}</span>
+                              {det.esRegalo && (
+                                <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-extrabold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                  <FaGift size={9} /> OFERTA / GRATIS
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-slate-700 font-mono font-semibold bg-slate-100 px-2.5 py-1 rounded-lg text-xs whitespace-nowrap">
-                                {det.cantidadEsperada} × S/ {det.precioCompra.toFixed(2)}
+                              <span className={`font-mono font-semibold px-2.5 py-1 rounded-lg text-xs whitespace-nowrap ${
+                                det.esRegalo ? 'bg-purple-100 text-purple-900' : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {det.esRegalo ? `${det.cantidadEsperada} un. • Gratis` : `${det.cantidadEsperada} × S/ ${det.precioCompra.toFixed(2)}`}
                               </span>
                               <button 
                                 type="button" 
@@ -869,7 +1103,7 @@ export default function PlanCompras() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: RECIBIR PEDIDO (CON LOGOS REALES DE MÉTODO DE PAGO Y DESCUENTO DE CAJA) */}
+      {/* MODAL 2: RECIBIR PEDIDO (SOLO DISMINUIR HASTA 0 + BOTÓN RÁPIDO "SIN STOCK") */}
       <AnimatePresence>
         {receivingPlan && (
           <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[80] flex items-center justify-center p-4">
@@ -902,55 +1136,166 @@ export default function PlanCompras() {
               </div>
 
               <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50/60 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                <div className="bg-verde-pastel/20 border border-emerald-200/80 p-3.5 rounded-xl flex items-start gap-3">
-                  <FaInfoCircle className="text-emerald-700 mt-0.5 shrink-0" size={15} />
-                  <p className="text-xs sm:text-sm text-emerald-950 font-medium leading-relaxed">
-                    Compara la cantidad solicitada con lo que realmente llegó. El importe final se descontará automáticamente del capital de la bodega.
-                  </p>
+                <div className="bg-verde-pastel/20 border border-emerald-200/80 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <FaInfoCircle className="text-emerald-700 mt-0.5 shrink-0" size={15} />
+                    <p className="text-xs sm:text-sm text-emerald-950 font-medium leading-relaxed">
+                      Si el proveedor trajo menos cajas o no tuvo stock de algún producto, disminuye la cantidad o toca <strong>Sin stock</strong>. No se permite exceder lo pedido.
+                    </p>
+                  </div>
+                  {huboReducciones && (
+                    <button
+                      type="button"
+                      onClick={restaurarTodoCompleto}
+                      className="self-start sm:self-center px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
+                    >
+                      <FaUndo size={10} /> Todo completo
+                    </button>
+                  )}
                 </div>
 
-                <div className="space-y-2.5">
-                  {detallesRecibidos.map((item) => (
-                    <div key={item.detalleId} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs gap-3 sm:gap-4">
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-slate-900 text-sm font-bold line-clamp-2 leading-snug" title={item.nombre}>
-                          {item.nombre}
-                        </h4>
-                        <p className="text-xs text-slate-500 mt-1 font-medium flex flex-wrap items-center gap-1.5">
-                          <span>Solicitado:</span>
-                          <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
-                            {item.cantidadEsperada} un.
-                          </span>
-                          <span className="font-mono text-slate-600">(S/ {Number(item.precioCompra || 0).toFixed(2)} c/u)</span>
-                        </p>
-                      </div>
+                <div className="space-y-3">
+                  {detallesRecibidos.map((item) => {
+                    const cantActual = parseInt(item.cantidadRecibida, 10) || 0;
+                    const esSinStock = cantActual === 0;
+                    const esParcial = cantActual > 0 && cantActual < item.cantidadEsperada;
 
-                      <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/80 shrink-0">
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Llegaron:</span>
-                        <div className="flex items-center gap-2">
-                          <input 
-                            type="number" 
-                            min="0"
-                            value={item.cantidadRecibida} 
-                            onChange={(e) => actualizarCantidadRecibida(item.detalleId, e.target.value)}
-                            className="w-20 py-1.5 px-2 bg-white border border-slate-300 rounded-lg text-center text-emerald-800 font-extrabold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/40 text-sm font-mono" 
-                          />
-                          <span className="text-xs font-bold text-slate-500">un.</span>
+                    return (
+                      <div
+                        key={item.detalleId}
+                        className={`p-4 rounded-xl border shadow-2xs space-y-3 transition-colors ${
+                          esSinStock
+                            ? 'bg-red-50/40 border-red-200/90'
+                            : esParcial
+                            ? 'bg-amber-50/30 border-amber-200/90'
+                            : 'bg-white border-slate-200/90'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <h4
+                                className={`text-sm font-bold line-clamp-2 leading-snug ${
+                                  esSinStock ? 'text-slate-500 line-through' : 'text-slate-900'
+                                }`}
+                                title={item.nombre}
+                              >
+                                {item.nombre}
+                              </h4>
+                              {item.esRegalo && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-purple-800 bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md shrink-0">
+                                  <FaGift size={9} /> OFERTA GRATIS
+                                </span>
+                              )}
+                              {esSinStock && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-md shrink-0">
+                                  No llegó (Sin stock)
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-slate-500 mt-1 font-medium flex flex-wrap items-center gap-1.5">
+                              <span>Solicitado:</span>
+                              <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                                {item.cantidadEsperada} un.
+                              </span>
+                              <span className="font-mono text-slate-600">
+                                {item.esRegalo ? '(S/ 0.00 c/u)' : `(S/ ${item.precioCompra.toFixed(2)} c/u)`}
+                              </span>
+                            </p>
+                          </div>
+
+                          {/* Controles táctiles para disminuir hasta 0 (tope máximo = cantidadEsperada) */}
+                          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0">
+                            <div className="inline-flex items-center border border-slate-200 rounded-xl bg-white p-0.5 shadow-2xs">
+                              <button
+                                type="button"
+                                disabled={cantActual <= 0}
+                                onClick={() => ajustarCantidadRecibida(item.detalleId, -1)}
+                                className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                                title="Disminuir 1 unidad"
+                              >
+                                <FaMinus size={11} />
+                              </button>
+                              <input 
+                                type="number" 
+                                min="0"
+                                max={item.cantidadEsperada}
+                                value={item.cantidadRecibida} 
+                                onChange={(e) => actualizarCantidadRecibida(item.detalleId, e.target.value)}
+                                className="w-16 py-1 px-1 bg-transparent text-center text-emerald-800 font-extrabold outline-none text-sm font-mono" 
+                              />
+                              <button
+                                type="button"
+                                disabled={cantActual >= item.cantidadEsperada}
+                                onClick={() => ajustarCantidadRecibida(item.detalleId, 1)}
+                                className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                title="Aumentar hasta la cantidad pedida"
+                              >
+                                <FaPlus size={11} />
+                              </button>
+                            </div>
+
+                            {/* Atajos rápidos: Mitad (si pidió >= 2) y Sin stock */}
+                            <div className="flex items-center gap-1.5">
+                              {item.cantidadEsperada >= 2 && item.cantidadEsperada % 2 === 0 && !esSinStock && cantActual === item.cantidadEsperada && (
+                                <button
+                                  type="button"
+                                  onClick={() => marcarMitadItem(item.detalleId)}
+                                  className="px-2.5 py-2 rounded-xl text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors cursor-pointer whitespace-nowrap"
+                                  title={`Recibir la mitad (${item.cantidadEsperada / 2} un.)`}
+                                >
+                                  Mitad ({item.cantidadEsperada / 2})
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => marcarSinStockItem(item.detalleId)}
+                                className={`px-2.5 py-2 rounded-xl text-[11px] font-bold border transition-colors inline-flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                                  esSinStock
+                                    ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                                    : 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
+                                }`}
+                                title={esSinStock ? 'Restaurar cantidad solicitada' : 'Marcar producto sin stock (0 unidades)'}
+                              >
+                                {esSinStock ? (
+                                  <><FaUndo size={10} /> Restaurar</>
+                                ) : (
+                                  <><FaBan size={10} /> Sin stock</>
+                                )}
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
-                {/* RESUMEN DE PAGO AL PROVEEDOR CON LOGOS REALES (Responsive tablet/móvil) */}
+                {/* RESUMEN DE PAGO AL PROVEEDOR CON LOGOS REALES */}
                 <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200/90 shadow-2xs space-y-4 mt-4">
-                  <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-3">
-                    <span className="text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider">
-                      Total Real a Pagar al Proveedor:
-                    </span>
-                    <span className="text-2xl font-extrabold text-red-600 tracking-tight font-mono">
-                      S/ {totalRealCalculado.toFixed(2)}
-                    </span>
+                  <div className="space-y-1.5 border-b border-slate-100 pb-3">
+                    <div className="flex flex-wrap justify-between items-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider">
+                        Total Real a Pagar al Proveedor:
+                      </span>
+                      <span className="text-2xl font-extrabold text-red-600 tracking-tight font-mono">
+                        S/ {totalRealCalculado.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-slate-500 font-medium">
+                      <span>
+                        Ingresarán <strong className="text-slate-800">{unidadesRecibidasTotal}</strong> de{' '}
+                        <strong className="text-slate-800">{unidadesSolicitadasTotal}</strong> unidades
+                        {itemsSinStockCount > 0 && ` • ${itemsSinStockCount} sin stock`}
+                      </span>
+                      {totalRealCalculado < totalEsperadoModal && (
+                        <span className="font-mono font-bold text-emerald-700">
+                          Descuento por faltantes: -S/ {(totalEsperadoModal - totalRealCalculado).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -1045,7 +1390,9 @@ export default function PlanCompras() {
                   ¿Confirmar recepción?
                 </h3>
                 <p className="text-sm text-slate-600 font-medium leading-relaxed">
-                  Se sumará el stock al inventario y se descontarán <strong className="text-slate-900">S/ {totalRealCalculado.toFixed(2)}</strong> ({metodoPagoCompra === 'YAPE_PLIN' ? 'Yape/Plin' : metodoPagoCompra}) del capital de la bodega.
+                  Ingresarán <strong className="text-slate-900">{unidadesRecibidasTotal} un.</strong> al inventario
+                  {itemsSinStockCount > 0 ? ` (${itemsSinStockCount} producto${itemsSinStockCount === 1 ? '' : 's'} sin stock)` : ''} y se descontarán{' '}
+                  <strong className="text-slate-900">S/ {totalRealCalculado.toFixed(2)}</strong> ({metodoPagoCompra === 'YAPE_PLIN' ? 'Yape/Plin' : metodoPagoCompra}) del capital de la bodega.
                 </p>
               </div>
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
