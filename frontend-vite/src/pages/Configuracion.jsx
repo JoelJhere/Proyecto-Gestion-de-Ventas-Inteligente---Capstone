@@ -182,9 +182,10 @@ export default function Configuracion() {
   const tieneCredencialesSunat = Boolean(
     formData.nubefactRuta?.trim() && (formData.nubefactToken?.trim() || formData.nubefactTokenGuardado)
   );
+  const esRucValido = /^(10|20)\d{9}$/.test(String(formData.ruc || ''));
 
   return (
-    <div className="flex flex-col gap-6 text-slate-800 pb-24 lg:pb-6 font-sans antialiased max-w-6xl mx-auto">
+    <div className="flex flex-col gap-6 text-slate-800 pb-24 font-sans antialiased max-w-6xl mx-auto">
       
       {/* CABECERA PRINCIPAL */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -255,14 +256,31 @@ export default function Configuracion() {
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
                       Se mostrará en el menú lateral y comprobantes (PNG o JPG, máx. 2MB).
                     </p>
-                    <button 
-                      type="button"
-                      disabled={loading}
-                      onClick={() => fileInputRef.current?.click()} 
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      <FaUpload size={11} /> {previewLogo ? 'Cambiar imagen' : 'Seleccionar archivo'}
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button 
+                        type="button"
+                        disabled={loading}
+                        onClick={() => fileInputRef.current?.click()} 
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-verde-pastel/45 hover:bg-verde-pastel px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <FaUpload size={11} /> {previewLogo ? 'Cambiar imagen' : 'Seleccionar archivo'}
+                      </button>
+
+                      {previewLogo && (
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => {
+                            setPreviewLogo(null);
+                            setFormData(prev => ({ ...prev, logo: null }));
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                          }}
+                          className="text-xs font-bold text-slate-500 hover:text-red-600 px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          Quitar
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <input type="file" accept="image/png, image/jpeg" ref={fileInputRef} onChange={handleLogoUpload} className="hidden" />
                 </div>
@@ -271,7 +289,7 @@ export default function Configuracion() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                      Número de RUC (11 dígitos) *
+                      RUC (11 dígitos) *
                     </label>
                     <input 
                       type="text" 
@@ -281,7 +299,9 @@ export default function Configuracion() {
                       className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono font-bold text-sm transition-all" 
                       placeholder="Ej: 20123456789" 
                     />
-                    <p className="text-[11px] text-amber-700 font-semibold mt-1">Debe iniciar con 10 o 20.</p>
+                    <p className={`text-[11px] font-semibold mt-1 ${esRucValido ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {esRucValido ? 'Formato RUC válido.' : 'Debe iniciar con 10 o 20.'}
+                    </p>
                   </div>
 
                   <div>
@@ -319,7 +339,7 @@ export default function Configuracion() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                   <div>
                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                      <FaPhone className="text-emerald-600" size={11} /> Teléfono de Contacto *
+                      <FaPhone className="text-emerald-600" size={11} /> Teléfono *
                     </label>
                     <input 
                       type="text" 
@@ -332,7 +352,7 @@ export default function Configuracion() {
                   </div>
                   <div>
                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                      <FaEnvelope className="text-emerald-600" size={11} /> Correo Electrónico *
+                      <FaEnvelope className="text-emerald-600" size={11} /> Correo *
                     </label>
                     <input 
                       type="email" 
