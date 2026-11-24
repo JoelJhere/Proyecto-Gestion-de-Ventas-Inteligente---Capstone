@@ -718,6 +718,17 @@ export default function Productos() {
     e.preventDefault();
     if (accionEnCursoRef.current) return;
 
+    if (!formData.nombre.trim()) {
+      return toast.error('El nombre del producto es obligatorio.', { id: 'prod-accion' });
+    }
+    const ventaNum = parseFloat(formData.precioVenta);
+    if (Number.isNaN(ventaNum) || ventaNum <= 0) {
+      return toast.error('Ingresa un precio de venta válido mayor a 0.', { id: 'prod-accion' });
+    }
+    if (formData.precioCompra !== '' && parseFloat(formData.precioCompra) < 0) {
+      return toast.error('El costo de compra no puede ser negativo.', { id: 'prod-accion' });
+    }
+
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
     try {
@@ -742,6 +753,17 @@ export default function Productos() {
     e.preventDefault();
     if (accionEnCursoRef.current || !editingProduct) return;
 
+    if (!editingProduct.nombre?.trim()) {
+      return toast.error('El nombre del producto es obligatorio.', { id: 'prod-accion' });
+    }
+    const ventaNum = parseFloat(editingProduct.precioVenta);
+    if (Number.isNaN(ventaNum) || ventaNum <= 0) {
+      return toast.error('Ingresa un precio de venta válido mayor a 0.', { id: 'prod-accion' });
+    }
+    if (editingProduct.precioCompra !== '' && editingProduct.precioCompra !== null && parseFloat(editingProduct.precioCompra) < 0) {
+      return toast.error('El costo de compra no puede ser negativo.', { id: 'prod-accion' });
+    }
+
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
     try {
@@ -762,6 +784,11 @@ export default function Productos() {
   const handleManageStock = async (e) => {
     e.preventDefault();
     if (accionEnCursoRef.current || !stockProduct) return;
+
+    const cantNum = parseInt(stockData.cantidad, 10);
+    if (Number.isNaN(cantNum) || cantNum <= 0) {
+      return toast.error('Ingresa una cantidad válida mayor a 0.', { id: 'prod-accion' });
+    }
 
     accionEnCursoRef.current = true;
     setIsSubmitting(true);

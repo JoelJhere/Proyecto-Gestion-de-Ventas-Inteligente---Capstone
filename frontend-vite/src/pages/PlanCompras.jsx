@@ -276,6 +276,9 @@ export default function PlanCompras() {
     if (formData.detalles.length === 0) {
       return toast.error('Agrega al menos un producto a la orden.', { id: 'plan-accion' });
     }
+    if (formData.fechaEsperada && formData.fechaEsperada < obtenerFechaHoyLocal()) {
+      return toast.error('La fecha esperada no puede ser anterior a hoy.', { id: 'plan-accion' });
+    }
 
     const payload = {
       proveedorId: formData.proveedorId,
@@ -811,7 +814,7 @@ export default function PlanCompras() {
                 </button>
               </div>
 
-              <form onSubmit={handleCrearPlan} className="flex flex-col flex-1 min-h-0">
+              <form onSubmit={handleCrearPlan} noValidate className="flex flex-col flex-1 min-h-0">
                 <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 bg-white [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                   
                   {/* SECCIÓN 1: DATOS DEL PEDIDO */}

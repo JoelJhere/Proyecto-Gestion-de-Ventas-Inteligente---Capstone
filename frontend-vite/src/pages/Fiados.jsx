@@ -243,7 +243,14 @@ export default function Fiados() {
 
   const handleActualizarFecha = async (e) => {
     e.preventDefault();
-    if (!modalPlazo || !nuevaFecha || accionEnCursoRef.current) return;
+    if (!modalPlazo || accionEnCursoRef.current) return;
+
+    if (!nuevaFecha) {
+      return toast.error('Selecciona una fecha límite de aviso.', { id: 'fiado-accion' });
+    }
+    if (nuevaFecha < obtenerFechaHoyLocal()) {
+      return toast.error('La fecha límite no puede ser anterior a hoy.', { id: 'fiado-accion' });
+    }
 
     accionEnCursoRef.current = true;
     setIsSubmitting(true);

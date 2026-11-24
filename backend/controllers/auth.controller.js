@@ -4,13 +4,47 @@ import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RUC_REGEX = /^(10|20)\d{9}$/;
+
+const esPasswordSegura = (pass = '') =>
+  typeof pass === 'string' &&
+  pass.length >= 8 &&
+  /[A-Z]/.test(pass) &&
+  /\d/.test(pass);
+
 // --- 1. REGISTRO DE UN NUEVO NEGOCIO (SAAS) ---
 export const registrarNegocio = async (req, res) => {
   const { nombreNegocio, ruc, nombreDuenio, email, password } = req.body;
 
+  const nombreNegocioLimpio = (nombreNegocio || '').trim();
+  const nombreDuenioLimpio = (nombreDuenio || '').trim();
+  const emailLimpio = (email || '').trim().toLowerCase();
+  const rucLimpio = String(ruc || '').replace(/\D/g, '').trim();
+
+  if (!nombreNegocioLimpio || !nombreDuenioLimpio || !emailLimpio || !password) {
+    return res.status(400).json({ message: 'Completa todos los campos obligatorios.' });
+  }
+
+  if (!EMAIL_REGEX.test(emailLimpio)) {
+    return res.status(400).json({ message: 'Ingresa un correo electrónico válido.' });
+  }
+
+  if (rucLimpio && !RUC_REGEX.test(rucLimpio)) {
+    return res.status(400).json({ message: 'El RUC debe tener 11 dígitos e iniciar con 10 o 20.' });
+  }
+
+  if (!esPasswordSegura(password)) {
+    return res.status(400).json({
+      message: 'La contraseña debe tener al menos 8 caracteres, una letra mayúscula y un número.'
+    });
+  }
+
   try {
-    // A. Validar que el correo no exista ya en todo el sistema
-    const usuarioExistente = await prisma.user.findUnique({ where: { email } });
+    // A. Validar que el correo no exista ya en todo el sistema (sin distinguir mayúsculas)
+    const usuarioExistente = await prisma.user.findFirst({
+      where: { email: { equals: emailLimpio, mode: 'insensitive' } }
+    });
     if (usuarioExistente) {
       return res.status(400).json({ message: 'Este correo electrónico ya está registrado.' });
     }
@@ -21,35 +55,31 @@ export const registrarNegocio = async (req, res) => {
 
     // C. Crear el Negocio y el Usuario Administrador en una sola transacción
     const resultado = await prisma.$transaction(async (tx) => {
-      // 1. Crear el Negocio
       const nuevoNegocio = await tx.negocio.create({
         data: {
-          nombre: nombreNegocio,
-          ruc: ruc || "",
-          // La configuración inicial por defecto se crea sola gracias al schema
+          nombre: nombreNegocioLimpio,
+          ruc: rucLimpio
         }
       });
 
-      // 2. Crear al usuario dueño y amarrarlo al negocio creado
       const nuevoAdmin = await tx.user.create({
         data: {
-          nombre: nombreDuenio,
-          email: email,
+          nombre: nombreDuenioLimpio,
+          email: emailLimpio,
           password: hashedPassword,
-          rol: 'ADMIN', // El dueño creador siempre es ADMIN
+          rol: 'ADMIN',
           negocioId: nuevoNegocio.id,
-          terminosAceptados: true // El dueño acepta los términos al crear su negocio
+          terminosAceptados: true
         }
       });
 
       return { nuevoNegocio, nuevoAdmin };
     });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: 'Negocio registrado exitosamente. Ya puedes iniciar sesión.',
       negocio: resultado.nuevoNegocio.nombre
     });
-
   } catch (error) {
     console.error('Error al registrar negocio:', error);
     res.status(500).json({ message: 'Error interno al registrar el negocio.' });
@@ -60,35 +90,49 @@ export const registrarNegocio = async (req, res) => {
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
-  try {
-    // 1. Buscar al usuario y traer los datos de su negocio
-    const user = await prisma.user.findUnique({ 
-      where: { email },
-      include: { negocio: true } // Traemos el negocio para verificar su estado
-    });
-    
-    if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
+  const emailLimpio = (email || '').trim().toLowerCase();
+  if (!emailLimpio || !password) {
+    return res.status(400).json({ message: 'Ingresa tu correo y contraseña.' });
+  }
 
-    // 2. Reglas de negocio (Cuenta Activa)
-    if (!user.estado) return res.status(403).json({ message: 'Tu cuenta ha sido desactivada por el administrador de tu bodega.' });
-    
-    // Regla SaaS: Si la bodega entera fue suspendida (por falta de pago), nadie entra.
-    if (user.rol !== 'SUPER_ADMIN' && user.negocio && !user.negocio.estado) {
-      return res.status(403).json({ message: 'El acceso a este negocio ha sido suspendido temporalmente. Contacte a soporte.' });
+  try {
+    // 1. Buscar al usuario (compatible con correos antiguos que tengan mayúsculas)
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: emailLimpio, mode: 'insensitive' } },
+      include: { negocio: true }
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Correo o contraseña incorrectos.' });
     }
 
-    // 3. Comparar la contraseña
+    // 2. Verificar contraseña antes de revelar el estado de la cuenta
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Credenciales inválidas.' });
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Correo o contraseña incorrectos.' });
+    }
 
-    // 4. Generar Token (Ahora inyectamos el negocioId como el ADN de la sesión)
+    // 3. Reglas de negocio (Cuenta y Bodega Activas)
+    if (!user.estado) {
+      return res.status(403).json({
+        message: 'Tu cuenta ha sido desactivada por el administrador de tu bodega.'
+      });
+    }
+
+    if (user.rol !== 'SUPER_ADMIN' && user.negocio && !user.negocio.estado) {
+      return res.status(403).json({
+        message: 'El acceso a este negocio ha sido suspendido temporalmente. Contacte a soporte.'
+      });
+    }
+
+    // 4. Generar Token con negocioId como aislamiento Multi-Tenant
     const token = jwt.sign(
-      { 
-        id: user.id, 
+      {
+        id: user.id,
         rol: user.rol,
-        negocioId: user.negocioId 
-      }, 
-      process.env.JWT_SECRET || 'secreto_super_seguro_aj', 
+        negocioId: user.negocioId
+      },
+      process.env.JWT_SECRET || 'secreto_super_seguro_aj',
       { expiresIn: '12h' }
     );
 
@@ -102,10 +146,9 @@ export const login = async (req, res) => {
         rol: user.rol,
         negocioId: user.negocioId,
         terminosAceptados: user.terminosAceptados,
-        nombreNegocio: user.negocio ? user.negocio.nombre : 'Panel Central' // Si es SUPER_ADMIN dice Panel Central
+        nombreNegocio: user.negocio ? user.negocio.nombre : 'Panel Central'
       }
     });
-
   } catch (error) {
     console.error('Error en login:', error);
     res.status(500).json({ message: 'Error en el servidor.' });
