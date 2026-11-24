@@ -134,15 +134,16 @@ export default function Historial() {
     movimientos: []
   });
   const [isLoadingCaja, setIsLoadingCaja] = useState(false);
+  const [filtroTipoCaja, setFiltroTipoCaja] = useState('TODOS'); // 'TODOS' | 'INGRESO' | 'EGRESO'
   const [limiteCaja, setLimiteCaja] = useState(BLOQUE_CARGA);
   const [modalMovimiento, setModalMovimiento] = useState(null); // 'INGRESO' o 'EGRESO'
   const [formCaja, setFormCaja] = useState({ monto: '', metodoPago: 'EFECTIVO', descripcion: '', categoria: '' });
   const [puntoHover, setPuntoHover] = useState(null);
 
-  // Debounce del buscador para evitar ráfagas de peticiones al escribir en tablet o laptop
+  // Debounce del buscador (limpiando espacios sobrantes del teclado táctil)
   useEffect(() => {
     const timer = setTimeout(() => {
-      setBusquedaDebounced(busqueda);
+      setBusquedaDebounced(busqueda.trim());
     }, 300);
     return () => clearTimeout(timer);
   }, [busqueda]);
@@ -154,13 +155,14 @@ export default function Historial() {
     return 'Efectivo';
   };
 
-  const abrirImpresion = (ventaId) => {
+  const abrirTicket = (ventaId, autoImprimir = false) => {
     const width = 420;
     const height = 720;
     const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
     const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+    const url = autoImprimir ? `/ticket/${ventaId}?imprimir=1` : `/ticket/${ventaId}`;
     window.open(
-      `/ticket/${ventaId}?imprimir=1`,
+      url,
       'Comprobante',
       `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
     );
@@ -385,12 +387,23 @@ export default function Historial() {
     }
   };
 
-  // --- PAGINACIÓN PROGRESIVA DEL LIBRO DIARIO DE CAJA (30 EN 30) ---
-  const movimientosVisibles = (datosCaja.movimientos || []).slice(0, limiteCaja);
-  const restantesCaja = (datosCaja.movimientos || []).length - movimientosVisibles.length;
+  // Restantes aproximados para el botón "Cargar más" en Ventas
+  const totalOperaciones = resumen.cantidadOperaciones || ventas.length;
+  const restantesVentas = Math.max(0, totalOperaciones - ventas.length);
+  const cantidadProximaCargaVentas = restantesVentas > 0 ? Math.min(BLOQUE_CARGA, restantesVentas) : BLOQUE_CARGA;
+
+  // --- FILTRO Y PAGINACIÓN PROGRESIVA DEL LIBRO DIARIO DE CAJA (30 EN 30) ---
+  const todosMovimientosCaja = datosCaja.movimientos || [];
+  const totalIngresosMovs = todosMovimientosCaja.filter(m => m.tipo === 'INGRESO').length;
+  const totalEgresosMovs = todosMovimientosCaja.filter(m => m.tipo === 'EGRESO').length;
+  const movimientosFiltrados = filtroTipoCaja === 'TODOS'
+    ? todosMovimientosCaja
+    : todosMovimientosCaja.filter(m => m.tipo === filtroTipoCaja);
+  const movimientosVisibles = movimientosFiltrados.slice(0, limiteCaja);
+  const restantesCaja = movimientosFiltrados.length - movimientosVisibles.length;
 
   // --- PREPARACIÓN DE PUNTOS PARA EL GRÁFICO ESTILO TRADING ---
-  const puntosGrafico = [...(datosCaja.movimientos || [])].reverse();
+  const puntosGrafico = [...todosMovimientosCaja].reverse();
   const anchoSvg = 850;
   const altoSvg = 240;
   const padX = 35;
@@ -554,6 +567,7 @@ export default function Historial() {
                     <input
                       type="date"
                       value={fechaInicio}
+                      max={fechaFin || formatoFechaLocal(new Date())}
                       onChange={e => setFechaInicio(e.target.value)}
                       className="flex-1 sm:flex-none px-3 py-2 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white outline-none focus:border-emerald-500 font-medium"
                     />
@@ -565,6 +579,8 @@ export default function Historial() {
                     <input
                       type="date"
                       value={fechaFin}
+                      min={fechaInicio || undefined}
+                      max={formatoFechaLocal(new Date())}
                       onChange={e => setFechaFin(e.target.value)}
                       className="flex-1 sm:flex-none px-3 py-2 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white outline-none focus:border-emerald-500 font-medium"
                     />
@@ -574,53 +590,69 @@ export default function Historial() {
             </AnimatePresence>
           </div>
 
-          {/* LISTADO RESPONSIVE DE HISTORIAL DE VENTAS */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden flex-1 flex flex-col">
+          {/* LISTADO RESPONSIVE: TARJETAS EN CELULAR (1 col) Y TABLET (2 cols) + TABLA EN PC (>= 1024px) */}
+          <div className="lg:bg-white lg:border lg:border-slate-200/90 lg:rounded-2xl lg:shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden flex-1 flex flex-col">
             
-            {/* VISTA MÓVIL (< 768px): Tarjetas limpias */}
-            <div className="md:hidden divide-y divide-slate-100">
-              {ventas.length === 0 && !isLoading ? (
-                <div className="p-10 text-center text-slate-500 font-medium text-sm">
+            {/* VISTA CELULAR (1 col) Y TABLET VERTICAL (2 cols) */}
+            <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {isLoading && ventas.length === 0 ? (
+                [...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200/90 animate-pulse space-y-3">
+                    <div className="flex justify-between gap-2">
+                      <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                      <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                    </div>
+                    <div className="h-12 bg-slate-100 rounded-xl w-full"></div>
+                    <div className="flex justify-end gap-2">
+                      <div className="h-8 bg-slate-100 rounded-lg w-20"></div>
+                      <div className="h-8 bg-slate-100 rounded-lg w-28"></div>
+                    </div>
+                  </div>
+                ))
+              ) : ventas.length === 0 ? (
+                <div className="col-span-full bg-white rounded-2xl border border-slate-200/90 p-10 text-center text-slate-500 font-medium text-sm">
                   No se encontraron transacciones registradas para este periodo.
                 </div>
               ) : (
                 ventas.map((venta) => (
-                  <div key={venta.id} className="p-4 space-y-3 bg-white">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                        <IconoComprobante tipo={venta.tipoComprobante} />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-slate-900 text-sm leading-snug">
-                            {venta.tipoComprobante === 'SIN_COMPROBANTE' ? 'Venta Rápida' : venta.tipoComprobante}
+                  <div key={venta.id} className="p-4 space-y-3 rounded-2xl border border-slate-200/90 shadow-2xs bg-white flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <IconoComprobante tipo={venta.tipoComprobante} />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-slate-900 text-sm leading-snug">
+                              {venta.tipoComprobante === 'SIN_COMPROBANTE' ? 'Venta Rápida' : venta.tipoComprobante}
+                            </p>
+                            <p className="text-xs text-slate-500 font-mono truncate">
+                              {venta.numeroComprobante || `#000${venta.id}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-extrabold text-emerald-700 font-mono text-base">
+                            S/ {Number(venta.total || 0).toFixed(2)}
                           </p>
-                          <p className="text-xs text-slate-500 font-mono truncate">
-                            {venta.numeroComprobante || `#000${venta.id}`}
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            {new Date(venta.createdAt).toLocaleDateString('es-PE')} • {new Date(venta.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-extrabold text-emerald-700 font-mono text-base">
-                          S/ {Number(venta.total || 0).toFixed(2)}
-                        </p>
-                        <p className="text-[11px] text-slate-500 font-medium">
-                          {new Date(venta.createdAt).toLocaleDateString('es-PE')} • {new Date(venta.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+
+                      <div className="flex items-center justify-between gap-2 bg-slate-50/90 px-3 py-2 rounded-xl border border-slate-100">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-800 line-clamp-2 leading-snug" title={venta.clienteNombre}>
+                            {venta.clienteNombre || 'Cliente Varios'}
+                          </p>
+                          <p className="text-[11px] text-slate-500 font-mono">
+                            {venta.clienteDocumento && venta.clienteDocumento !== '00000000' ? `Doc: ${venta.clienteDocumento}` : 'Sin documento'}
+                          </p>
+                        </div>
+                        <BadgeMetodoPago metodo={venta.metodoPago} />
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-2 bg-slate-50/90 px-3 py-2 rounded-xl border border-slate-100">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-800 line-clamp-2 leading-snug" title={venta.clienteNombre}>
-                          {venta.clienteNombre || 'Cliente Varios'}
-                        </p>
-                        <p className="text-[11px] text-slate-500 font-mono">
-                          {venta.clienteDocumento && venta.clienteDocumento !== '00000000' ? `Doc: ${venta.clienteDocumento}` : 'Sin documento'}
-                        </p>
-                      </div>
-                      <BadgeMetodoPago metodo={venta.metodoPago} />
-                    </div>
-
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 pt-0.5">
                       <button
                         type="button"
                         onClick={() => setModalDetalles(venta)}
@@ -634,10 +666,7 @@ export default function Historial() {
                           if (venta.enlacePdf) {
                             setVisorComprobante(venta);
                           } else {
-                            const width = 400; const height = 600;
-                            const left = (window.innerWidth / 2) - (width / 2);
-                            const top = (window.innerHeight / 2) - (height / 2);
-                            window.open(`/ticket/${venta.id}`, 'Ticket', `width=${width},height=${height},top=${top},left=${left}`);
+                            abrirTicket(venta.id, false);
                           }
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 bg-white hover:bg-red-50 border border-slate-200/80 rounded-lg cursor-pointer"
@@ -650,9 +679,9 @@ export default function Historial() {
               )}
             </div>
 
-            {/* VISTA TABLET Y ESCRITORIO (>= 768px) */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[740px]">
+            {/* VISTA ESCRITORIO (>= 1024px) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[760px]">
                 <thead>
                   <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4 xl:px-5 whitespace-nowrap">Fecha y Hora</th>
@@ -664,7 +693,21 @@ export default function Historial() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {ventas.length === 0 && !isLoading ? (
+                  {isLoading && ventas.length === 0 ? (
+                    [...Array(5)].map((_, idx) => (
+                      <tr key={idx} className="animate-pulse">
+                        <td className="py-4 px-5"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-32"></div></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-40"></div></td>
+                        <td className="py-4 px-4"><div className="h-6 bg-slate-200 rounded-full w-24 mx-auto"></div></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-20 ml-auto"></div></td>
+                        <td className="py-4 px-5 flex justify-center gap-2">
+                          <div className="h-8 w-8 bg-slate-200 rounded-lg"></div>
+                          <div className="h-8 w-8 bg-slate-200 rounded-lg"></div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : ventas.length === 0 ? (
                     <tr>
                       <td colSpan="6" className="p-12 text-center text-slate-500 font-medium">
                         No se encontraron transacciones registradas para este periodo.
@@ -719,10 +762,7 @@ export default function Historial() {
                                 if (venta.enlacePdf) {
                                   setVisorComprobante(venta);
                                 } else {
-                                  const width = 400; const height = 600;
-                                  const left = (window.innerWidth / 2) - (width / 2);
-                                  const top = (window.innerHeight / 2) - (height / 2);
-                                  window.open(`/ticket/${venta.id}`, 'Ticket', `width=${width},height=${height},top=${top},left=${left}`);
+                                  abrirTicket(venta.id, false);
                                 }
                               }}
                               className="bg-white hover:bg-red-50 text-red-500 hover:text-red-600 p-2 rounded-lg transition-colors border border-slate-200/80 cursor-pointer" 
@@ -739,17 +779,18 @@ export default function Historial() {
               </table>
             </div>
 
-            {isLoading && (
-              <div className="p-6 text-center text-sm font-bold text-slate-400 animate-pulse">
-                Cargando transacciones...
+            {isLoading && ventas.length > 0 && (
+              <div className="p-5 text-center text-xs sm:text-sm font-bold text-slate-400 animate-pulse">
+                Cargando más transacciones...
               </div>
             )}
 
+            {/* PIE DE PAGINACIÓN CENTRADO Y CON ESPACIO (30 EN 30) */}
             {!isLoading && ventas.length > 0 && (
-              <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <p className="text-xs font-semibold text-slate-500">
+              <div className="mt-4 lg:mt-0 px-5 py-5 bg-white lg:bg-slate-50/80 border border-slate-200/90 lg:border-0 lg:border-t lg:border-slate-100 rounded-2xl lg:rounded-none shadow-2xs lg:shadow-none flex flex-col items-center justify-center gap-3 text-center">
+                <p className="text-xs sm:text-sm font-semibold text-slate-500">
                   Mostrando <strong className="text-slate-800">{ventas.length}</strong> de{' '}
-                  <strong className="text-slate-800">{resumen.cantidadOperaciones || ventas.length}</strong> operación(es)
+                  <strong className="text-slate-800">{totalOperaciones}</strong> operación(es)
                 </p>
 
                 {hayMas && (
@@ -757,10 +798,12 @@ export default function Historial() {
                     type="button"
                     disabled={isLoading}
                     onClick={() => cargarHistorial(false, paginaActual + 1)} 
-                    className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+                    className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-6 py-2.5 rounded-xl transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
                   >
-                    <FaChevronDown size={11} />
-                    <span>Cargar {BLOQUE_CARGA} operaciones más</span>
+                    <FaChevronDown size={12} />
+                    <span>
+                      Cargar {cantidadProximaCargaVentas} operación{cantidadProximaCargaVentas === 1 ? '' : 'es'} más
+                    </span>
                   </button>
                 )}
               </div>
@@ -935,22 +978,53 @@ export default function Historial() {
             )}
           </div>
 
-          {/* LIBRO DIARIO DE CAJA RESPONSIVE (TARJETAS EN CELULAR + TABLA EN TABLET/PC + PAGINACIÓN 30 EN 30) */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
+          {/* FILTROS RÁPIDOS DEL LIBRO DIARIO DE CAJA */}
+          {!isLoadingCaja && todosMovimientosCaja.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { id: 'TODOS', label: `Todos (${todosMovimientosCaja.length})`, activoClase: 'bg-verde-pastel text-emerald-950 border-emerald-300 shadow-2xs' },
+                { id: 'INGRESO', label: `Ingresos (${totalIngresosMovs})`, activoClase: 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs' },
+                { id: 'EGRESO', label: `Egresos (${totalEgresosMovs})`, activoClase: 'bg-red-50 text-red-700 border-red-300 shadow-2xs' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setFiltroTipoCaja(tab.id);
+                    setLimiteCaja(BLOQUE_CARGA);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    filtroTipoCaja === tab.id
+                      ? tab.activoClase
+                      : 'bg-white text-slate-600 border-slate-200/90 hover:bg-slate-50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* LIBRO DIARIO DE CAJA: TARJETAS EN CELULAR (1 col) Y TABLET (2 cols) + TABLA EN PC (>= 1024px) */}
+          <div className="lg:bg-white lg:border lg:border-slate-200/90 lg:rounded-2xl lg:shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
             
-            {/* VISTA MÓVIL (< 768px) */}
-            <div className="md:hidden divide-y divide-slate-100">
+            {/* VISTA CELULAR (1 col) Y TABLET VERTICAL (2 cols) */}
+            <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {isLoadingCaja ? (
-                <div className="p-8 text-center text-slate-400 text-sm font-medium animate-pulse">
-                  Cargando movimientos...
-                </div>
-              ) : datosCaja.movimientos.length === 0 ? (
-                <div className="p-10 text-center text-slate-500 text-sm font-medium">
-                  Sin movimientos financieros registrados.
+                [...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200/90 animate-pulse space-y-2.5">
+                    <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                    <div className="h-4 bg-slate-100 rounded w-3/4"></div>
+                    <div className="h-6 bg-slate-100 rounded-lg w-1/2"></div>
+                  </div>
+                ))
+              ) : movimientosFiltrados.length === 0 ? (
+                <div className="col-span-full bg-white rounded-2xl border border-slate-200/90 p-10 text-center text-slate-500 text-sm font-medium">
+                  Sin movimientos financieros registrados para este filtro.
                 </div>
               ) : (
                 movimientosVisibles.map((mov) => (
-                  <div key={mov.id} className="p-4 space-y-2.5 bg-white">
+                  <div key={mov.id} className="p-4 space-y-3 rounded-2xl border border-slate-200/90 shadow-2xs bg-white flex flex-col justify-between">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/80 mb-1">
@@ -970,7 +1044,7 @@ export default function Historial() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs pt-1">
+                    <div className="flex items-center justify-between gap-2 text-xs pt-2 border-t border-slate-100">
                       <span className="text-slate-500 font-medium">
                         {new Date(mov.createdAt).toLocaleDateString('es-PE')} • {new Date(mov.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
                       </span>
@@ -981,9 +1055,9 @@ export default function Historial() {
               )}
             </div>
 
-            {/* VISTA TABLET Y ESCRITORIO (>= 768px) */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+            {/* VISTA ESCRITORIO (>= 1024px) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[720px]">
                 <thead>
                   <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                     <th className="py-3.5 px-5 whitespace-nowrap">Fecha y Hora</th>
@@ -995,9 +1069,17 @@ export default function Historial() {
                 </thead>
                 <tbody className="text-sm font-medium text-slate-700 divide-y divide-slate-100">
                   {isLoadingCaja ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-slate-400">Cargando movimientos...</td></tr>
-                  ) : datosCaja.movimientos.length === 0 ? (
-                    <tr><td colSpan="5" className="p-10 text-center text-slate-500">Sin movimientos financieros registrados.</td></tr>
+                    [...Array(4)].map((_, idx) => (
+                      <tr key={idx} className="animate-pulse">
+                        <td className="py-4 px-5"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-56"></div></td>
+                        <td className="py-4 px-4"><div className="h-6 bg-slate-200 rounded-full w-24 mx-auto"></div></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-20 ml-auto"></div></td>
+                        <td className="py-4 px-5"><div className="h-4 bg-slate-200 rounded w-20 ml-auto"></div></td>
+                      </tr>
+                    ))
+                  ) : movimientosFiltrados.length === 0 ? (
+                    <tr><td colSpan="5" className="p-10 text-center text-slate-500">Sin movimientos financieros registrados para este filtro.</td></tr>
                   ) : (
                     movimientosVisibles.map((mov) => (
                       <tr key={mov.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1005,7 +1087,7 @@ export default function Historial() {
                           <p className="font-bold text-slate-900 text-sm">{new Date(mov.createdAt).toLocaleDateString('es-PE')}</p>
                           <p className="text-xs text-slate-500">{new Date(mov.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>
                         </td>
-                        <td className="py-3.5 px-4 max-w-[260px] lg:max-w-[360px]">
+                        <td className="py-3.5 px-4 max-w-[260px] xl:max-w-[380px]">
                           <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/80 mb-1">
                             {(mov.categoria || '').replace(/_/g, ' ')}
                           </span>
@@ -1029,21 +1111,22 @@ export default function Historial() {
               </table>
             </div>
 
-            {/* PIE DE PAGINACIÓN PROGRESIVA DEL LIBRO DIARIO (30 EN 30) */}
-            {!isLoadingCaja && datosCaja.movimientos.length > 0 && (
-              <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <p className="text-xs font-semibold text-slate-500">
+            {/* PIE DE PAGINACIÓN CENTRADO Y CON ESPACIO (30 EN 30) */}
+            {!isLoadingCaja && movimientosFiltrados.length > 0 && (
+              <div className="mt-4 lg:mt-0 px-5 py-5 bg-white lg:bg-slate-50/80 border border-slate-200/90 lg:border-0 lg:border-t lg:border-slate-100 rounded-2xl lg:rounded-none shadow-2xs lg:shadow-none flex flex-col items-center justify-center gap-3 text-center">
+                <p className="text-xs sm:text-sm font-semibold text-slate-500">
                   Mostrando <strong className="text-slate-800">{movimientosVisibles.length}</strong> de{' '}
-                  <strong className="text-slate-800">{datosCaja.movimientos.length}</strong> movimiento(s)
+                  <strong className="text-slate-800">{movimientosFiltrados.length}</strong> movimiento(s)
+                  {filtroTipoCaja !== 'TODOS' ? ' filtrados' : ''}
                 </p>
 
                 {restantesCaja > 0 && (
                   <button
                     type="button"
                     onClick={() => setLimiteCaja(prev => prev + BLOQUE_CARGA)}
-                    className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs cursor-pointer"
+                    className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-6 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
                   >
-                    <FaChevronDown size={11} />
+                    <FaChevronDown size={12} />
                     <span>
                       Cargar {Math.min(BLOQUE_CARGA, restantesCaja)} movimiento{Math.min(BLOQUE_CARGA, restantesCaja) === 1 ? '' : 's'} más
                     </span>
@@ -1264,7 +1347,7 @@ export default function Historial() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => abrirImpresion(visorComprobante.id)}
+                    onClick={() => abrirTicket(visorComprobante.id, true)}
                     className="bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 px-3.5 py-2 rounded-lg text-xs font-extrabold transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <FaPrint size={12} /> Imprimir
