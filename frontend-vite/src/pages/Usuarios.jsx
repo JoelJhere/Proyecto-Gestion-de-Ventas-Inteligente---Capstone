@@ -14,6 +14,7 @@ export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('TODOS'); // TODOS | ACTIVOS | SUSPENDIDOS
   const [limiteVisible, setLimiteVisible] = useState(BLOQUE_CARGA);
 
   // Candado síncrono anti-spam / doble clic
@@ -26,7 +27,7 @@ export default function Usuarios() {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [mostrarPassword, setMostrarPassword] = useState(false);
 
-  // Usuario actual en sesión (para evitar que se suspenda a sí mismo)
+  // Usuario actual en sesión (para evitar que se suspenda o se quite el rol ADMIN a sí mismo)
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
   // Datos del formulario
@@ -65,17 +66,29 @@ export default function Usuarios() {
     }
   };
 
+  // Métricas en vivo para tarjetas superiores y filtros
+  const totalAdmins = usuarios.filter(u => u.rol === 'ADMIN').length;
+  const usuariosActivos = usuarios.filter(u => u.estado).length;
+  const usuariosSuspendidos = usuarios.length - usuariosActivos;
+
+  // Filtrado combinado + paginación progresiva (30 en 30)
+  const qBusqueda = busqueda.trim().toLowerCase();
   const usuariosFiltrados = usuarios.filter((u) => {
-    const q = busqueda.toLowerCase();
+    if (filtroEstado === 'ACTIVOS' && !u.estado) return false;
+    if (filtroEstado === 'SUSPENDIDOS' && u.estado) return false;
+    if (!qBusqueda) return true;
     return (
-      u.nombre.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q) ||
-      u.rol.toLowerCase().includes(q)
+      u.nombre.toLowerCase().includes(qBusqueda) ||
+      u.email.toLowerCase().includes(qBusqueda) ||
+      u.rol.toLowerCase().includes(qBusqueda)
     );
   });
 
   const usuariosVisibles = usuariosFiltrados.slice(0, limiteVisible);
   const restantesPorCargar = usuariosFiltrados.length - usuariosVisibles.length;
+  const hayFiltrosActivos = filtroEstado !== 'TODOS' || qBusqueda !== '';
+
+  const esCuentaPropiaEnEdicion = modoEdicion && formData.id === currentUser.id;
 
   const abrirModalNuevo = () => {
     if (accionEnCursoRef.current) return;
@@ -117,12 +130,16 @@ export default function Usuarios() {
     if (!modoEdicion && passwordLimpia.length < 6) {
       return toast.error('La contraseña inicial debe tener al menos 6 caracteres.', { id: 'user-accion' });
     }
+    if (modoEdicion && passwordLimpia.length > 0 && passwordLimpia.length < 6) {
+      return toast.error('Si cambias la contraseña, debe tener al menos 6 caracteres.', { id: 'user-accion' });
+    }
 
     const payload = {
       ...formData,
       nombre: nombreLimpio,
       email: emailLimpio,
-      password: passwordLimpia
+      password: passwordLimpia,
+      rol: esCuentaPropiaEnEdicion ? currentUser.rol : formData.rol
     };
 
     accionEnCursoRef.current = true;
@@ -179,10 +196,6 @@ export default function Usuarios() {
       setIsSubmitting(false);
     }
   };
-
-  // Métricas en vivo para las tarjetas superiores estilo Figma
-  const totalAdmins = usuarios.filter(u => u.rol === 'ADMIN').length;
-  const usuariosActivos = usuarios.filter(u => u.estado).length;
 
   return (
     <div className="flex flex-col gap-6 text-slate-800 pb-24 lg:pb-6 font-sans antialiased">
@@ -277,28 +290,75 @@ export default function Usuarios() {
         </div>
       </div>
 
-      {/* LISTADO RESPONSIVE */}
+      {/* BARRA DE FILTROS RÁPIDOS POR ESTADO */}
+      {!isLoading && usuarios.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'TODOS', label: `Todos (${usuarios.length})`, activoClase: 'bg-verde-pastel text-emerald-950 border-emerald-300 shadow-2xs' },
+            { id: 'ACTIVOS', label: `Activos (${usuariosActivos})`, activoClase: 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs' },
+            { id: 'SUSPENDIDOS', label: `Suspendidos (${usuariosSuspendidos})`, activoClase: 'bg-red-50 text-red-700 border-red-300 shadow-2xs' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setFiltroEstado(tab.id);
+                setLimiteVisible(BLOQUE_CARGA);
+              }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                filtroEstado === tab.id
+                  ? tab.activoClase
+                  : 'bg-white text-slate-600 border-slate-200/90 hover:bg-slate-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroEstado('TODOS');
+                setBusqueda('');
+                setLimiteVisible(BLOQUE_CARGA);
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <FaTimes size={10} /> Limpiar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* LISTADO RESPONSIVE: TARJETAS EN CELULAR (1 col) Y TABLET (2 cols) + TABLA EN PC (>= 1024px) */}
       <div className="lg:bg-white lg:border lg:border-slate-200/90 lg:rounded-2xl lg:shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
         
-        {/* VISTA MÓVIL Y TABLET */}
-        <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        {/* VISTA CELULAR (1 col) Y TABLET VERTICAL (2 cols) */}
+        <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {isLoading ? (
-            [...Array(3)].map((_, i) => (
+            [...Array(4)].map((_, i) => (
               <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200/90 animate-pulse space-y-2.5">
                 <div className="h-4 bg-slate-200 rounded w-3/4"></div>
                 <div className="h-3 bg-slate-100 rounded w-1/2"></div>
+                <div className="h-8 bg-slate-100 rounded-xl w-full"></div>
               </div>
             ))
           ) : usuariosFiltrados.length === 0 ? (
             <div className="col-span-full bg-white rounded-2xl border border-slate-200/90 p-10 text-center text-slate-500 font-medium text-sm">
-              {busqueda ? 'No se encontraron colaboradores con ese criterio.' : 'No hay usuarios registrados.'}
+              {hayFiltrosActivos ? 'No se encontraron colaboradores con ese filtro.' : 'No hay usuarios registrados.'}
             </div>
           ) : (
             usuariosVisibles.map((u) => (
-              <div key={u.id} className={`p-4 space-y-3 rounded-2xl border border-slate-200/90 shadow-2xs ${u.estado ? 'bg-white' : 'opacity-60 bg-slate-50/70'}`}>
+              <div
+                key={u.id}
+                className={`p-4 space-y-3 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between ${
+                  u.estado ? 'bg-white' : 'opacity-60 bg-slate-50/70'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div className={`w-9 h-9 rounded-xl font-bold text-sm flex items-center justify-center shrink-0 ${
+                    <div className={`w-10 h-10 rounded-xl font-bold text-sm flex items-center justify-center shrink-0 ${
                       u.estado ? 'bg-verde-pastel/40 text-emerald-900' : 'bg-slate-200 text-slate-600'
                     }`}>
                       {u.nombre.charAt(0).toUpperCase()}
@@ -367,7 +427,7 @@ export default function Usuarios() {
           )}
         </div>
 
-        {/* VISTA ESCRITORIO */}
+        {/* VISTA ESCRITORIO (>= 1024px) */}
         <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[680px]">
             <thead>
@@ -396,14 +456,14 @@ export default function Usuarios() {
               ) : usuariosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="p-12 text-center text-slate-500 font-medium text-sm">
-                    {busqueda ? 'No se encontraron colaboradores con ese criterio.' : 'No hay usuarios registrados.'}
+                    {hayFiltrosActivos ? 'No se encontraron colaboradores con ese filtro.' : 'No hay usuarios registrados.'}
                   </td>
                 </tr>
               ) : (
                 usuariosVisibles.map((u) => (
                   <tr key={u.id} className={`transition-colors ${u.estado ? 'hover:bg-slate-50/80' : 'opacity-55 bg-slate-50/60'}`}>
                     
-                    <td className="py-3.5 px-5 align-middle max-w-[220px] lg:max-w-[280px]">
+                    <td className="py-3.5 px-5 align-middle max-w-[220px] xl:max-w-[300px]">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-9 h-9 rounded-xl font-bold text-sm flex items-center justify-center shrink-0 ${
                           u.estado ? 'bg-verde-pastel/40 text-emerald-900' : 'bg-slate-200 text-slate-600'
@@ -482,22 +542,22 @@ export default function Usuarios() {
           </table>
         </div>
 
-        {/* PIE DE PAGINACIÓN PROGRESIVA (30 EN 30) */}
+        {/* PIE DE PAGINACIÓN PROGRESIVA CENTRADO Y CON ESPACIO (30 EN 30) */}
         {!isLoading && usuariosFiltrados.length > 0 && (
-          <div className="mt-3.5 lg:mt-0 px-5 py-3.5 bg-white lg:bg-slate-50/80 border border-slate-200/90 lg:border-0 lg:border-t lg:border-slate-100 rounded-2xl lg:rounded-none flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-slate-500">
+          <div className="mt-4 lg:mt-0 px-5 py-5 bg-white lg:bg-slate-50/80 border border-slate-200/90 lg:border-0 lg:border-t lg:border-slate-100 rounded-2xl lg:rounded-none shadow-2xs lg:shadow-none flex flex-col items-center justify-center gap-3 text-center">
+            <p className="text-xs sm:text-sm font-semibold text-slate-500">
               Mostrando <strong className="text-slate-800">{usuariosVisibles.length}</strong> de{' '}
               <strong className="text-slate-800">{usuariosFiltrados.length}</strong> colaborador(es)
-              {busqueda.trim() ? ' encontrados' : ''}
+              {hayFiltrosActivos ? ' filtrados' : ''}
             </p>
 
             {restantesPorCargar > 0 && (
               <button
                 type="button"
                 onClick={() => setLimiteVisible(prev => prev + BLOQUE_CARGA)}
-                className="inline-flex items-center gap-2 text-xs font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-4 py-2 rounded-xl transition-colors shadow-2xs cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-950 bg-verde-pastel hover:bg-[#86e6bb] px-6 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
               >
-                <FaChevronDown size={11} />
+                <FaChevronDown size={12} />
                 <span>
                   Cargar {Math.min(BLOQUE_CARGA, restantesPorCargar)} colaborador{Math.min(BLOQUE_CARGA, restantesPorCargar) === 1 ? '' : 'es'} más
                 </span>
@@ -639,13 +699,19 @@ export default function Usuarios() {
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nivel de Acceso (Rol) *</label>
                     <select 
+                      disabled={esCuentaPropiaEnEdicion}
                       value={formData.rol} 
                       onChange={e => setFormData({ ...formData, rol: e.target.value })} 
-                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-bold cursor-pointer"
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-bold cursor-pointer disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     >
                       <option value="AYUDANTE">AYUDANTE (Ventas, Fiados, Recepción de Compras)</option>
                       <option value="ADMIN">ADMIN (Control Total, Configuración y Usuarios)</option>
                     </select>
+                    {esCuentaPropiaEnEdicion && (
+                      <p className="text-[11px] font-semibold text-amber-700 mt-1">
+                        No puedes cambiar el rol de tu propia sesión activa para evitar perder acceso administrativo.
+                      </p>
+                    )}
                   </div>
                 </div>
 
