@@ -3,6 +3,95 @@ import axios from 'axios';
 
 const prisma = new PrismaClient();
 
+// --- UTILIDADES DE FECHA EN HORA DE PERÚ (UTC-5, evita desfase en Render después de las 7 PM) ---
+const obtenerInicioDiaPeruUTC = (diasAtras = 0) => {
+  const ahoraPeru = new Date(Date.now() - 5 * 3600000);
+  return new Date(
+    Date.UTC(
+      ahoraPeru.getUTCFullYear(),
+      ahoraPeru.getUTCMonth(),
+      ahoraPeru.getUTCDate() - diasAtras,
+      5, 0, 0, 0
+    )
+  );
+};
+
+const obtenerInicioMesPeruUTC = () => {
+  const ahoraPeru = new Date(Date.now() - 5 * 3600000);
+  return new Date(
+    Date.UTC(ahoraPeru.getUTCFullYear(), ahoraPeru.getUTCMonth(), 1, 5, 0, 0, 0)
+  );
+};
+
+// --- UTILIDADES DE TOLERANCIA ORTOGRÁFICA Y FONÉTICA (ESPAÑOL PERÚ) ---
+const normalizarFonetico = (texto = '') => {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Quita tildes
+    .replace(/[^a-z0-9\s]/g, ' ')    // Limpia signos de puntuación
+    .replace(/(.)\1+/g, '$1')        // Colapsa letras repetidas (holaaa -> hola)
+    .replace(/(?<!c)h/g, '')         // Quita h muda conservando "ch" (hoy/oy -> oy)
+    .replace(/v/g, 'b')              // Unifica b/v (vendi/bendi -> bendi)
+    .replace(/qu(?=[ei])/g, 'k')     // que/qui -> ke/ki
+    .replace(/z/g, 's')              // Unifica z/s
+    .replace(/c(?=[ei])/g, 's')      // ce/ci -> se/si (ganancia/ganansia)
+    .replace(/c(?!h)/g, 'k')         // ca/co/cu -> ka/ko/ku
+    .replace(/y(?=\s|$)/g, 'i')      // hoy/oy -> oi
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const distanciaLevenshtein = (a, b) => {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = i - 1;
+    fila[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const temp = fila[j];
+      const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+      fila[j] = Math.min(fila[j] + 1, fila[j - 1] + 1, prev + costo);
+      prev = temp;
+    }
+  }
+  return fila[b.length];
+};
+
+const coincideConKeywords = (textoNormalizado, tokens, keywords) => {
+  for (const kwRaw of keywords) {
+    const kw = normalizarFonetico(kwRaw);
+    if (!kw) continue;
+
+    // Frases de varias palabras
+    if (kw.includes(' ')) {
+      if (textoNormalizado.includes(kw)) return true;
+      continue;
+    }
+
+    for (const token of tokens) {
+      if (token === kw) return true;
+
+      // Coincidencia por raíz o palabra truncada (ej. "seman" vs "semana", "prod" vs "producto")
+      if (token.length >= 4 && kw.length >= 5) {
+        if (kw.startsWith(token) || token.startsWith(kw)) return true;
+      }
+
+      // Tolerancia a errores de escritura (1 error en palabras de 5-7 letras, hasta 2 en 8+)
+      if (token.length >= 5 && kw.length >= 5) {
+        const maxDist = token.length >= 8 && kw.length >= 8 ? 2 : 1;
+        if (Math.abs(token.length - kw.length) <= maxDist && distanciaLevenshtein(token, kw) <= maxDist) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+};
+
 // 1. Resumen rápido de alertas para mostrar en la cabecera de la burbuja IA
 export const obtenerResumenIA = async (req, res) => {
   const negocioId = req.user.negocioId;
@@ -24,14 +113,11 @@ export const obtenerResumenIA = async (req, res) => {
     ]);
 
     const productosStockCritico = productos.filter(p => p.stock <= (p.stockMinimo || 3));
-    
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+
+    const inicioMananaPeru = obtenerInicioDiaPeruUTC(-1);
     const fiadosVencidos = fiadosPendientes.filter(f => {
       if (!f.fechaLimite) return false;
-      const limite = new Date(f.fechaLimite);
-      limite.setHours(0, 0, 0, 0);
-      return limite <= hoy;
+      return new Date(f.fechaLimite) < inicioMananaPeru;
     });
 
     res.json({
@@ -46,41 +132,43 @@ export const obtenerResumenIA = async (req, res) => {
   }
 };
 
-//  MOTOR LÓGICO DE RESPALDO
+// MOTOR LÓGICO DE RESPALDO (Con tolerancia a faltas de ortografía y modismos peruanos)
 const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
-  const texto = preguntaRaw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const textoNorm = normalizarFonetico(preguntaRaw);
+  const tokens = textoNorm.split(' ').filter(Boolean);
 
-  // 1. Candado estricto contra temas ajenos al negocio (Política, deportes, cultura general, etc.)
+  // 1. Candado estricto contra temas ajenos al negocio (incluso con faltas de ortografía)
   const palabrasProhibidas = [
-    'futbol', 'mundial', 'deporte', 'partido', 'messi', 'cristiano', 'alianza', 'universitario',
-    'politica', 'presidente', 'congreso', 'elecciones', 'votar', 'partido politico', 'alcalde',
+    'futbol', 'mundial', 'goleador', 'deporte', 'partido', 'messi', 'cristiano', 'alianza', 'universitario',
+    'politica', 'presidente', 'congreso', 'elecciones', 'votar', 'alcalde',
     'chiste', 'broma', 'poema', 'cancion', 'pelicula', 'anime', 'juego', 'minecraft',
     'receta', 'cocinar', 'clima', 'religion', 'dios', 'horoscopo', 'novia', 'amor', 'capital de'
   ];
 
   const palabrasNegocio = [
-    'venta', 'vendi', 'semana', 'mes', 'hoy', 'ayer', 'ingreso', 'ganancia', 'rentab',
-    'producto', 'stock', 'inventario', 'comprar', 'compre', 'pedido', 'proveedor', 'abastec',
-    'fiado', 'deuda', 'debe', 'vecino', 'cobrar', 'caja', 'saldo', 'capital', 'dinero',
-    'gasto', 'retiro', 'bodega', 'tienda', 'negocio', 'resumen', 'como me fue', 'como vamos', 'hola', 'ayuda'
+    'venta', 'vendi', 'vender', 'semana', 'mes', 'hoy', 'ayer', 'ingreso', 'ganancia', 'ganar', 'rentable', 'margen',
+    'producto', 'mercaderia', 'stock', 'inventario', 'comprar', 'compra', 'pedido', 'proveedor', 'abastecer', 'falta', 'agotado',
+    'fiado', 'fiao', 'deuda', 'debe', 'deben', 'vecino', 'cliente', 'cobrar', 'caja', 'saldo', 'capital', 'dinero', 'plata', 'soles',
+    'yape', 'plin', 'efectivo', 'transferencia', 'boleta', 'factura', 'ticket', 'gasto', 'egreso', 'retiro',
+    'bodega', 'tienda', 'negocio', 'resumen', 'balance', 'yendo', 'como fue', 'como vamos', 'como voy', 'hola', 'buenos dias', 'buenas tardes', 'buenas noches', 'ayuda'
   ];
 
-  const contieneProhibida = palabrasProhibidas.some(p => texto.includes(p));
-  const contieneNegocio = palabrasNegocio.some(p => texto.includes(p));
+  const contieneProhibida = coincideConKeywords(textoNorm, tokens, palabrasProhibidas);
+  const contieneNegocio = coincideConKeywords(textoNorm, tokens, palabrasNegocio);
 
   if (contieneProhibida || !contieneNegocio) {
     return 'No puedo responder a esa pregunta, ya que solo estoy programado para ayudarte con las ventas, el inventario y las finanzas de tu negocio.';
   }
 
-  // 2. Respuestas lógicas basadas en la base de datos real de la bodega
-  if (texto.includes('comprar') || texto.includes('stock') || texto.includes('agot') || texto.includes('inventario') || texto.includes('abastec') || texto.includes('pedir')) {
+  // 2. Compras / Stock / Inventario
+  if (coincideConKeywords(textoNorm, tokens, ['comprar', 'compra', 'stock', 'agotado', 'inventario', 'abastecer', 'pedir', 'pedido', 'falta', 'mercaderia', 'proveedor'])) {
     const criticos = datos.productosCriticos;
     const top = datos.rankingProductos.slice(0, 3);
     let resp = `📦 **Análisis de Inventario y Compras (${datos.nombreBodega}):**\n\n`;
     resp += `• **Capital disponible en caja:** S/ ${datos.saldoCaja.toFixed(2)}\n`;
 
     if (criticos.length > 0) {
-      resp += `\n⚠️ **Productos urgentes por comprar (Stock Bajo):**\n`;
+      resp += `\n⚠️ **Productos urgentes por comprar (${criticos.length} con stock bajo):**\n`;
       criticos.slice(0, 6).forEach(p => {
         resp += `- **${p.nombre}**: Quedan **${p.stock} un.** (Mínimo: ${p.stockMinimo}) | Costo: S/ ${(p.precioCompra || 0).toFixed(2)} | Prov: ${p.proveedor?.nombre || 'Sin asignar'}\n`;
       });
@@ -97,7 +185,8 @@ const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
     return resp.trim();
   }
 
-  if (texto.includes('fiado') || texto.includes('debe') || texto.includes('deuda') || texto.includes('vecino') || texto.includes('cobrar')) {
+  // 3. Fiados / Cuentas por cobrar
+  if (coincideConKeywords(textoNorm, tokens, ['fiado', 'fiao', 'debe', 'deben', 'deuda', 'vecino', 'cobrar'])) {
     if (datos.fiados.length === 0) {
       return `✅ **¡Excelente noticia!** Actualmente no tienes ningún vecino con fiados pendientes en **${datos.nombreBodega}**.`;
     }
@@ -111,40 +200,27 @@ const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
     return resp.trim();
   }
 
-  if (texto.includes('ganancia') || texto.includes('rentab') || texto.includes('margen')) {
-    const conMargen = datos.productosActivos
-      .filter(p => p.precioCompra && p.precioCompra > 0)
-      .map(p => ({
-        nombre: p.nombre,
-        ganancia: p.precioVenta - p.precioCompra,
-        porcentaje: ((p.precioVenta - p.precioCompra) / p.precioCompra) * 100
-      }))
-      .sort((a, b) => b.ganancia - a.ganancia);
-
-    if (conMargen.length === 0) {
-      return `Aún no tienes productos con costo de compra registrado para calcular la ganancia unitaria.`;
+  // 4. Ganancia / Rentabilidad
+  if (coincideConKeywords(textoNorm, tokens, ['ganancia', 'ganar', 'rentable', 'margen'])) {
+    if (datos.topRentables.length === 0) {
+      return 'Aún no tienes productos con costo de compra registrado para calcular la ganancia unitaria.';
     }
     let resp = `💰 **Productos que te dejan mayor ganancia en ${datos.nombreBodega}:**\n\n`;
-    conMargen.slice(0, 5).forEach(p => {
-      resp += `• **${p.nombre}**: Ganas **S/ ${p.ganancia.toFixed(2)}** por unidad (+${p.porcentaje.toFixed(0)}%)\n`;
+    datos.topRentables.slice(0, 5).forEach(p => {
+      resp += `• **${p.nombre}**: Ganas **S/ ${p.gananciaUnitaria.toFixed(2)}** por unidad (+${p.porcentajeMargen.toFixed(0)}%)\n`;
     });
     return resp.trim();
   }
 
-  // Respuesta natural para saludos o ayuda
+  // 5. Saludos o ayuda
   if (
-    texto === 'hola' ||
-    texto.startsWith('hola ') ||
-    texto.includes('buenos dias') ||
-    texto.includes('buenas tardes') ||
-    texto.includes('buenas noches') ||
-    texto.includes('que puedes hacer') ||
-    texto === 'ayuda'
+    tokens.length <= 4 &&
+    coincideConKeywords(textoNorm, tokens, ['hola', 'buenos dias', 'buenas tardes', 'buenas noches', 'ayuda'])
   ) {
     return `¡Hola! Soy **VendaIA**, el asistente de **${datos.nombreBodega}**.\n\nEn este momento tienes **S/ ${datos.saldoCaja.toFixed(2)}** en caja, **${datos.ventasHoyCount} venta(s)** registradas hoy y **${datos.productosCriticos.length} producto(s)** con stock crítico.\n\nPuedes preguntarme cosas como:\n• ¿Qué tal me fue en las ventas de esta semana?\n• ¿Qué productos me dejan mayor ganancia?\n• ¿Qué mercadería debería comprar pronto?\n• ¿Quiénes me deben fiado actualmente?`;
   }
 
-  // Por defecto: Resumen de ventas (hoy, semana, mes) y caja
+  // 6. Por defecto: Balance general de ventas (hoy, semana, mes) y caja
   let resp = `📊 **Balance de ${datos.nombreBodega}:**\n\n`;
   resp += `• **Ventas de Hoy:** ${datos.ventasHoyCount} operación(es) por **S/ ${datos.totalHoy.toFixed(2)}**\n`;
   resp += `• **Últimos 7 días (Semana):** ${datos.ventasSemanaCount} venta(s) por **S/ ${datos.totalSemana.toFixed(2)}**\n`;
@@ -168,14 +244,13 @@ export const consultarAsistenteIA = async (req, res) => {
   }
 
   try {
-    // Fechas de referencia
+    // Fechas de referencia exactas en hora Perú (UTC-5)
     const ahora = new Date();
-    const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
-    const hace7Dias = new Date(inicioHoy);
-    hace7Dias.setDate(hace7Dias.getDate() - 7);
-    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    const inicioHoy = obtenerInicioDiaPeruUTC(0);
+    const hace7Dias = obtenerInicioDiaPeruUTC(7);
+    const inicioMes = obtenerInicioMesPeruUTC();
 
-    // Consultamos unicamente los datos de la bodega actual (negocioId)
+    // Consultamos únicamente los datos de la bodega actual (negocioId)
     const [negocio, productos, ventasRecientes, fiados, planesCompra, movimientosCaja] = await prisma.$transaction([
       prisma.negocio.findUnique({ where: { id: negocioId } }),
       prisma.producto.findMany({
@@ -220,6 +295,19 @@ export const consultarAsistenteIA = async (req, res) => {
     const ventasMes = ventasRecientes.filter(v => new Date(v.createdAt) >= inicioMes);
     const sumarTotal = (lista) => lista.reduce((acc, v) => acc + v.total, 0);
 
+    const desglosePorMedio = (lista) => {
+      const totales = { EFECTIVO: 0, YAPE_PLIN: 0, TRANSFERENCIA: 0, FIADO: 0 };
+      lista.forEach(v => {
+        if (totales[v.metodoPago] !== undefined) totales[v.metodoPago] += v.total;
+      });
+      return {
+        efectivo: `S/ ${totales.EFECTIVO.toFixed(2)}`,
+        yapePlin: `S/ ${totales.YAPE_PLIN.toFixed(2)}`,
+        transferencia: `S/ ${totales.TRANSFERENCIA.toFixed(2)}`,
+        fiado: `S/ ${totales.FIADO.toFixed(2)}`
+      };
+    };
+
     // Ranking de rotación de productos
     const conteoProductos = {};
     ventasRecientes.forEach(v => {
@@ -240,6 +328,17 @@ export const consultarAsistenteIA = async (req, res) => {
     const productosActivos = productos.filter(p => p.estado);
     const productosCriticos = productosActivos.filter(p => p.stock <= (p.stockMinimo || 3));
 
+    const topRentables = productosActivos
+      .filter(p => p.precioCompra && p.precioCompra > 0)
+      .map(p => ({
+        nombre: p.nombre,
+        precioCompra: p.precioCompra,
+        precioVenta: p.precioVenta,
+        gananciaUnitaria: p.precioVenta - p.precioCompra,
+        porcentajeMargen: ((p.precioVenta - p.precioCompra) / p.precioCompra) * 100
+      }))
+      .sort((a, b) => b.gananciaUnitaria - a.gananciaUnitaria);
+
     const datosParaRespaldo = {
       nombreBodega: negocio?.nombre || 'Mi Bodega',
       saldoCaja: negocio?.saldoCaja || 0,
@@ -250,31 +349,60 @@ export const consultarAsistenteIA = async (req, res) => {
       ventasMesCount: ventasMes.length,
       totalMes: sumarTotal(ventasMes),
       rankingProductos,
+      topRentables,
       productosActivos,
       productosCriticos,
       fiados
     };
 
     const contextoNegocio = {
-      fechaActualPeru: ahora.toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      fechaActualPeru: ahora.toLocaleDateString('es-PE', {
+        timeZone: 'America/Lima',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
       nombreBodega: negocio?.nombre || 'Mi Bodega',
       capitalDisponibleEnCaja: `S/ ${(negocio?.saldoCaja || 0).toFixed(2)}`,
       metricasVentas: {
-        hoy: { cantidadVentas: ventasHoy.length, totalRecaudado: `S/ ${sumarTotal(ventasHoy).toFixed(2)}` },
-        ultimos7Dias: { cantidadVentas: ventasSemana.length, totalRecaudado: `S/ ${sumarTotal(ventasSemana).toFixed(2)}` },
-        esteMes: { cantidadVentas: ventasMes.length, totalRecaudado: `S/ ${sumarTotal(ventasMes).toFixed(2)}` }
+        hoy: {
+          cantidadVentas: ventasHoy.length,
+          totalRecaudado: `S/ ${sumarTotal(ventasHoy).toFixed(2)}`,
+          porMedioPago: desglosePorMedio(ventasHoy)
+        },
+        ultimos7Dias: {
+          cantidadVentas: ventasSemana.length,
+          totalRecaudado: `S/ ${sumarTotal(ventasSemana).toFixed(2)}`,
+          porMedioPago: desglosePorMedio(ventasSemana)
+        },
+        esteMes: {
+          cantidadVentas: ventasMes.length,
+          totalRecaudado: `S/ ${sumarTotal(ventasMes).toFixed(2)}`,
+          porMedioPago: desglosePorMedio(ventasMes)
+        }
       },
       topProductosMasVendidos: rankingProductos.slice(0, 10),
-      inventarioActual: productosActivos.map(p => ({
+      topProductosMasRentables: topRentables.slice(0, 10).map(p => ({
         nombre: p.nombre,
-        stockActual: p.stock,
-        stockMinimo: p.stockMinimo || 3,
-        estadoStock: p.stock <= (p.stockMinimo || 3) ? 'URGENTE REABASTECER' : 'OK',
-        costoCompra: p.precioCompra ? `S/ ${p.precioCompra.toFixed(2)}` : 'No registrado',
-        precioVenta: `S/ ${p.precioVenta.toFixed(2)}`,
-        gananciaUnitaria: p.precioCompra ? `S/ ${(p.precioVenta - p.precioCompra).toFixed(2)}` : 'N/A',
-        proveedor: p.proveedor?.nombre || 'Sin proveedor'
+        gananciaUnitaria: `S/ ${p.gananciaUnitaria.toFixed(2)}`,
+        margen: `${p.porcentajeMargen.toFixed(0)}%`
       })),
+      resumenInventario: {
+        totalProductosActivos: productosActivos.length,
+        cantidadStockCritico: productosCriticos.length,
+        productosUrgentesReabastecer: productosCriticos.slice(0, 20).map(p => ({
+          nombre: p.nombre,
+          stock: p.stock,
+          minimo: p.stockMinimo || 3,
+          costoCompra: p.precioCompra ? `S/ ${p.precioCompra.toFixed(2)}` : 'N/A',
+          proveedor: p.proveedor?.nombre || 'Sin proveedor'
+        }))
+      },
+      // Formato compacto para soportar 100+ productos sin saturar tokens ni lentificar respuestas
+      catalogoCompacto: productosActivos
+        .slice(0, 120)
+        .map(p => `${p.nombre} [${p.categoria || '-'}] stk:${p.stock} comp:${p.precioCompra ?? '-'} vta:${p.precioVenta}`),
       fiadosPendientesDeCobro: {
         cantidadVecinosDeudores: fiados.length,
         montoTotalPorCobrar: `S/ ${fiados.reduce((acc, f) => acc + f.monto, 0).toFixed(2)}`,
@@ -300,13 +428,11 @@ export const consultarAsistenteIA = async (req, res) => {
 
     const systemPrompt = `Eres VendaIA, el asesor comercial, logístico y financiero exclusivo de la bodega "${negocio?.nombre || 'la tienda'}".
 REGLAS ESTRICTAS:
-1. LÍMITE DE TEMA: SOLO puedes responder preguntas relacionadas con el negocio (ventas, inventario, qué productos comprar, proveedores, 
-fiados, flujo de caja o ganancias de esta bodega).
-2. RECHAZO DE TEMAS AJENOS: Si el usuario pregunta sobre política, deportes, fútbol, religión, chistes, tareas, programación o 
-cualquier tema que NO tenga relación con su bodega, responde ÚNICAMENTE con esta frase exacta:
+1. LÍMITE DE TEMA: SOLO puedes responder preguntas relacionadas con el negocio (ventas, inventario, qué productos comprar, proveedores, fiados, flujo de caja o ganancias de esta bodega).
+2. TOLERANCIA ORTOGRÁFICA Y MODISMOS: El dueño suele escribir rápido desde un celular o tablet con faltas de ortografía, letras faltantes, abreviaturas o expresiones coloquiales peruanas (por ejemplo: "com e esta yendo e eta seman?", "cuanto bendi oy", "kien me deve plata", "k prod falta"). Interpreta siempre su intención comercial real con naturalidad, sin corregirle la ortografía ni rechazar preguntas del negocio por estar mal escritas.
+3. RECHAZO DE TEMAS AJENOS: Si el usuario pregunta sobre política, deportes, fútbol, religión, chistes, tareas, programación o cualquier tema que NO tenga relación con su bodega (incluso mal escrito), responde ÚNICAMENTE con esta frase exacta:
 "No puedo responder a esa pregunta, ya que solo estoy programado para ayudarte con las ventas, el inventario y las finanzas de tu negocio."
-3. CERO INVENCIÓN: Usa EXCLUSIVAMENTE los datos reales del siguiente JSON. Nunca inventes productos ni cifras. Responde en español claro, 
-conciso y amigable usando Soles (S/).
+4. CERO INVENCIÓN: Usa EXCLUSIVAMENTE los datos reales del siguiente JSON. Nunca inventes productos ni cifras. Responde en español claro, conciso y amigable usando Soles (S/).
 
 DATOS EN TIEMPO REAL DE LA BODEGA:
 ${JSON.stringify(contextoNegocio)}`;
@@ -314,7 +440,6 @@ ${JSON.stringify(contextoNegocio)}`;
     const apiKey = process.env.GEMINI_API_KEY?.trim();
     let respuestaTexto = '';
 
-    // Función auxiliar para extraer el texto sin importar cómo lo anide Google
     const extraerTextoGemini = (data) => {
       if (!data) return '';
       if (typeof data.output_text === 'string' && data.output_text.trim()) return data.output_text;
@@ -356,7 +481,6 @@ ${JSON.stringify(contextoNegocio)}`;
         'x-goog-api-key': apiKey
       };
 
-      // 1. Probamos la nueva Interactions API con gemini-3.8-flash y gemini-3.5-flash-lite
       const modelosActivos = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
 
       for (const modelo of modelosActivos) {
@@ -379,7 +503,6 @@ ${JSON.stringify(contextoNegocio)}`;
         }
       }
 
-      // 2. Si Interactions no devolvió texto, usamos generateContent con los modelos vigentes
       if (!respuestaTexto) {
         for (const modelo of modelosActivos) {
           if (respuestaTexto) break;
@@ -407,13 +530,12 @@ ${JSON.stringify(contextoNegocio)}`;
       }
     }
 
-    // Si la API externa falló o tardó, el Motor Lógico Interno responde al instante con los datos reales de Prisma
+    // Si la API externa falló o tardó, el Motor Lógico Interno responde con tolerancia ortográfica
     if (!respuestaTexto) {
       respuestaTexto = generarAnalisisLocalInteligente(mensaje, datosParaRespaldo);
     }
 
     res.status(200).json({ respuesta: respuestaTexto });
-
   } catch (error) {
     console.error('Error en consultarAsistenteIA:', error);
     res.status(500).json({ message: 'Error al procesar la consulta con el asistente IA.' });
