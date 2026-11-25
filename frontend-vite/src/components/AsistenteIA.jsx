@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FaRobot, FaPaperPlane, FaTrash, FaTimes, FaExclamationTriangle,
-  FaClock, FaWallet, FaPlus, FaMinus, FaGripHorizontal
+  FaClock, FaWallet, FaPlus, FaMinus, FaGripHorizontal,
+  FaChevronLeft, FaChevronRight
 } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -97,6 +98,8 @@ export default function AsistenteIA() {
   const dragChatRef = useRef(null);
   const resizeChatRef = useRef(null);
   const chatMovidoManualRef = useRef(false);
+  const sugerenciasRef = useRef(null);
+  const [flechasSugerencias, setFlechasSugerencias] = useState({ izq: false, der: false });
 
   // Dimensiones efectivas del chat adaptadas al viewport actual
   const maxWViewport = Math.max(MIN_W, Math.min(MAX_W, viewport.w - MARGEN_PANTALLA * 2));
@@ -134,6 +137,46 @@ export default function AsistenteIA() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
+
+  // Controla las flechas izquierda/derecha y la rueda del mouse en las sugerencias rápidas
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = sugerenciasRef.current;
+    if (!el) return;
+
+    const revisarScroll = () => {
+      setFlechasSugerencias({
+        izq: el.scrollLeft > 4,
+        der: el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+      });
+    };
+
+    const manejarRueda = (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+
+    const rafId = requestAnimationFrame(revisarScroll);
+    el.addEventListener('scroll', revisarScroll, { passive: true });
+    el.addEventListener('wheel', manejarRueda, { passive: false });
+    const observer = new ResizeObserver(revisarScroll);
+    observer.observe(el);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      el.removeEventListener('scroll', revisarScroll);
+      el.removeEventListener('wheel', manejarRueda);
+      observer.disconnect();
+    };
+  }, [isOpen, anchoEfectivo]);
+
+  const desplazarSugerencias = (direccion) => {
+    const el = sugerenciasRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direccion * 190, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     try {
@@ -658,18 +701,49 @@ export default function AsistenteIA() {
             </div>
 
             {/* SUGERENCIAS RÁPIDAS */}
-            <div className="px-3 py-2 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0">
-              {preguntasRapidas.map((pregunta, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={isTyping}
-                  onClick={() => enviarConsulta(pregunta)}
-                  className="text-[11px] font-bold bg-slate-100 hover:bg-verde-pastel/30 text-slate-700 hover:text-emerald-950 px-3 py-1.5 rounded-full whitespace-nowrap transition-colors border border-slate-200 shrink-0 cursor-pointer disabled:opacity-50"
-                >
-                  {pregunta}
-                </button>
-              ))}
+            <div className="relative bg-white border-t border-slate-100 shrink-0">
+              {flechasSugerencias.izq && (
+                <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center pl-1.5 pr-4 bg-gradient-to-r from-white via-white/95 to-transparent pointer-events-none">
+                  <button
+                    type="button"
+                    onClick={() => desplazarSugerencias(-1)}
+                    title="Ver sugerencias anteriores"
+                    className="pointer-events-auto w-6 h-6 rounded-full bg-white hover:bg-verde-pastel/40 text-slate-700 hover:text-emerald-950 border border-slate-200 shadow-xs flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <FaChevronLeft size={9} />
+                  </button>
+                </div>
+              )}
+
+              <div
+                ref={sugerenciasRef}
+                className="px-3 py-2 flex gap-1.5 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:hidden"
+              >
+                {preguntasRapidas.map((pregunta, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={isTyping}
+                    onClick={() => enviarConsulta(pregunta)}
+                    className="text-[11px] font-bold bg-slate-100 hover:bg-verde-pastel/30 text-slate-700 hover:text-emerald-950 px-3 py-1.5 rounded-full whitespace-nowrap transition-colors border border-slate-200 shrink-0 cursor-pointer disabled:opacity-50"
+                  >
+                    {pregunta}
+                  </button>
+                ))}
+              </div>
+
+              {flechasSugerencias.der && (
+                <div className="absolute right-0 top-0 bottom-0 z-10 flex items-center pr-1.5 pl-4 bg-gradient-to-l from-white via-white/95 to-transparent pointer-events-none">
+                  <button
+                    type="button"
+                    onClick={() => desplazarSugerencias(1)}
+                    title="Ver más sugerencias"
+                    className="pointer-events-auto w-6 h-6 rounded-full bg-white hover:bg-verde-pastel/40 text-slate-700 hover:text-emerald-950 border border-slate-200 shadow-xs flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <FaChevronRight size={9} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* CAJA DE TEXTO INFERIOR + TIRADOR DE ESQUINA PARA REDIMENSIONAR */}
