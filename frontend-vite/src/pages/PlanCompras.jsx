@@ -57,9 +57,10 @@ export default function PlanCompras() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const accionEnCursoRef = useRef(false);
 
-  // Refs para cierre táctil confiable de desplegables en tablets
+  // Refs para cierre táctil confiable de desplegables y foco rápido en cantidad
   const provDropdownRef = useRef(null);
   const prodDropdownRef = useRef(null);
+  const cantidadInputRef = useRef(null);
 
   // Control de Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -81,7 +82,7 @@ export default function PlanCompras() {
     detalles: []
   });
 
-  // itemTemp ahora incluye esRegalo para registrar ofertas/bonificaciones a S/ 0.00
+  // itemTemp incluye esRegalo para registrar ofertas/bonificaciones a S/ 0.00
   const [itemTemp, setItemTemp] = useState({
     productoId: '',
     cantidadEsperada: '',
@@ -145,10 +146,12 @@ export default function PlanCompras() {
     : productos;
 
   const qProd = busquedaProd.trim().toLowerCase();
-  const productosFiltrados = productosBaseModal.filter(p =>
-    p.nombre.toLowerCase().includes(qProd) ||
-    (p.codigo && p.codigo.toLowerCase().includes(qProd))
-  );
+  const productosFiltrados = productosBaseModal
+    .filter(p =>
+      p.nombre.toLowerCase().includes(qProd) ||
+      (p.codigo && p.codigo.toLowerCase().includes(qProd))
+    )
+    .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0)); // Prioriza arriba los de menor stock
   const productosDropdown = productosFiltrados.slice(0, LIMITE_DROPDOWN);
 
   const handleSelectProvider = (prov) => {
@@ -177,6 +180,11 @@ export default function PlanCompras() {
         toast.success(`Proveedor auto-completado: ${provAsociado.nombre}`, { id: 'plan-auto-prov' });
       }
     }
+
+    // Llevamos el foco directo a Cantidad para acelerar la carga
+    setTimeout(() => {
+      cantidadInputRef.current?.focus();
+    }, 50);
   };
 
   const toggleModoRegalo = () => {
@@ -245,6 +253,13 @@ export default function PlanCompras() {
     setBusquedaProd('');
   };
 
+  const handleEnterItem = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      agregarItemAlPlan();
+    }
+  };
+
   const eliminarItemTemp = (index) => {
     setFormData(prev => ({
       ...prev,
@@ -260,6 +275,8 @@ export default function PlanCompras() {
   const cerrarModalCrear = () => {
     if (accionEnCursoRef.current) return;
     setIsCreateModalOpen(false);
+    setShowProvDropdown(false);
+    setShowProdDropdown(false);
     setFormData({ proveedorId: '', fechaEsperada: '', detalles: [] });
     setBusquedaProv('');
     setBusquedaProd('');
@@ -296,6 +313,8 @@ export default function PlanCompras() {
       await axios.post('/planes-compra', payload);
       toast.success('Plan de compra creado exitosamente.', { id: 'plan-accion' });
       setIsCreateModalOpen(false);
+      setShowProvDropdown(false);
+      setShowProdDropdown(false);
       setFormData({ proveedorId: '', fechaEsperada: '', detalles: [] });
       setBusquedaProv('');
       setBusquedaProd('');
@@ -784,7 +803,7 @@ export default function PlanCompras() {
         )}
       </div>
 
-      {/* MODAL 1: CREAR PLAN DE COMPRA (CON OPCIÓN DE OFERTA / PRODUCTO DE REGALO) */}
+      {/* MODAL 1: CREAR PLAN DE COMPRA (AMPLIADO + BUSCADOR DE PRODUCTOS EN FLUJO SIN RECORTES) */}
       <AnimatePresence>
         {isCreateModalOpen && (
           <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[80] flex items-center justify-center p-4">
@@ -792,7 +811,7 @@ export default function PlanCompras() {
               initial={{ opacity: 0, scale: 0.95 }} 
               animate={{ opacity: 1, scale: 1 }} 
               exit={{ opacity: 0, scale: 0.95 }} 
-              className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+              className="bg-white rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[92vh]"
             >
               <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
@@ -860,8 +879,8 @@ export default function PlanCompras() {
 
                       <AnimatePresence>
                         {showProvDropdown && (
-                          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} 
-                            className="absolute z-30 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.12)] max-h-44 overflow-y-auto divide-y divide-slate-100">
+                          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} 
+                            className="absolute z-30 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.14)] max-h-52 overflow-y-auto divide-y divide-slate-100">
                             {proveedoresFiltrados.length === 0 ? (
                               <div className="p-3 text-xs text-slate-500 text-center">No se encontraron proveedores</div>
                             ) : (
@@ -895,13 +914,17 @@ export default function PlanCompras() {
                     </div>
                   </div>
 
-                  {/* SECCIÓN 2: AGREGAR PRODUCTOS Y OFERTAS */}
-                  <div className="p-4 sm:p-5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-4">
+                  {/* SECCIÓN 2: AGREGAR PRODUCTOS Y OFERTAS (BUSCADOR A ANCHO COMPLETO + LISTA EXPANDIBLE) */}
+                  <div className="p-4 sm:p-5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                       <div>
                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Productos del Pedido</h3>
                         <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                          Agrega los productos comprados o marca si es una bonificación gratis del proveedor.
+                          {itemTemp.esRegalo
+                            ? 'Mostrando todo el catálogo para elegir el producto de bonificación.'
+                            : formData.proveedorId
+                            ? `Mostrando ${productosBaseModal.length} producto(s) de este proveedor (ordenados por menor stock).`
+                            : 'Busca un producto para autocompletar su proveedor o selecciona el proveedor arriba.'}
                         </p>
                       </div>
 
@@ -929,14 +952,13 @@ export default function PlanCompras() {
                       </div>
                     )}
                     
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 relative">
-                      
-                      {/* Buscador Dinámico de Productos */}
-                      <div ref={prodDropdownRef} className="md:col-span-5 relative">
-                        <FaSearch className="absolute left-3.5 top-3 text-slate-400" size={13} />
+                    {/* FILA 1: BUSCADOR DE PRODUCTO A ANCHO COMPLETO + PANEL EXPANDIBLE EN FLUJO */}
+                    <div ref={prodDropdownRef} className="space-y-2">
+                      <div className="relative">
+                        <FaSearch className="absolute left-3.5 top-3.5 text-slate-400" size={13} />
                         <input 
                           type="text" 
-                          placeholder={itemTemp.esRegalo ? 'Buscar producto de regalo...' : 'Buscar producto...'} 
+                          placeholder={itemTemp.esRegalo ? 'Buscar producto de regalo por nombre o código...' : 'Buscar producto por nombre o código...'} 
                           value={busquedaProd}
                           onChange={(e) => {
                             setBusquedaProd(e.target.value);
@@ -944,7 +966,7 @@ export default function PlanCompras() {
                             setShowProdDropdown(true);
                           }}
                           onFocus={() => setShowProdDropdown(true)}
-                          className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30" 
+                          className="w-full pl-9 pr-9 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/35 transition-all" 
                         />
                         {busquedaProd && (
                           <button
@@ -952,94 +974,128 @@ export default function PlanCompras() {
                             onClick={() => {
                               setBusquedaProd('');
                               setItemTemp(prev => ({ ...prev, productoId: '' }));
+                              setShowProdDropdown(true);
                             }}
-                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                            className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
                             title="Limpiar producto"
                           >
                             <FaTimes size={12} />
                           </button>
                         )}
-                        <AnimatePresence>
-                          {showProdDropdown && (
-                            <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} 
-                              className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.14)] max-h-48 overflow-y-auto divide-y divide-slate-100">
+                      </div>
+
+                      {/* Lista en flujo natural (NUNCA se recorta contra el borde inferior del modal) */}
+                      <AnimatePresence>
+                        {showProdDropdown && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.16 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="bg-white border border-emerald-200/90 rounded-xl shadow-xs max-h-56 overflow-y-auto divide-y divide-slate-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
                               {productosDropdown.length === 0 ? (
-                                <div className="p-3 text-xs text-slate-500 text-center">No se encontró producto</div>
+                                <div className="p-4 text-xs text-slate-500 text-center font-medium">
+                                  No se encontraron productos disponibles con ese criterio.
+                                </div>
                               ) : (
                                 <>
-                                  {productosDropdown.map(p => (
-                                    <button
-                                      type="button"
-                                      key={p.id}
-                                      onClick={() => handleSelectProduct(p)} 
-                                      className="w-full text-left px-3.5 py-2.5 hover:bg-verde-pastel/25 cursor-pointer flex justify-between items-center gap-2 transition-colors"
-                                    >
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{p.nombre}</p>
-                                        <p className="text-xs text-slate-500 font-mono">{p.codigo}</p>
-                                      </div>
-                                      <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-md text-slate-700 font-bold shrink-0">
-                                        Stock: {p.stock}
-                                      </span>
-                                    </button>
-                                  ))}
+                                  {productosDropdown.map(p => {
+                                    const esStockBajo = (p.stock ?? 0) <= (p.stockMinimo ?? 5);
+                                    const seleccionado = itemTemp.productoId === p.id;
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={p.id}
+                                        onClick={() => handleSelectProduct(p)} 
+                                        className={`w-full text-left px-3.5 py-2.5 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
+                                          seleccionado ? 'bg-verde-pastel/30' : 'hover:bg-verde-pastel/20'
+                                        }`}
+                                      >
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-bold text-slate-900 leading-snug">
+                                            {p.nombre}
+                                          </p>
+                                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-0.5 text-xs text-slate-500">
+                                            <span className="font-mono">{p.codigo}</span>
+                                            {p.precioCompra !== null && p.precioCompra !== undefined && (
+                                              <span className="font-mono font-semibold text-slate-600">
+                                                Costo: S/ {Number(p.precioCompra).toFixed(2)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <span className={`text-xs px-2.5 py-1 rounded-lg font-bold shrink-0 whitespace-nowrap border ${
+                                          esStockBajo
+                                            ? 'bg-red-50 text-red-700 border-red-200'
+                                            : 'bg-slate-100 text-slate-700 border-slate-200/70'
+                                        }`}>
+                                          Stock: {p.stock} un.
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
                                   {productosFiltrados.length > LIMITE_DROPDOWN && (
-                                    <div className="px-3 py-2 bg-slate-50 text-center text-[11px] font-semibold text-slate-500">
-                                      Mostrando {LIMITE_DROPDOWN} de {productosFiltrados.length}. Escribe para precisar.
+                                    <div className="px-3.5 py-2 bg-slate-50 text-center text-[11px] font-semibold text-slate-500">
+                                      Mostrando {LIMITE_DROPDOWN} de {productosFiltrados.length}. Escribe el nombre para filtrar más.
                                     </div>
                                   )}
                                 </>
                               )}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
 
-                      <div className="grid grid-cols-2 md:contents gap-2.5">
-                        <div className="md:col-span-3">
-                          <input 
-                            type="number" 
-                            placeholder="Cantidad (un.)" 
-                            min="1" 
-                            value={itemTemp.cantidadEsperada} 
-                            onChange={e => setItemTemp({ ...itemTemp, cantidadEsperada: e.target.value })} 
-                            className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30" 
-                          />
-                        </div>
-                        <div className="md:col-span-3">
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            placeholder={itemTemp.esRegalo ? 'Gratis (S/ 0.00)' : 'Costo Unit. (S/)'}
-                            min="0" 
-                            disabled={itemTemp.esRegalo}
-                            value={itemTemp.esRegalo ? '0.00' : itemTemp.precioCompra} 
-                            onChange={e => setItemTemp({ ...itemTemp, precioCompra: e.target.value })} 
-                            className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30 disabled:bg-purple-50 disabled:text-purple-800 disabled:font-bold disabled:border-purple-200 disabled:cursor-not-allowed" 
-                          />
-                        </div>
+                    {/* FILA 2: CANTIDAD, COSTO UNITARIO Y BOTÓN AGREGAR BIEN PROPORCIONADOS */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                      <div className="sm:col-span-4">
+                        <input 
+                          ref={cantidadInputRef}
+                          type="number" 
+                          placeholder="Cantidad (un.)" 
+                          min="1" 
+                          value={itemTemp.cantidadEsperada} 
+                          onChange={e => setItemTemp({ ...itemTemp, cantidadEsperada: e.target.value })}
+                          onKeyDown={handleEnterItem}
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30" 
+                        />
                       </div>
-
-                      <div className="md:col-span-1">
+                      <div className="sm:col-span-4">
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder={itemTemp.esRegalo ? 'Gratis (S/ 0.00)' : 'Costo Unit. (S/)'}
+                          min="0" 
+                          disabled={itemTemp.esRegalo}
+                          value={itemTemp.esRegalo ? '0.00' : itemTemp.precioCompra} 
+                          onChange={e => setItemTemp({ ...itemTemp, precioCompra: e.target.value })}
+                          onKeyDown={handleEnterItem}
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30 disabled:bg-purple-50 disabled:text-purple-800 disabled:font-bold disabled:border-purple-200 disabled:cursor-not-allowed" 
+                        />
+                      </div>
+                      <div className="sm:col-span-4">
                         <button 
                           type="button" 
                           onClick={agregarItemAlPlan} 
-                          className={`w-full h-full min-h-[42px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer text-sm ${
+                          className={`w-full h-full min-h-[42px] px-4 font-extrabold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer text-sm whitespace-nowrap ${
                             itemTemp.esRegalo
                               ? 'bg-purple-600 hover:bg-purple-700 text-white'
                               : 'bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950'
                           }`}
-                          title={itemTemp.esRegalo ? 'Agregar regalo a la orden' : 'Agregar producto a la lista'}
                         >
-                          {itemTemp.esRegalo ? <FaGift /> : <FaPlus />}
-                          <span className="md:hidden">{itemTemp.esRegalo ? 'Agregar oferta gratis' : 'Agregar producto'}</span>
+                          {itemTemp.esRegalo ? <FaGift size={13} /> : <FaPlus size={12} />}
+                          <span>{itemTemp.esRegalo ? 'Agregar regalo' : 'Agregar a lista'}</span>
                         </button>
                       </div>
                     </div>
 
                     {/* LISTA TEMPORAL DE ÍTEMS A PEDIR */}
                     {formData.detalles.length > 0 && (
-                      <div className="mt-4 space-y-2 max-h-44 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                      <div className="mt-4 space-y-2 max-h-48 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
                         <div className="flex items-center justify-between mb-1.5">
                           <p className="text-xs font-bold text-emerald-800">Resumen de la orden ({formData.detalles.length}):</p>
                           <p className="text-xs font-extrabold text-slate-800 font-mono">
