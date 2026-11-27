@@ -92,7 +92,7 @@ const coincideConKeywords = (textoNormalizado, tokens, keywords) => {
   return false;
 };
 
-// 1. Resumen rápido de alertas para mostrar en la cabecera de la burbuja IA
+// 1. Resumen rápido de alertas para mostrar en la cabecera de la burbuja IA (sin alertas extra de vencimiento)
 export const obtenerResumenIA = async (req, res) => {
   const negocioId = req.user.negocioId;
 
@@ -150,6 +150,7 @@ const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
     'producto', 'mercaderia', 'stock', 'inventario', 'comprar', 'compra', 'pedido', 'proveedor', 'abastecer', 'falta', 'agotado',
     'fiado', 'fiao', 'deuda', 'debe', 'deben', 'vecino', 'cliente', 'cobrar', 'caja', 'saldo', 'capital', 'dinero', 'plata', 'soles',
     'yape', 'plin', 'efectivo', 'transferencia', 'boleta', 'factura', 'ticket', 'gasto', 'egreso', 'retiro',
+    'vencer', 'vence', 'vencido', 'vencimiento', 'caducar', 'caduca', 'caducado', 'expira', 'lote', 'lotes', 'malograr',
     'bodega', 'tienda', 'negocio', 'resumen', 'balance', 'yendo', 'como fue', 'como vamos', 'como voy', 'hola', 'buenos dias', 'buenas tardes', 'buenas noches', 'ayuda'
   ];
 
@@ -158,6 +159,32 @@ const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
 
   if (contieneProhibida || !contieneNegocio) {
     return 'No puedo responder a esa pregunta, ya que solo estoy programado para ayudarte con las ventas, el inventario y las finanzas de tu negocio.';
+  }
+
+  // 1.5. Control de vencimientos y lotes (≤ 15 días)
+  if (coincideConKeywords(textoNorm, tokens, ['vencer', 'vence', 'vencido', 'vencimiento', 'caducar', 'caduca', 'caducado', 'expira', 'lote', 'lotes', 'malograr'])) {
+    const vencidos = datos.lotesVencidos || [];
+    const porVencer = datos.lotesPorVencer || [];
+
+    if (vencidos.length === 0 && porVencer.length === 0) {
+      return `✅ **¡Todo en orden en ${datos.nombreBodega}!** No tienes productos vencidos ni lotes que venzan en los próximos 15 días.`;
+    }
+
+    let resp = `⏳ **Control de Vencimientos (${datos.nombreBodega}):**\n\n`;
+    if (vencidos.length > 0) {
+      resp += `🔴 **Lotes ya vencidos (${vencidos.length}):**\n`;
+      vencidos.slice(0, 8).forEach(l => {
+        resp += `• **${l.nombre}**: ${l.cantidad} un. (Venció el ${l.fecha} — ${l.detalleDias})\n`;
+      });
+      resp += '\n';
+    }
+    if (porVencer.length > 0) {
+      resp += `🟠 **Próximos a vencer en 15 días o menos (${porVencer.length}):**\n`;
+      porVencer.slice(0, 8).forEach(l => {
+        resp += `• **${l.nombre}**: ${l.cantidad} un. (Vence el ${l.fecha} — ${l.detalleDias})\n`;
+      });
+    }
+    return resp.trim();
   }
 
   // 2. Compras / Stock / Inventario
@@ -217,7 +244,7 @@ const generarAnalisisLocalInteligente = (preguntaRaw, datos) => {
     tokens.length <= 4 &&
     coincideConKeywords(textoNorm, tokens, ['hola', 'buenos dias', 'buenas tardes', 'buenas noches', 'ayuda'])
   ) {
-    return `¡Hola! Soy **VendaIA**, el asistente de **${datos.nombreBodega}**.\n\nEn este momento tienes **S/ ${datos.saldoCaja.toFixed(2)}** en caja, **${datos.ventasHoyCount} venta(s)** registradas hoy y **${datos.productosCriticos.length} producto(s)** con stock crítico.\n\nPuedes preguntarme cosas como:\n• ¿Qué tal me fue en las ventas de esta semana?\n• ¿Qué productos me dejan mayor ganancia?\n• ¿Qué mercadería debería comprar pronto?\n• ¿Quiénes me deben fiado actualmente?`;
+    return `¡Hola! Soy **VendaIA**, el asistente de **${datos.nombreBodega}**.\n\nEn este momento tienes **S/ ${datos.saldoCaja.toFixed(2)}** en caja, **${datos.ventasHoyCount} venta(s)** registradas hoy y **${datos.productosCriticos.length} producto(s)** con stock crítico.\n\nPuedes preguntarme cosas como:\n• ¿Qué tal me fue en las ventas de esta semana?\n• ¿Qué productos me dejan mayor ganancia?\n• ¿Qué mercadería debería comprar pronto?\n• ¿Qué productos están por vencer?\n• ¿Quiénes me deben fiado actualmente?`;
   }
 
   // 6. Por defecto: Balance general de ventas (hoy, semana, mes) y caja
@@ -255,7 +282,13 @@ export const consultarAsistenteIA = async (req, res) => {
       prisma.negocio.findUnique({ where: { id: negocioId } }),
       prisma.producto.findMany({
         where: { negocioId },
-        include: { proveedor: { select: { nombre: true, telefono: true } } },
+        include: {
+          proveedor: { select: { nombre: true, telefono: true } },
+          lotes: {
+            where: { cantidad: { gt: 0 } },
+            orderBy: [{ fechaVencimiento: 'asc' }, { id: 'asc' }]
+          }
+        },
         orderBy: { stock: 'asc' }
       }),
       prisma.venta.findMany({
@@ -328,6 +361,46 @@ export const consultarAsistenteIA = async (req, res) => {
     const productosActivos = productos.filter(p => p.estado);
     const productosCriticos = productosActivos.filter(p => p.stock <= (p.stockMinimo || 3));
 
+    // Cálculo de lotes vencidos y próximos a vencer (≤ 15 días en hora de Perú)
+    const ahoraPeru = new Date(Date.now() - 5 * 3600000);
+    const hoyMediodiaUTC = Date.UTC(
+      ahoraPeru.getUTCFullYear(),
+      ahoraPeru.getUTCMonth(),
+      ahoraPeru.getUTCDate(),
+      12, 0, 0
+    );
+    const formatearFechaUTC = (iso) => {
+      const d = new Date(iso);
+      return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+    };
+
+    const lotesVencidos = [];
+    const lotesPorVencer = [];
+    const proximosLotesConFecha = [];
+
+    productosActivos.forEach(p => {
+      (p.lotes || []).forEach(l => {
+        if (!l.fechaVencimiento || l.cantidad <= 0) return;
+        const fv = new Date(l.fechaVencimiento);
+        const fvMediodiaUTC = Date.UTC(fv.getUTCFullYear(), fv.getUTCMonth(), fv.getUTCDate(), 12, 0, 0);
+        const dias = Math.round((fvMediodiaUTC - hoyMediodiaUTC) / 86400000);
+        const info = {
+          nombre: p.nombre,
+          cantidad: l.cantidad,
+          fecha: formatearFechaUTC(l.fechaVencimiento),
+          diasRestantes: dias,
+          detalleDias: dias < 0 ? `venció hace ${Math.abs(dias)} día(s)` : dias === 0 ? 'vence hoy' : `en ${dias} día(s)`
+        };
+        proximosLotesConFecha.push(info);
+        if (dias <= 0) lotesVencidos.push(info);
+        else if (dias <= 15) lotesPorVencer.push(info);
+      });
+    });
+
+    lotesVencidos.sort((a, b) => a.diasRestantes - b.diasRestantes);
+    lotesPorVencer.sort((a, b) => a.diasRestantes - b.diasRestantes);
+    proximosLotesConFecha.sort((a, b) => a.diasRestantes - b.diasRestantes);
+
     const topRentables = productosActivos
       .filter(p => p.precioCompra && p.precioCompra > 0)
       .map(p => ({
@@ -352,6 +425,8 @@ export const consultarAsistenteIA = async (req, res) => {
       topRentables,
       productosActivos,
       productosCriticos,
+      lotesVencidos,
+      lotesPorVencer,
       fiados
     };
 
@@ -399,6 +474,14 @@ export const consultarAsistenteIA = async (req, res) => {
           proveedor: p.proveedor?.nombre || 'Sin proveedor'
         }))
       },
+      controlDeVencimientos: {
+        umbralAlertaDias: 15,
+        cantidadLotesVencidos: lotesVencidos.length,
+        cantidadLotesPorVencer15Dias: lotesPorVencer.length,
+        lotesVencidos: lotesVencidos.slice(0, 20),
+        lotesPorVencerEn15Dias: lotesPorVencer.slice(0, 20),
+        proximosLotesConFecha: proximosLotesConFecha.slice(0, 25)
+      },
       // Formato compacto para soportar 100+ productos sin saturar tokens ni lentificar respuestas
       catalogoCompacto: productosActivos
         .slice(0, 120)
@@ -428,7 +511,7 @@ export const consultarAsistenteIA = async (req, res) => {
 
     const systemPrompt = `Eres VendaIA, el asesor comercial, logístico y financiero exclusivo de la bodega "${negocio?.nombre || 'la tienda'}".
 REGLAS ESTRICTAS:
-1. LÍMITE DE TEMA: SOLO puedes responder preguntas relacionadas con el negocio (ventas, inventario, qué productos comprar, proveedores, fiados, flujo de caja o ganancias de esta bodega).
+1. LÍMITE DE TEMA: SOLO puedes responder preguntas relacionadas con el negocio (ventas, inventario, fechas de vencimiento y lotes, qué productos comprar, proveedores, fiados, flujo de caja o ganancias de esta bodega).
 2. TOLERANCIA ORTOGRÁFICA Y MODISMOS: El dueño suele escribir rápido desde un celular o tablet con faltas de ortografía, letras faltantes, abreviaturas o expresiones coloquiales peruanas (por ejemplo: "com e esta yendo e eta seman?", "cuanto bendi oy", "kien me deve plata", "k prod falta"). Interpreta siempre su intención comercial real con naturalidad, sin corregirle la ortografía ni rechazar preguntas del negocio por estar mal escritas.
 3. RECHAZO DE TEMAS AJENOS: Si el usuario pregunta sobre política, deportes, fútbol, religión, chistes, tareas, programación o cualquier tema que NO tenga relación con su bodega (incluso mal escrito), responde ÚNICAMENTE con esta frase exacta:
 "No puedo responder a esa pregunta, ya que solo estoy programado para ayudarte con las ventas, el inventario y las finanzas de tu negocio."
