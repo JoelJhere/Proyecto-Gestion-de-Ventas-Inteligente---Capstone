@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { parsearFechaVencimiento, agregarStockALote } from '../utils/lotes.util.js';
 
 const prisma = new PrismaClient();
 
@@ -36,7 +37,6 @@ export const crearPlan = async (req, res) => {
   }
 
   try {
-    // Validar que el proveedor pertenezca a esta bodega
     const proveedorValido = await prisma.proveedor.findFirst({
       where: { id: parseInt(proveedorId, 10), negocioId }
     });
@@ -44,7 +44,6 @@ export const crearPlan = async (req, res) => {
       return res.status(404).json({ message: 'Proveedor no encontrado en tu negocio.' });
     }
 
-    // Normalizar y validar cada detalle (acepta precioCompra === 0 para regalos/ofertas)
     const detallesLimpios = detalles.map((item) => {
       const productoId = parseInt(item.productoId, 10);
       const cantidadEsperada = parseInt(item.cantidadEsperada, 10);
@@ -63,7 +62,6 @@ export const crearPlan = async (req, res) => {
       return { productoId, cantidadEsperada, precioCompra };
     });
 
-    // Verificar que todos los productos pertenezcan a esta bodega
     const idsProductosUnicos = [...new Set(detallesLimpios.map(d => d.productoId))];
     const productosValidos = await prisma.producto.count({
       where: { id: { in: idsProductosUnicos }, negocioId }
@@ -77,7 +75,6 @@ export const crearPlan = async (req, res) => {
       0
     );
 
-    // Evita desfase de 1 día en zona horaria de Perú cuando llega como "YYYY-MM-DD"
     let fechaEsperadaDate = null;
     if (fechaEsperada) {
       const fechaStr = String(fechaEsperada).includes('T')
@@ -105,7 +102,7 @@ export const crearPlan = async (req, res) => {
   }
 };
 
-// 3. RECIBIR LA MERCADERÍA (Solo disminuir o marcar 0 sin stock, respeta ofertas gratis)
+// 3. RECIBIR LA MERCADERÍA (Soporta fecha de vencimiento por lote, ofertas gratis y faltantes)
 export const recibirPlan = async (req, res) => {
   const { id } = req.params;
   const negocioId = req.user.negocioId;
@@ -117,7 +114,6 @@ export const recibirPlan = async (req, res) => {
 
   try {
     const resultado = await prisma.$transaction(async (tx) => {
-      // A. Verificamos que el plan exista, sea de esta bodega y traemos sus detalles reales
       const plan = await tx.planCompra.findFirst({
         where: { id: parseInt(id, 10), negocioId },
         include: {
@@ -131,22 +127,23 @@ export const recibirPlan = async (req, res) => {
         throw new Error('Este pedido ya fue ingresado al sistema anteriormente.');
       }
 
-      // Mapa de cantidades enviadas indexado por detalleId (evita duplicados)
+      // Mapa indexado por detalleId con cantidad recibida y fecha de vencimiento opcional
       const mapaRecibidos = new Map();
       for (const item of detallesRecibidos) {
         const detId = parseInt(item.detalleId, 10);
         if (!Number.isNaN(detId)) {
-          mapaRecibidos.set(detId, parseInt(item.cantidadRecibida, 10) || 0);
+          mapaRecibidos.set(detId, {
+            cantidad: parseInt(item.cantidadRecibida, 10) || 0,
+            fechaVencimiento: item.fechaVencimiento || null
+          });
         }
       }
 
       let totalReal = 0;
 
-      // B. Iteramos sobre los detalles REALES del plan en BD (fuente única de verdad)
       for (const detalleOriginal of plan.detalles) {
-        const cantidadIngresada = mapaRecibidos.has(detalleOriginal.id)
-          ? mapaRecibidos.get(detalleOriginal.id)
-          : 0;
+        const infoRecibida = mapaRecibidos.get(detalleOriginal.id) || { cantidad: 0, fechaVencimiento: null };
+        const cantidadIngresada = infoRecibida.cantidad;
 
         if (cantidadIngresada < 0) {
           throw new Error('La cantidad recibida no puede ser negativa.');
@@ -157,6 +154,10 @@ export const recibirPlan = async (req, res) => {
           );
         }
 
+        const fechaVencObj = cantidadIngresada > 0
+          ? parsearFechaVencimiento(infoRecibida.fechaVencimiento)
+          : null;
+
         const costoUnitario = Number(detalleOriginal.precioCompra || 0);
         const esRegalo = costoUnitario === 0;
 
@@ -164,16 +165,31 @@ export const recibirPlan = async (req, res) => {
 
         await tx.detallePlanCompra.update({
           where: { id: detalleOriginal.id },
-          data: { cantidadRecibida: cantidadIngresada }
+          data: {
+            cantidadRecibida: cantidadIngresada,
+            fechaVencimiento: fechaVencObj
+          }
         });
 
-        // C. Si llegó mercadería (> 0), sumamos stock y registramos movimiento
         if (cantidadIngresada > 0) {
+          // Leemos el stock actual antes de sumar para preservar el lote viejo sin sobrescribirlo
+          const productoActual = await tx.producto.findUnique({
+            where: { id: detalleOriginal.productoId },
+            select: { stock: true }
+          });
+
+          await agregarStockALote(
+            tx,
+            detalleOriginal.productoId,
+            cantidadIngresada,
+            fechaVencObj,
+            productoActual?.stock ?? 0
+          );
+
           await tx.producto.update({
             where: { id: detalleOriginal.productoId },
             data: {
               stock: { increment: cantidadIngresada },
-              // Si es oferta/regalo (S/ 0.00), NO sobrescribimos el costo real del producto
               ...(costoUnitario > 0 ? { precioCompra: costoUnitario } : {})
             }
           });
@@ -191,7 +207,6 @@ export const recibirPlan = async (req, res) => {
         }
       }
 
-      // D. Cerramos el Plan de Compra
       const planActualizado = await tx.planCompra.update({
         where: { id: plan.id },
         data: {
@@ -202,7 +217,6 @@ export const recibirPlan = async (req, res) => {
         include: { proveedor: true, detalles: true }
       });
 
-      // E. Descontamos de caja solo si hubo importe real a pagar (> 0)
       if (totalReal > 0) {
         const metodoValido = ['EFECTIVO', 'YAPE_PLIN', 'TRANSFERENCIA'].includes(metodoPago)
           ? metodoPago
@@ -229,7 +243,7 @@ export const recibirPlan = async (req, res) => {
       return planActualizado;
     });
 
-    res.json({ message: 'Mercadería recibida, stock y caja actualizados', plan: resultado });
+    res.json({ message: 'Mercadería recibida, stock, lotes y caja actualizados', plan: resultado });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

@@ -1,5 +1,5 @@
 import express from 'express';
-import { obtenerProductos, obtenerCatalogoGlobal , crearProducto, actualizarProducto, gestionarStock, toggleEstadoProducto } from '../controllers/producto.controller.js';
+import { obtenerProductos, obtenerCatalogoGlobal , crearProducto, actualizarProducto, gestionarStock, toggleEstadoProducto, asignarFechaLote, actualizarFechaLote } from '../controllers/producto.controller.js';
 import { verificarToken, esAdmin } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -15,5 +15,8 @@ router.put('/:id', verificarToken, esAdmin, actualizarProducto);
 router.post('/:id/stock', verificarToken, esAdmin, gestionarStock);
 
 router.put('/:id/estado', verificarToken, esAdmin, toggleEstadoProducto);
+
+router.post('/:id/lotes', verificarToken, esAdmin, asignarFechaLote);
+router.put('/:id/lotes/:loteId', verificarToken, esAdmin, actualizarFechaLote);
 
 export default router;

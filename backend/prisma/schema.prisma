@@ -108,11 +108,25 @@ model Producto {
   movimientos    MovimientoInventario[]
   detalles       DetalleVenta[]
   detallesCompra DetallePlanCompra[]
+  lotes          LoteProducto[]
   
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@unique([codigo, negocioId]) // El código de barras es único POR NEGOCIO
+}
+
+// --- 4.1 LOTES Y FECHAS DE VENCIMIENTO (CONTROL FEFO) ---
+model LoteProducto {
+  id               Int       @id @default(autoincrement())
+  productoId       Int
+  producto         Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad         Int       @default(0)
+  fechaVencimiento DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([productoId, fechaVencimiento])
 }
 
 // --- 5. MOVIMIENTOS DE INVENTARIO ---
@@ -187,7 +201,8 @@ model DetallePlanCompra {
   id               Int        @id @default(autoincrement())
   cantidadEsperada Int        
   cantidadRecibida Int        @default(0) 
-  precioCompra     Float      
+  precioCompra     Float   
+  fechaVencimiento DateTime?   
   
   planCompraId     Int
   planCompra       PlanCompra @relation(fields: [planCompraId], references: [id], onDelete: Cascade)

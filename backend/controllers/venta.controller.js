@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
+import { descontarStockFEFO } from '../utils/lotes.util.js';
 
 const prisma = new PrismaClient();
 
@@ -265,6 +266,15 @@ export const crearVenta = async (req, res) => {
       }
 
       for (const item of carrito) {
+        const productoActual = await tx.producto.findFirst({
+          where: { id: item.id, negocioId },
+          select: { stock: true, nombre: true }
+        });
+
+        if (!productoActual || productoActual.stock < item.cantidad) {
+          throw new Error(`Stock insuficiente para: ${productoActual?.nombre || item.nombre}`);
+        }
+
         await tx.detalleVenta.create({
           data: {
             ventaId: venta.id,
@@ -274,6 +284,9 @@ export const crearVenta = async (req, res) => {
             subtotal: parseFloat(item.precioVenta) * item.cantidad
           }
         });
+
+        // Descuento automático FEFO: consume primero las unidades más próximas a vencer
+        await descontarStockFEFO(tx, item.id, item.cantidad, productoActual.stock);
 
         await tx.producto.update({
           where: { id: item.id },
