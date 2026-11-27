@@ -39,6 +39,13 @@ const obtenerFechaHoyLocal = () => {
   return new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 };
 
+const formatearFechaCorta = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+};
+
 export default function PlanCompras() {
   const BLOQUE_CARGA = 30;
   const LIMITE_DROPDOWN = 30;
@@ -341,9 +348,16 @@ export default function PlanCompras() {
         cantidadEsperada: d.cantidadEsperada,
         cantidadRecibida: d.cantidadEsperada,
         precioCompra: Number(d.precioCompra || 0),
-        esRegalo: Number(d.precioCompra || 0) === 0
+        esRegalo: Number(d.precioCompra || 0) === 0,
+        fechaVencimiento: ''
       }))
     );
+  };
+
+  const actualizarFechaVencimientoRecibida = (detalleId, valor) => {
+    setDetallesRecibidos(prev => prev.map(item =>
+      item.detalleId === detalleId ? { ...item, fechaVencimiento: valor } : item
+    ));
   };
 
   // Clamped estrictamente entre 0 y cantidadEsperada (no se puede aumentar sobre lo pedido)
@@ -423,10 +437,14 @@ export default function PlanCompras() {
   const confirmarRecepcion = async () => {
     if (!receivingPlan || accionEnCursoRef.current) return;
 
-    const detallesNormalizados = detallesRecibidos.map(item => ({
-      ...item,
-      cantidadRecibida: Math.max(0, Math.min(item.cantidadEsperada, parseInt(item.cantidadRecibida, 10) || 0))
-    }));
+    const detallesNormalizados = detallesRecibidos.map(item => {
+      const cantidadFinal = Math.max(0, Math.min(item.cantidadEsperada, parseInt(item.cantidadRecibida, 10) || 0));
+      return {
+        ...item,
+        cantidadRecibida: cantidadFinal,
+        fechaVencimiento: cantidadFinal > 0 ? (item.fechaVencimiento || null) : null
+      };
+    });
 
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
@@ -728,6 +746,12 @@ export default function PlanCompras() {
                             {esGratis && (
                               <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-extrabold text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
                                 <FaGift size={9} /> GRATIS
+                              </span>
+                            )}
+
+                            {plan.estado === 'RECIBIDO' && det.fechaVencimiento && !noLlego && (
+                              <span className="inline-flex items-center gap-1 mt-0.5 ml-1 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                                <FaCalendarAlt size={8} className="text-slate-400" /> Vence: {formatearFechaCorta(det.fechaVencimiento)}
                               </span>
                             )}
                           </div>
@@ -1327,6 +1351,34 @@ export default function PlanCompras() {
                             </div>
                           </div>
                         </div>
+
+                        {/* Campo opcional de fecha de vencimiento del lote que llega */}
+                        {!esSinStock && (
+                          <div className="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                              <FaCalendarAlt className="text-emerald-600 shrink-0" size={11} />
+                              <span>Vencimiento del lote (opcional):</span>
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="date"
+                                value={item.fechaVencimiento || ''}
+                                onChange={(e) => actualizarFechaVencimientoRecibida(item.detalleId, e.target.value)}
+                                className="flex-1 sm:w-44 px-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-verde-pastel/30"
+                              />
+                              {item.fechaVencimiento && (
+                                <button
+                                  type="button"
+                                  onClick={() => actualizarFechaVencimientoRecibida(item.detalleId, '')}
+                                  className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                                  title="Quitar fecha"
+                                >
+                                  <FaTimes size={11} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

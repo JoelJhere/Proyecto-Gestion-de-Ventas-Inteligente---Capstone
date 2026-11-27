@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FaPlus, FaEdit, FaBox, FaBarcode, FaTimes, FaSearch, 
   FaCheck, FaCamera, FaPrint, FaBoxOpen, FaExclamationTriangle,
-  FaPercentage, FaChevronDown, FaTruck
+  FaPercentage, FaChevronDown, FaTruck, FaCalendarAlt, FaClock, FaTrash
 } from 'react-icons/fa';
 import { useBusiness } from '../context/BusinessContext';
 import axios from 'axios';
@@ -11,12 +11,45 @@ import toast from 'react-hot-toast';
 import Barcode from 'react-barcode';
 import { Html5Qrcode } from 'html5-qrcode';
 
-// Sub-componente dinámico para buscar y seleccionar proveedores (Definido afuera para evitar bugs visuales)
+// --- UTILIDADES DE FECHAS DE VENCIMIENTO (SIN DESFASE DE ZONA HORARIA) ---
+const formatearFechaCorta = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+};
+
+const isoAInputDate = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+};
+
+const obtenerDiasParaVencer = (iso) => {
+  if (!iso) return null;
+  const hoy = new Date();
+  const hoyMediodiaUTC = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 12, 0, 0);
+  const fv = new Date(iso);
+  if (Number.isNaN(fv.getTime())) return null;
+  const fvMediodiaUTC = Date.UTC(fv.getUTCFullYear(), fv.getUTCMonth(), fv.getUTCDate(), 12, 0, 0);
+  return Math.round((fvMediodiaUTC - hoyMediodiaUTC) / 86400000);
+};
+
+const textoEstadoDias = (dias) => {
+  if (dias === null || dias === undefined) return '';
+  if (dias < 0) return `Venció hace ${Math.abs(dias)}d`;
+  if (dias === 0) return 'Vence hoy';
+  if (dias === 1) return 'Vence mañana';
+  return `En ${dias} días`;
+};
+
+// Sub-componente dinámico para buscar y seleccionar proveedores
 const SelectorProveedor = ({ proveedores, valorActual, onChange }) => {
   const [abierto, setAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
-  const proveedorSeleccionado = proveedores.find(p => p.id === parseInt(valorActual));
+  const proveedorSeleccionado = proveedores.find(p => p.id === parseInt(valorActual, 10));
   const textoMostrar = abierto ? busqueda : (proveedorSeleccionado ? proveedorSeleccionado.nombre : '');
   const filtrados = proveedores.filter(p => p.nombre.toLowerCase().includes(busqueda.toLowerCase()));
 
@@ -25,7 +58,7 @@ const SelectorProveedor = ({ proveedores, valorActual, onChange }) => {
       <input
         type="text"
         className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium cursor-text"
-        placeholder={proveedorSeleccionado ? proveedorSeleccionado.nombre : "Buscar proveedor..."}
+        placeholder={proveedorSeleccionado ? proveedorSeleccionado.nombre : 'Buscar proveedor...'}
         value={textoMostrar}
         onFocus={() => { setAbierto(true); setBusqueda(''); }}
         onBlur={() => setTimeout(() => setAbierto(false), 200)}
@@ -56,7 +89,7 @@ const SelectorProveedor = ({ proveedores, valorActual, onChange }) => {
   );
 };
 
-// Normalizador idéntico al del backend para detectar duplicados en tiempo real ("gaseosa de 150ml" === "gaseosa 150ml")
+// Normalizador idéntico al del backend para detectar duplicados en tiempo real
 const normalizarTextoProducto = (texto = '') => {
   return texto
     .toLowerCase()
@@ -111,7 +144,7 @@ const SelectorCategoria = ({ categorias, valorActual, onChange }) => {
   );
 };
 
-// Buscador desplegable de proveedores para filtrar la tabla (optimizado para 50+ proveedores y tablets)
+// Buscador desplegable de proveedores para filtrar la tabla
 const FiltroProveedorBuscable = ({
   proveedores,
   productos,
@@ -123,7 +156,6 @@ const FiltroProveedorBuscable = ({
   const [textoBusqueda, setTextoBusqueda] = useState('');
   const contenedorRef = useRef(null);
 
-  // Cerramos el menú al tocar o hacer clic fuera (más confiable en tablets que onBlur)
   useEffect(() => {
     const manejarClicExterno = (e) => {
       if (contenedorRef.current && !contenedorRef.current.contains(e.target)) {
@@ -135,7 +167,6 @@ const FiltroProveedorBuscable = ({
     return () => document.removeEventListener('mousedown', manejarClicExterno);
   }, []);
 
-  // Conteo optimizado en una sola pasada (evita recorrer todos los productos por cada proveedor)
   const conteoPorProveedor = {};
   for (const prod of productos) {
     if (prod.proveedorId) {
@@ -319,46 +350,68 @@ export default function Productos() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroProveedor, setFiltroProveedor] = useState('TODOS');
   const [soloStockBajo, setSoloStockBajo] = useState(false);
-  
-  // Estados de carga (Skeleton)
+  const [soloPorVencer, setSoloPorVencer] = useState(false);
+
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Estados de Modales y Autocompletado
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null); 
-  const [stockProduct, setStockProduct] = useState(null);     
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [stockProduct, setStockProduct] = useState(null);
+  const [lotesProduct, setLotesProduct] = useState(null);
   const [barcodeView, setBarcodeView] = useState(null);
   const [scannerTarget, setScannerTarget] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [showSugerenciasNombre, setShowSugerenciasNombre] = useState(false);
-  const [origenAutocompletado, setOrigenAutocompletado] = useState(null); // 'LOCAL' | 'GLOBAL' | null
+  const [origenAutocompletado, setOrigenAutocompletado] = useState(null);
 
-  const [formData, setFormData] = useState({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
-  const [stockData, setStockData] = useState({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
+  const [formData, setFormData] = useState({
+    codigo: '',
+    nombre: '',
+    categoria: '',
+    precioCompra: '',
+    precioVenta: '',
+    stock: '',
+    proveedorId: '',
+    fechaVencimiento: ''
+  });
+  const [stockData, setStockData] = useState({
+    tipo: 'ABASTECIMIENTO',
+    cantidad: '',
+    motivo: '',
+    fechaVencimiento: '',
+    loteId: ''
+  });
 
-  // Bloqueo inmediato anti-spam / doble clic para todas las acciones
+  // Estados del Modal de Lotes y Vencimientos
+  const [nuevoLoteForm, setNuevoLoteForm] = useState({ fechaVencimiento: '', cantidad: '' });
+  const [editandoLoteId, setEditandoLoteId] = useState(null);
+  const [fechaEdicionLote, setFechaEdicionLote] = useState('');
+  const [confirmMermaLoteId, setConfirmMermaLoteId] = useState(null);
+
+  // Bloqueo inmediato anti-spam / doble clic
   const [isSubmitting, setIsSubmitting] = useState(false);
   const accionEnCursoRef = useRef(false);
 
-  // Control del cálculo bidireccional (+20% / ÷1.2): null | 'compra' | 'venta' | 'ambos'
+  // Control del cálculo bidireccional (+% / ÷factor)
   const [modoPrecioCrear, setModoPrecioCrear] = useState(null);
   const [modoPrecioEditar, setModoPrecioEditar] = useState('ambos');
 
   const { businessConfig, setBusinessConfig } = useBusiness();
 
-  // Paginación progresiva en bloques de 30 productos (mantiene rápida la tablet y el celular)
   const BLOQUE_CARGA = 30;
   const [limiteVisible, setLimiteVisible] = useState(BLOQUE_CARGA);
 
-  // Configuración del margen automático sincronizada desde la Base de Datos
   const autoMargenActivo =
     Boolean(businessConfig?.autoMargenActivo) && Number(businessConfig?.porcentajeGanancia) > 0;
   const porcentajeGanancia = Number(businessConfig?.porcentajeGanancia) || 0;
   const factorMargen = 1 + porcentajeGanancia / 100;
 
-  // Estados del Modal de Configuración de Margen
   const [isMargenModalOpen, setIsMargenModalOpen] = useState(false);
   const [formMargen, setFormMargen] = useState({ activo: false, porcentaje: '' });
+
+  const usuario = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = usuario.rol === 'ADMIN';
 
   const abrirModalMargen = () => {
     setFormMargen({
@@ -400,7 +453,16 @@ export default function Productos() {
   };
 
   const abrirModalCrear = () => {
-    setFormData({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
+    setFormData({
+      codigo: '',
+      nombre: '',
+      categoria: '',
+      precioCompra: '',
+      precioVenta: '',
+      stock: '',
+      proveedorId: '',
+      fechaVencimiento: ''
+    });
     setOrigenAutocompletado(null);
     setModoPrecioCrear(null);
     setIsCreateModalOpen(true);
@@ -412,6 +474,28 @@ export default function Productos() {
     else if (prod.precioVenta) setModoPrecioEditar('venta');
     else if (prod.precioCompra) setModoPrecioEditar('compra');
     else setModoPrecioEditar(null);
+  };
+
+  const abrirModalStock = (prod) => {
+    setStockProduct(prod);
+    setStockData({
+      tipo: 'ABASTECIMIENTO',
+      cantidad: '',
+      motivo: '',
+      fechaVencimiento: '',
+      loteId: ''
+    });
+  };
+
+  const abrirModalLotes = (prod) => {
+    setLotesProduct(prod);
+    setNuevoLoteForm({
+      fechaVencimiento: '',
+      cantidad: prod.stockSinFecha > 0 ? String(prod.stockSinFecha) : ''
+    });
+    setEditandoLoteId(null);
+    setFechaEdicionLote('');
+    setConfirmMermaLoteId(null);
   };
 
   // --- CÁLCULO AUTOMÁTICO BIDIRECCIONAL (CREAR) ---
@@ -528,11 +612,8 @@ export default function Productos() {
     }
   };
 
-  const usuario = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAdmin = usuario.rol === 'ADMIN';
-
   const cargarDatos = async () => {
-    setIsLoading(true); 
+    setIsLoading(true);
     try {
       const [resProductos, resProveedores, resGlobal] = await Promise.all([
         axios.get('/productos'),
@@ -543,25 +624,37 @@ export default function Productos() {
       setProveedores(resProveedores.data);
       setCategoriasGlobales(resGlobal.data.categoriasGlobales || []);
       setProductosGlobales(resGlobal.data.productosGlobales || []);
+      return resProductos.data;
     } catch (error) {
-      console.error("Error al cargar datos:", error);
-      toast.error('Ocurrió un problema al cargar los datos');
+      console.error('Error al cargar datos:', error);
+      toast.error('Ocurrió un problema al cargar los datos.', { id: 'prod-carga' });
+      return null;
     } finally {
-      setIsLoading(false); 
+      setIsLoading(false);
     }
   };
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargarDatos(); }, []);
 
-  // Verifica un código de barras (al escanear o escribir) respetando si el usuario ya llenó datos antes
+  // Sincroniza un producto actualizado dentro del listado y dentro del modal de lotes si sigue abierto
+  const sincronizarProductoEnEstado = (productoActualizado) => {
+    if (!productoActualizado) return;
+    setProductos(prev => prev.map(p => (p.id === productoActualizado.id ? productoActualizado : p)));
+    setLotesProduct(productoActualizado);
+    setNuevoLoteForm({
+      fechaVencimiento: '',
+      cantidad: productoActualizado.stockSinFecha > 0 ? String(productoActualizado.stockSinFecha) : ''
+    });
+  };
+
+  // Verifica un código de barras (al escanear o escribir)
   const procesarCodigoEnFormulario = async (codigoLimpio, desdeEscaner = false) => {
     if (!codigoLimpio) {
       setOrigenAutocompletado(null);
       return;
     }
 
-    // 1. Verificar si ya existe en el inventario de ESTA bodega
     const existenteLocal = productos.find(p => p.codigo.toLowerCase() === codigoLimpio.toLowerCase());
     if (existenteLocal) {
       setOrigenAutocompletado('LOCAL');
@@ -574,19 +667,17 @@ export default function Productos() {
         precioVenta: prev.precioVenta !== '' ? prev.precioVenta : (existenteLocal.precioVenta || ''),
         proveedorId: prev.proveedorId !== '' ? prev.proveedorId : (existenteLocal.proveedorId || '')
       }));
-      if (desdeEscaner) toast.error('Este código ya está registrado en tu inventario.');
+      if (desdeEscaner) toast.error('Este código ya está registrado en tu inventario.', { id: 'prod-scan' });
       return;
     }
 
-    // 2. Si el dueño YA escribió primero el nombre/datos y al final escanea el código, NO borramos sus datos
     if (formData.nombre.trim() !== '') {
       setOrigenAutocompletado(null);
       setFormData(prev => ({ ...prev, codigo: codigoLimpio }));
-      if (desdeEscaner) toast.success('Código asignado. Tus datos ingresados se mantuvieron intactos.');
+      if (desdeEscaner) toast.success('Código asignado. Tus datos ingresados se mantuvieron intactos.', { id: 'prod-scan' });
       return;
     }
 
-    // 3. Buscar en el Catálogo Global (Productos escaneados en otras bodegas)
     const existenteGlobal = productosGlobales.find(p => p.codigo.toLowerCase() === codigoLimpio.toLowerCase());
     if (existenteGlobal) {
       setOrigenAutocompletado('GLOBAL');
@@ -601,43 +692,42 @@ export default function Productos() {
         precioCompra: existenteGlobal.precioCompra || prev.precioCompra,
         precioVenta: existenteGlobal.precioVenta || prev.precioVenta
       }));
-      if (desdeEscaner) toast.success('Producto autocompletado desde el catálogo global');
+      if (desdeEscaner) toast.success('Producto autocompletado desde el catálogo global.', { id: 'prod-scan' });
       return;
     }
 
     setOrigenAutocompletado(null);
 
-    // 4. Si se escaneó con cámara y no está en BD, consultar APIs internacionales
     if (desdeEscaner) {
-      toast.success('Código escaneado. Buscando información...');
+      toast.success('Código escaneado. Buscando información...', { id: 'prod-scan' });
       try {
         const resFood = await fetch(`https://world.openfoodfacts.org/api/v0/product/${codigoLimpio}.json`).then(r => r.json());
         if (resFood.status === 1 && resFood.product.product_name) {
           setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resFood.product.product_name }));
-          return toast.success('Producto encontrado en la base de datos');
+          return toast.success('Producto encontrado en la base de datos.', { id: 'prod-scan' });
         }
 
         const resBeauty = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${codigoLimpio}.json`).then(r => r.json());
         if (resBeauty.status === 1 && resBeauty.product.product_name) {
           setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resBeauty.product.product_name }));
-          return toast.success('Producto encontrado en la base de datos');
+          return toast.success('Producto encontrado en la base de datos.', { id: 'prod-scan' });
         }
 
         const resProducts = await fetch(`https://world.openproductsfacts.org/api/v0/product/${codigoLimpio}.json`).then(r => r.json());
         if (resProducts.status === 1 && resProducts.product.product_name) {
           setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resProducts.product.product_name }));
-          return toast.success('Producto encontrado en la base de datos');
+          return toast.success('Producto encontrado en la base de datos.', { id: 'prod-scan' });
         }
 
         const resUpc = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${codigoLimpio}`).then(r => r.json());
         if (resUpc.items && resUpc.items.length > 0) {
           setFormData(prev => ({ ...prev, codigo: codigoLimpio, nombre: prev.nombre || resUpc.items[0].title }));
-          return toast.success('Producto encontrado en la base de datos');
+          return toast.success('Producto encontrado en la base de datos.', { id: 'prod-scan' });
         }
-        
-        toast.error('Producto nuevo. Completa sus datos manualmente.');
+
+        toast.error('Producto nuevo. Completa sus datos manualmente.', { id: 'prod-scan' });
       } catch (error) {
-        console.log("Error consultando APIs externas:", error);
+        console.log('Error consultando APIs externas:', error);
       }
     }
   };
@@ -646,12 +736,12 @@ export default function Productos() {
     let html5QrCode;
 
     if (scannerTarget) {
-      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode = new Html5Qrcode('reader');
 
       const iniciarCamara = async () => {
         try {
           await html5QrCode.start(
-            { facingMode: "environment" }, 
+            { facingMode: 'environment' },
             { fps: 10, qrbox: { width: 250, height: 100 } },
             async (decodedText) => {
               if (html5QrCode.isScanning) {
@@ -665,18 +755,18 @@ export default function Productos() {
                 await procesarCodigoEnFormulario(decodedText, true);
               } else if (scannerTarget === 'editar') {
                 setEditingProduct(prev => ({ ...prev, codigo: decodedText }));
-                toast.success('Código escaneado exitosamente');
+                toast.success('Código escaneado exitosamente.', { id: 'prod-scan' });
               } else if (scannerTarget === 'busqueda') {
                 setBusqueda(decodedText);
                 setLimiteVisible(BLOQUE_CARGA);
-                toast.success('Buscando producto...');
+                toast.success('Buscando producto...', { id: 'prod-scan' });
               }
             },
-            () => { /* Ignorar advertencias */ }
+            () => { /* Ignorar lecturas parciales */ }
           );
         } catch (error) {
-          console.error("Error al iniciar la cámara:", error);
-          toast.error("No se pudo iniciar la cámara. Verifica los permisos de tu navegador.");
+          console.error('Error al iniciar la cámara:', error);
+          toast.error('No se pudo iniciar la cámara. Verifica los permisos de tu navegador.', { id: 'prod-scan' });
         }
       };
 
@@ -692,7 +782,7 @@ export default function Productos() {
   }, [scannerTarget]);
 
   const handleImprimirEtiqueta = () => {
-    const contenido = document.getElementById("area-impresion-barcode").innerHTML;
+    const contenido = document.getElementById('area-impresion-barcode').innerHTML;
     const ventana = window.open('', 'PRINT', 'height=600,width=800');
     ventana.document.write(`
       <html>
@@ -728,21 +818,37 @@ export default function Productos() {
     if (formData.precioCompra !== '' && parseFloat(formData.precioCompra) < 0) {
       return toast.error('El costo de compra no puede ser negativo.', { id: 'prod-accion' });
     }
+    if (formData.stock !== '' && parseInt(formData.stock, 10) < 0) {
+      return toast.error('El stock inicial no puede ser negativo.', { id: 'prod-accion' });
+    }
 
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
     try {
-      const dataAEnviar = { ...formData, proveedorId: formData.proveedorId ? parseInt(formData.proveedorId) : null };
+      const dataAEnviar = {
+        ...formData,
+        proveedorId: formData.proveedorId ? parseInt(formData.proveedorId, 10) : null,
+        fechaVencimiento: formData.fechaVencimiento || null
+      };
       await axios.post('/productos', dataAEnviar);
-      
+
       toast.success('Producto registrado correctamente.', { id: 'prod-accion' });
       setIsCreateModalOpen(false);
       setOrigenAutocompletado(null);
       setModoPrecioCrear(null);
-      setFormData({ codigo: '', nombre: '', categoria: '', precioCompra: '', precioVenta: '', stock: '', proveedorId: '' });
+      setFormData({
+        codigo: '',
+        nombre: '',
+        categoria: '',
+        precioCompra: '',
+        precioVenta: '',
+        stock: '',
+        proveedorId: '',
+        fechaVencimiento: ''
+      });
       cargarDatos();
-    } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al guardar el producto.', { id: 'prod-accion' }); 
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al guardar el producto.', { id: 'prod-accion' });
     } finally {
       accionEnCursoRef.current = false;
       setIsSubmitting(false);
@@ -767,14 +873,17 @@ export default function Productos() {
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
     try {
-      const dataAEnviar = { ...editingProduct, proveedorId: editingProduct.proveedorId ? parseInt(editingProduct.proveedorId) : null };
+      const dataAEnviar = {
+        ...editingProduct,
+        proveedorId: editingProduct.proveedorId ? parseInt(editingProduct.proveedorId, 10) : null
+      };
       await axios.put(`/productos/${editingProduct.id}`, dataAEnviar);
-      
+
       toast.success('Producto actualizado correctamente.', { id: 'prod-accion' });
       setEditingProduct(null);
       cargarDatos();
-    } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al actualizar el producto.', { id: 'prod-accion' }); 
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al actualizar el producto.', { id: 'prod-accion' });
     } finally {
       accionEnCursoRef.current = false;
       setIsSubmitting(false);
@@ -793,13 +902,115 @@ export default function Productos() {
     accionEnCursoRef.current = true;
     setIsSubmitting(true);
     try {
-      await axios.post(`/productos/${stockProduct.id}/stock`, stockData);
+      const esEntrada = stockData.tipo === 'ABASTECIMIENTO' || stockData.tipo === 'DEVOLUCION';
+      const payload = {
+        tipo: stockData.tipo,
+        cantidad: cantNum,
+        motivo: stockData.motivo,
+        ...(esEntrada && stockData.fechaVencimiento ? { fechaVencimiento: stockData.fechaVencimiento } : {}),
+        ...(!esEntrada && stockData.loteId ? { loteId: parseInt(stockData.loteId, 10) } : {})
+      };
+
+      await axios.post(`/productos/${stockProduct.id}/stock`, payload);
       toast.success('Inventario actualizado correctamente.', { id: 'prod-accion' });
       setStockProduct(null);
-      setStockData({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '' });
+      setStockData({ tipo: 'ABASTECIMIENTO', cantidad: '', motivo: '', fechaVencimiento: '', loteId: '' });
       cargarDatos();
-    } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al actualizar el inventario.', { id: 'prod-accion' }); 
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al actualizar el inventario.', { id: 'prod-accion' });
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- ACCIONES DEL MODAL DE LOTES Y VENCIMIENTOS ---
+  const handleAsignarFechaLote = async (e) => {
+    e.preventDefault();
+    if (!lotesProduct || accionEnCursoRef.current) return;
+
+    if (!nuevoLoteForm.fechaVencimiento) {
+      return toast.error('Selecciona una fecha de vencimiento.', { id: 'lote-accion' });
+    }
+    const cantNum = parseInt(nuevoLoteForm.cantidad, 10);
+    if (Number.isNaN(cantNum) || cantNum <= 0) {
+      return toast.error('Ingresa una cantidad válida mayor a 0.', { id: 'lote-accion' });
+    }
+    if (cantNum > (lotesProduct.stockSinFecha || 0)) {
+      return toast.error(`Solo tienes ${lotesProduct.stockSinFecha} unidad(es) sin fecha.`, { id: 'lote-accion' });
+    }
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const res = await axios.post(`/productos/${lotesProduct.id}/lotes`, {
+        fechaVencimiento: nuevoLoteForm.fechaVencimiento,
+        cantidad: cantNum
+      });
+      toast.success('Fecha de vencimiento asignada.', { id: 'lote-accion' });
+      sincronizarProductoEnEstado(res.data?.producto);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al asignar fecha.', { id: 'lote-accion' });
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGuardarEdicionLote = async (loteId, fechaNueva) => {
+    if (!lotesProduct || accionEnCursoRef.current) return;
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const res = await axios.put(`/productos/${lotesProduct.id}/lotes/${loteId}`, {
+        fechaVencimiento: fechaNueva || null
+      });
+      toast.success(
+        fechaNueva ? 'Fecha del lote actualizada.' : 'Fecha retirada del lote.',
+        { id: 'lote-accion' }
+      );
+      setEditandoLoteId(null);
+      setFechaEdicionLote('');
+      sincronizarProductoEnEstado(res.data?.producto);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al actualizar el lote.', { id: 'lote-accion' });
+    } finally {
+      accionEnCursoRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDarDeBajaLote = async (lote) => {
+    if (!lotesProduct || accionEnCursoRef.current) return;
+
+    accionEnCursoRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await axios.post(`/productos/${lotesProduct.id}/stock`, {
+        tipo: 'AJUSTE_NEGATIVO',
+        cantidad: lote.cantidad,
+        motivo: `Baja por merma / vencimiento (Lote ${formatearFechaCorta(lote.fechaVencimiento) || 'sin fecha'})`,
+        loteId: lote.id
+      });
+      toast.success(`Se dio de baja ${lote.cantidad} unidad(es) del lote.`, { id: 'lote-accion' });
+      setConfirmMermaLoteId(null);
+
+      const listaActualizada = await cargarDatos();
+      if (listaActualizada) {
+        const prodRefrescado = listaActualizada.find(p => p.id === lotesProduct.id);
+        if (prodRefrescado) {
+          setLotesProduct(prodRefrescado);
+          setNuevoLoteForm({
+            fechaVencimiento: '',
+            cantidad: prodRefrescado.stockSinFecha > 0 ? String(prodRefrescado.stockSinFecha) : ''
+          });
+        } else {
+          setLotesProduct(null);
+        }
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al dar de baja el lote.', { id: 'lote-accion' });
     } finally {
       accionEnCursoRef.current = false;
       setIsSubmitting(false);
@@ -823,28 +1034,31 @@ export default function Productos() {
       toast.success(`Producto ${accion} exitosamente.`, { id: 'prod-accion' });
       setConfirmDialog(null);
       cargarDatos();
-    } catch (error) { 
-      toast.error(error.response?.data?.message || 'Error al cambiar el estado del producto.', { id: 'prod-accion' }); 
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al cambiar el estado del producto.', { id: 'prod-accion' });
     } finally {
       accionEnCursoRef.current = false;
       setIsSubmitting(false);
     }
   };
 
+  // --- FILTRADO INTEGRAL ---
   const productosFiltrados = productos.filter(prod => {
-    // 1. Filtro por proveedor seleccionado
     if (filtroProveedor === 'SIN_PROVEEDOR') {
       if (prod.proveedorId) return false;
     } else if (filtroProveedor !== 'TODOS') {
       if (String(prod.proveedorId) !== String(filtroProveedor)) return false;
     }
 
-    // 2. Filtro opcional de solo stock bajo (productos activos)
     if (soloStockBajo) {
       if (!prod.estado || prod.stock > (prod.stockMinimo || 5)) return false;
     }
 
-    // 3. Buscador por nombre o código dentro de la selección actual
+    if (soloPorVencer) {
+      const enAlertaVencimiento = prod.estado && prod.stock > 0 && (prod.estadoVencimiento === 'VENCIDO' || prod.estadoVencimiento === 'POR_VENCER');
+      if (!enAlertaVencimiento) return false;
+    }
+
     const q = busqueda.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -854,32 +1068,32 @@ export default function Productos() {
   });
 
   const sinProveedorCount = productos.filter(p => !p.proveedorId).length;
-  const hayFiltrosActivos = filtroProveedor !== 'TODOS' || soloStockBajo || busqueda.trim() !== '';
+  const hayFiltrosActivos = filtroProveedor !== 'TODOS' || soloStockBajo || soloPorVencer || busqueda.trim() !== '';
   const productosVisibles = productosFiltrados.slice(0, limiteVisible);
   const restantesPorCargar = productosFiltrados.length - productosVisibles.length;
 
-  // Métricas en vivo para las tarjetas superiores estilo Figma
+  // Métricas en vivo para las tarjetas superiores
   const productosActivos = productos.filter(p => p.estado);
   const stockCriticoCount = productosActivos.filter(p => p.stock <= (p.stockMinimo || 5)).length;
+  const vencidosCount = productosActivos.filter(p => p.stock > 0 && p.estadoVencimiento === 'VENCIDO').length;
+  const porVencerCount = productosActivos.filter(p => p.stock > 0 && p.estadoVencimiento === 'POR_VENCER').length;
+  const alertasVencimientoCount = vencidosCount + porVencerCount;
   const valorizadoTotal = productosActivos.reduce((acc, p) => acc + (p.stock * p.precioVenta), 0);
 
-  // 1. Verificar si el código escrito ya existe en el inventario local
+  // Validadores en vivo del modal Crear
   const productoCodigoEnInventario = formData.codigo.trim() !== ''
     ? productos.find(p => p.codigo.toLowerCase() === formData.codigo.trim().toLowerCase())
     : null;
 
-  // 2. Verificar si el nombre escrito es un duplicado exacto normalizado ("gaseosa de 150ml" === "gaseosa 150ml")
   const nombreNormalizadoActual = normalizarTextoProducto(formData.nombre);
   const productoDuplicadoPorNombre = nombreNormalizadoActual.length >= 3
     ? productos.find(p => normalizarTextoProducto(p.nombre) === nombreNormalizadoActual)
     : null;
 
-  // 3. Filtrar productos similares en el inventario para usarlos como plantilla rápida (ej. otro tamaño de gaseosa)
   const productosSimilaresPlantilla = formData.nombre.trim().length >= 2
     ? productos.filter(p => p.nombre.toLowerCase().includes(formData.nombre.trim().toLowerCase()))
     : [];
 
-  // 4. Lista unificada de categorías (globales + locales de esta bodega)
   const listaCategoriasUnificadas = Array.from(
     new Set([
       ...categoriasGlobales,
@@ -887,39 +1101,102 @@ export default function Productos() {
     ])
   ).sort();
 
-  return (
-    <div className="flex flex-col gap-6 text-slate-800 pb-24 lg:pb-6 font-sans antialiased">      
+  // Renderizador reutilizable de la celda/badge de vencimiento (tabla y tarjetas)
+  const renderCeldaVencimiento = (prod, compacto = false) => {
+    if (prod.stock <= 0) {
+      return <span className="text-xs font-medium text-slate-400">Sin stock</span>;
+    }
 
-      {/* CABECERA PRINCIPAL (Jerarquía limpia estilo Figma) */}
+    if (!prod.proximoVencimiento || prod.estadoVencimiento === 'SIN_FECHA') {
+      if (isAdmin && prod.estado) {
+        return (
+          <button
+            type="button"
+            onClick={() => abrirModalLotes(prod)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 hover:text-emerald-900 bg-slate-50 hover:bg-verde-pastel/35 border border-dashed border-slate-300 hover:border-emerald-400 transition-colors cursor-pointer whitespace-nowrap"
+            title="Asignar fecha de vencimiento a este producto"
+          >
+            <FaCalendarAlt size={10} /> + Fecha
+          </button>
+        );
+      }
+      return <span className="text-xs font-medium text-slate-400">Sin fecha</span>;
+    }
+
+    const fechaStr = formatearFechaCorta(prod.proximoVencimiento);
+    const lotesAdicionales = Math.max(0, (prod.totalLotesConFecha || 1) - 1);
+    const tieneSinFecha = (prod.stockSinFecha || 0) > 0;
+
+    let estilosBadge = 'bg-emerald-50/70 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100/70';
+    let etiquetaEstado = null;
+
+    if (prod.estadoVencimiento === 'VENCIDO') {
+      estilosBadge = 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100/80';
+      etiquetaEstado = textoEstadoDias(prod.diasParaVencer);
+    } else if (prod.estadoVencimiento === 'POR_VENCER') {
+      estilosBadge = 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100/80';
+      etiquetaEstado = textoEstadoDias(prod.diasParaVencer);
+    }
+
+    return (
+      <div className={`inline-flex flex-col ${compacto ? 'items-start' : 'items-center'} gap-1`}>
+        <button
+          type="button"
+          onClick={() => abrirModalLotes(prod)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer whitespace-nowrap ${estilosBadge}`}
+          title="Ver o gestionar lotes y fechas de vencimiento"
+        >
+          <FaClock size={10} className="shrink-0" />
+          <span className="font-mono">{fechaStr}</span>
+          {etiquetaEstado && (
+            <span className="text-[10px] font-extrabold opacity-90">• {etiquetaEstado}</span>
+          )}
+        </button>
+
+        {(lotesAdicionales > 0 || tieneSinFecha || prod.cantidadProximoVencimiento < prod.stock) && (
+          <span className="text-[10px] font-semibold text-slate-500 whitespace-nowrap">
+            {prod.cantidadProximoVencimiento} un. próx.
+            {lotesAdicionales > 0 ? ` • +${lotesAdicionales} lote${lotesAdicionales === 1 ? '' : 's'}` : ''}
+            {tieneSinFecha ? ` • ${prod.stockSinFecha} s/f` : ''}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-6 text-slate-800 pb-24 lg:pb-6 font-sans antialiased">
+
+      {/* CABECERA PRINCIPAL */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Gestion de Productos
           </h1>
           <p className="text-sm text-slate-600 font-medium mt-1">
-            Administra tus existencias, costos de compra, precios de venta y etiquetas de código de barras.
+            Administra existencias, fechas de vencimiento por lotes (FEFO), precios y códigos de barras.
           </p>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
           <div className="relative w-full sm:w-80">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <FaSearch className="text-slate-400 text-sm" />
             </div>
-            
-            <input 
-              type="text" 
+
+            <input
+              type="text"
               placeholder={
                 filtroProveedor === 'TODOS'
                   ? 'Buscar por nombre o código...'
                   : 'Buscar en este proveedor...'
               }
-              value={busqueda} 
+              value={busqueda}
               onChange={(e) => {
                 setBusqueda(e.target.value);
                 setLimiteVisible(BLOQUE_CARGA);
               }}
-              className={`w-full pl-11 ${busqueda ? 'pr-20' : 'pr-12'} py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium placeholder:text-slate-400`} 
+              className={`w-full pl-11 ${busqueda ? 'pr-20' : 'pr-12'} py-2.5 bg-white border border-slate-200/90 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-sm text-slate-800 transition-all shadow-[0_2px_12px_rgba(15,23,42,0.04)] font-medium placeholder:text-slate-400`}
             />
 
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-2">
@@ -936,7 +1213,7 @@ export default function Productos() {
                   <FaTimes size={13} />
                 </button>
               )}
-              <button 
+              <button
                 type="button"
                 onClick={() => setScannerTarget('busqueda')}
                 className="text-slate-400 hover:text-emerald-700 transition-colors p-1 cursor-pointer"
@@ -946,7 +1223,7 @@ export default function Productos() {
               </button>
             </div>
           </div>
-          
+
           {isAdmin && (
             <div className="flex gap-2.5 w-full sm:w-auto">
               <button
@@ -963,9 +1240,9 @@ export default function Productos() {
                 <span>{autoMargenActivo ? `Margen: ${porcentajeGanancia}%` : 'Margen Auto'}</span>
               </button>
 
-              <button 
+              <button
                 type="button"
-                onClick={abrirModalCrear} 
+                onClick={abrirModalCrear}
                 className="flex-1 sm:flex-none bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 font-extrabold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-2xs text-sm whitespace-nowrap cursor-pointer"
               >
                 <FaPlus size={13} /> Nuevo Producto
@@ -975,47 +1252,78 @@ export default function Productos() {
         </div>
       </div>
 
-      {/* TARJETAS DE RESUMEN SIMÉTRICAS (Estilo Figma) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">Productos Activos</p>
+      {/* TARJETAS DE RESUMEN SIMÉTRICAS (4 COLUMNAS EN ESCRITORIO) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-slate-500 truncate">Productos Activos</p>
             <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
               {productosActivos.length}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
-            <FaBoxOpen size={22} />
+          <div className="w-11 h-11 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
+            <FaBoxOpen size={20} />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">Stock Bajo / Crítico</p>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-slate-500 truncate">Stock Bajo / Crítico</p>
             <p className={`text-2xl sm:text-3xl font-extrabold mt-1 tracking-tight ${stockCriticoCount > 0 ? 'text-red-600' : 'text-slate-900'}`}>
               {stockCriticoCount}
             </p>
           </div>
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${stockCriticoCount > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
-            <FaExclamationTriangle size={20} />
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${stockCriticoCount > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
+            <FaExclamationTriangle size={19} />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">Valorizado en Venta</p>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
+        <div
+          onClick={() => {
+            if (alertasVencimientoCount > 0) {
+              setSoloPorVencer(prev => !prev);
+              setLimiteVisible(BLOQUE_CARGA);
+            }
+          }}
+          className={`bg-white p-5 rounded-2xl border shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between gap-3 transition-all ${
+            soloPorVencer ? 'border-amber-400 ring-2 ring-amber-200/60' : 'border-slate-200/90'
+          } ${alertasVencimientoCount > 0 ? 'cursor-pointer hover:border-amber-300' : ''}`}
+        >
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-slate-500 truncate">Por Vencer (≤15 días)</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-1 tracking-tight ${
+              vencidosCount > 0 ? 'text-red-600' : porVencerCount > 0 ? 'text-amber-600' : 'text-slate-900'
+            }`}>
+              {alertasVencimientoCount}
+            </p>
+            {alertasVencimientoCount > 0 && (
+              <p className="text-[11px] font-semibold text-slate-500 mt-0.5 truncate">
+                {vencidosCount > 0 ? `${vencidosCount} vencido(s)` : ''}{vencidosCount > 0 && porVencerCount > 0 ? ' • ' : ''}{porVencerCount > 0 ? `${porVencerCount} próx.` : ''}
+              </p>
+            )}
+          </div>
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+            vencidosCount > 0 ? 'bg-red-50 text-red-600' : porVencerCount > 0 ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'
+          }`}>
+            <FaClock size={19} />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_6px_24px_rgba(15,23,42,0.05)] flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-slate-500 truncate">Valorizado en Venta</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight font-mono">
               S/ {valorizadoTotal.toFixed(2)}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <FaBarcode size={22} />
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <FaBarcode size={20} />
           </div>
         </div>
       </div>
 
-      {/* BARRA DE FILTROS: PROVEEDOR + SOLO STOCK BAJO */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/90 shadow-[0_4px_18px_rgba(15,23,42,0.04)] flex flex-col md:flex-row md:items-center justify-between gap-3">
+      {/* BARRA DE FILTROS: PROVEEDOR + STOCK BAJO + POR VENCER */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/90 shadow-[0_4px_18px_rgba(15,23,42,0.04)] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 min-w-0">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">
             <FaTruck className="text-emerald-700" size={13} />
@@ -1051,12 +1359,29 @@ export default function Productos() {
             <span>Solo Stock Bajo ({stockCriticoCount})</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => {
+              setSoloPorVencer(prev => !prev);
+              setLimiteVisible(BLOQUE_CARGA);
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all inline-flex items-center gap-1.5 cursor-pointer ${
+              soloPorVencer
+                ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <FaClock size={11} className={soloPorVencer ? 'text-amber-600' : 'text-slate-400'} />
+            <span>Por Vencer ({alertasVencimientoCount})</span>
+          </button>
+
           {hayFiltrosActivos && (
             <button
               type="button"
               onClick={() => {
                 setFiltroProveedor('TODOS');
                 setSoloStockBajo(false);
+                setSoloPorVencer(false);
                 setBusqueda('');
                 setLimiteVisible(BLOQUE_CARGA);
               }}
@@ -1070,7 +1395,7 @@ export default function Productos() {
 
       {/* LISTADO RESPONSIVE: TARJETAS EN CELULAR/TABLET (< 1024px) + TABLA EN ESCRITORIO (>= 1024px) */}
       <div className="lg:bg-white lg:border lg:border-slate-200/90 lg:rounded-2xl lg:shadow-[0_6px_28px_rgba(15,23,42,0.06)] overflow-hidden">
-        
+
         {/* VISTA CELULAR (1 col) Y TABLET VERTICAL (2 cols) */}
         <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {isLoading ? (
@@ -1108,8 +1433,8 @@ export default function Productos() {
                         </div>
                       </div>
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shrink-0 ${
-                        esStockBajo 
-                          ? 'bg-red-50 text-red-700 border-red-200' 
+                        esStockBajo
+                          ? 'bg-red-50 text-red-700 border-red-200'
                           : 'bg-verde-pastel/35 text-emerald-900 border-emerald-200'
                       }`}>
                         {prod.stock} un.
@@ -1138,13 +1463,19 @@ export default function Productos() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Fila de Vencimiento en Tarjeta */}
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Vencimiento</span>
+                      <div>{renderCeldaVencimiento(prod, true)}</div>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <button 
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button
                       type="button"
-                      onClick={() => setBarcodeView(prod)} 
-                      className="p-2 text-slate-600 bg-white hover:bg-slate-100 border border-slate-200/80 rounded-lg cursor-pointer" 
+                      onClick={() => setBarcodeView(prod)}
+                      className="p-2 text-slate-600 bg-white hover:bg-slate-100 border border-slate-200/80 rounded-lg cursor-pointer"
                       title="Ver Código"
                     >
                       <FaBarcode size={14} />
@@ -1152,19 +1483,19 @@ export default function Productos() {
                     {prod.estado && (
                       <>
                         {isAdmin && (
-                          <button 
+                          <button
                             type="button"
-                            onClick={() => abrirModalEditar(prod)} 
-                            className="p-2 text-amber-600 bg-white hover:bg-amber-50 border border-slate-200/80 rounded-lg cursor-pointer" 
+                            onClick={() => abrirModalEditar(prod)}
+                            className="p-2 text-amber-600 bg-white hover:bg-amber-50 border border-slate-200/80 rounded-lg cursor-pointer"
                             title="Editar Producto"
                           >
                             <FaEdit size={14} />
                           </button>
                         )}
-                        <button 
+                        <button
                           type="button"
-                          onClick={() => setStockProduct(prod)} 
-                          className="p-2 text-emerald-700 bg-white hover:bg-verde-pastel/30 border border-slate-200/80 rounded-lg cursor-pointer" 
+                          onClick={() => abrirModalStock(prod)}
+                          className="p-2 text-emerald-700 bg-white hover:bg-verde-pastel/30 border border-slate-200/80 rounded-lg cursor-pointer"
                           title="Actualizar Stock"
                         >
                           <FaBox size={14} />
@@ -1172,7 +1503,7 @@ export default function Productos() {
                       </>
                     )}
                     {isAdmin && (
-                      <button 
+                      <button
                         type="button"
                         disabled={isSubmitting}
                         onClick={() => prepararToggleEstado(prod)}
@@ -1191,17 +1522,18 @@ export default function Productos() {
           )}
         </div>
 
-        {/* VISTA ESCRITORIO (>= 1024px): Tabla completa */}
+        {/* VISTA ESCRITORIO (>= 1024px): Tabla completa con columna Vencimiento */}
         <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[740px]">
+          <table className="w-full text-left border-collapse min-w-[880px]">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                 <th className="py-3.5 px-4 xl:px-5 whitespace-nowrap">Código</th>
                 <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap">Producto / Categoría</th>
                 <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap">Proveedor</th>
-                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-right">Costo Compra</th>
-                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-right">Precio Venta</th>
-                <th className="py-3.5 px-3 xl:px-4 text-center whitespace-nowrap">Existencias</th>
+                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-right">Compra</th>
+                <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-right">Venta</th>
+                <th className="py-3.5 px-3 xl:px-4 text-center whitespace-nowrap">Stock</th>
+                <th className="py-3.5 px-3 xl:px-4 text-center whitespace-nowrap">Vencimiento</th>
                 <th className="py-3.5 px-4 xl:px-5 text-center whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
@@ -1212,9 +1544,10 @@ export default function Productos() {
                     <td className="py-4 px-5"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
                     <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-44"></div></td>
                     <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
-                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-16 ml-auto"></div></td>
-                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-16 ml-auto"></div></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-14 ml-auto"></div></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-200 rounded w-14 ml-auto"></div></td>
                     <td className="py-4 px-4"><div className="h-6 bg-slate-200 rounded-full w-14 mx-auto"></div></td>
+                    <td className="py-4 px-4"><div className="h-6 bg-slate-200 rounded-lg w-24 mx-auto"></div></td>
                     <td className="py-4 px-5 flex justify-center gap-2">
                       <div className="h-8 w-8 bg-slate-200 rounded-lg"></div>
                       <div className="h-8 w-8 bg-slate-200 rounded-lg"></div>
@@ -1224,7 +1557,7 @@ export default function Productos() {
                 ))
               ) : productosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-12 text-center text-slate-500 font-medium text-sm">
+                  <td colSpan="8" className="p-12 text-center text-slate-500 font-medium text-sm">
                     {hayFiltrosActivos
                       ? 'No se encontraron productos con los filtros seleccionados.'
                       : 'Aún no hay productos registrados en el catálogo.'}
@@ -1238,7 +1571,7 @@ export default function Productos() {
                       <td className="py-3.5 px-4 xl:px-5 font-mono text-xs font-semibold text-slate-600 align-middle whitespace-nowrap">
                         {prod.codigo}
                       </td>
-                      <td className="py-3.5 px-3 xl:px-4 align-middle max-w-[200px] lg:max-w-[250px] xl:max-w-[300px]">
+                      <td className="py-3.5 px-3 xl:px-4 align-middle max-w-[190px] xl:max-w-[260px]">
                         <p className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug" title={prod.nombre}>
                           {prod.nombre}
                         </p>
@@ -1248,7 +1581,7 @@ export default function Productos() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3.5 px-3 xl:px-4 text-slate-600 font-medium align-middle max-w-[140px] xl:max-w-[180px]">
+                      <td className="py-3.5 px-3 xl:px-4 text-slate-600 font-medium align-middle max-w-[130px] xl:max-w-[170px]">
                         <span className="block truncate" title={prod.proveedor?.nombre || ''}>
                           {prod.proveedor?.nombre || <span className="text-slate-400 text-xs">Sin asignar</span>}
                         </span>
@@ -1261,40 +1594,43 @@ export default function Productos() {
                       </td>
                       <td className="py-3.5 px-3 xl:px-4 text-center align-middle whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
-                          esStockBajo 
-                            ? 'bg-red-50 text-red-700 border-red-200' 
+                          esStockBajo
+                            ? 'bg-red-50 text-red-700 border-red-200'
                             : 'bg-verde-pastel/35 text-emerald-900 border-emerald-200'
                         }`}>
                           {prod.stock} un.
                         </span>
                       </td>
+                      <td className="py-3.5 px-3 xl:px-4 text-center align-middle whitespace-nowrap">
+                        {renderCeldaVencimiento(prod, false)}
+                      </td>
                       <td className="py-3.5 px-4 xl:px-5 align-middle whitespace-nowrap">
                         <div className="flex justify-center gap-1.5">
-                          <button 
+                          <button
                             type="button"
-                            onClick={() => setBarcodeView(prod)} 
-                            className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200/80 rounded-lg transition-colors cursor-pointer" 
+                            onClick={() => setBarcodeView(prod)}
+                            className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200/80 rounded-lg transition-colors cursor-pointer"
                             title="Ver Código"
                           >
                             <FaBarcode size={14} />
                           </button>
-                          
+
                           {prod.estado && (
                             <>
                               {isAdmin && (
-                                <button 
+                                <button
                                   type="button"
-                                  onClick={() => abrirModalEditar(prod)} 
-                                  className="p-2 text-amber-600 hover:text-amber-700 bg-white hover:bg-amber-50 border border-slate-200/80 rounded-lg transition-colors cursor-pointer" 
+                                  onClick={() => abrirModalEditar(prod)}
+                                  className="p-2 text-amber-600 hover:text-amber-700 bg-white hover:bg-amber-50 border border-slate-200/80 rounded-lg transition-colors cursor-pointer"
                                   title="Editar Producto"
                                 >
                                   <FaEdit size={14} />
                                 </button>
                               )}
-                              <button 
+                              <button
                                 type="button"
-                                onClick={() => setStockProduct(prod)} 
-                                className="p-2 text-emerald-700 hover:text-emerald-800 bg-white hover:bg-verde-pastel/30 border border-slate-200/80 rounded-lg transition-colors cursor-pointer" 
+                                onClick={() => abrirModalStock(prod)}
+                                className="p-2 text-emerald-700 hover:text-emerald-800 bg-white hover:bg-verde-pastel/30 border border-slate-200/80 rounded-lg transition-colors cursor-pointer"
                                 title="Actualizar Stock"
                               >
                                 <FaBox size={14} />
@@ -1303,13 +1639,13 @@ export default function Productos() {
                           )}
 
                           {isAdmin && (
-                            <button 
+                            <button
                               type="button"
                               disabled={isSubmitting}
                               onClick={() => prepararToggleEstado(prod)}
                               className={`p-2 bg-white border border-slate-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                                prod.estado 
-                                  ? 'text-red-500 hover:text-red-700 hover:bg-red-50' 
+                                prod.estado
+                                  ? 'text-red-500 hover:text-red-700 hover:bg-red-50'
                                   : 'text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50'
                               }`}
                               title={prod.estado ? 'Descontinuar Producto' : 'Reactivar Producto'}
@@ -1327,7 +1663,7 @@ export default function Productos() {
           </table>
         </div>
 
-        {/* PIE DE PAGINACIÓN PROGRESIVA CENTRADO Y CON ESPACIO (30 EN 30) */}
+        {/* PIE DE PAGINACIÓN PROGRESIVA CENTRADO (30 EN 30) */}
         {!isLoading && productosFiltrados.length > 0 && (
           <div className="mt-4 lg:mt-0 px-5 py-5 bg-white lg:bg-slate-50/80 border border-slate-200/90 lg:border-0 lg:border-t lg:border-slate-100 rounded-2xl lg:rounded-none shadow-2xs lg:shadow-none flex flex-col items-center justify-center gap-3 text-center">
             <p className="text-xs sm:text-sm font-semibold text-slate-500">
@@ -1356,7 +1692,7 @@ export default function Productos() {
       <AnimatePresence>
         {confirmDialog && (
           <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-200">
               <div className="p-6 text-center">
                 <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-4 ${confirmDialog.estado ? 'bg-red-50 text-red-600' : 'bg-verde-pastel/40 text-emerald-800'}`}>
@@ -1366,8 +1702,8 @@ export default function Productos() {
                   {confirmDialog.estado ? '¿Descontinuar producto?' : '¿Reactivar producto?'}
                 </h3>
                 <p className="text-sm text-slate-600 font-medium leading-relaxed">
-                  {confirmDialog.estado 
-                    ? `El producto "${confirmDialog.nombre}" dejará de mostrarse en el Punto de Venta.` 
+                  {confirmDialog.estado
+                    ? `El producto "${confirmDialog.nombre}" dejará de mostrarse en el Punto de Venta.`
                     : `El producto "${confirmDialog.nombre}" volverá a estar habilitado para la venta.`}
                 </p>
               </div>
@@ -1400,7 +1736,7 @@ export default function Productos() {
       <AnimatePresence>
         {scannerTarget && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
               className="flex flex-col w-full max-w-md max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
               <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-3">
@@ -1409,7 +1745,7 @@ export default function Productos() {
                   </div>
                   <h3 className="text-slate-900 font-bold text-base">Escanear Código de Empaque</h3>
                 </div>
-                <button type="button" onClick={() => setScannerTarget(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors"><FaTimes size={18}/></button>
+                <button type="button" onClick={() => setScannerTarget(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors cursor-pointer"><FaTimes size={18}/></button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col items-center justify-center">
                 <div id="reader" className="w-full bg-black rounded-xl overflow-hidden border border-slate-300 shadow-inner"></div>
@@ -1420,13 +1756,13 @@ export default function Productos() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 1: NUEVO PRODUCTO */}
+      {/* MODAL 1: NUEVO PRODUCTO (CON FECHA DE VENCIMIENTO INICIAL OPCIONAL) */}
       <AnimatePresence>
         {isCreateModalOpen && !scannerTarget && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} 
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="flex flex-col w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-              
+
               <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
@@ -1437,22 +1773,22 @@ export default function Productos() {
                     <p className="text-xs text-slate-500 font-medium">Completa los datos para añadirlo al catálogo de tu bodega.</p>
                   </div>
                 </div>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => {
                     setIsCreateModalOpen(false);
                     setOrigenAutocompletado(null);
-                  }} 
-                  className="text-slate-400 hover:text-slate-700 p-1 transition-colors"
+                  }}
+                  className="text-slate-400 hover:text-slate-700 p-1 transition-colors cursor-pointer"
                 >
                   <FaTimes size={18}/>
                 </button>
               </div>
-              
-              <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
+
+              <form onSubmit={handleCreate} noValidate className="flex flex-col flex-1 min-h-0">
                 <div className="overflow-y-auto p-6 flex-1 bg-white space-y-5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                  
-                  {/* SECCIÓN DE CÓDIGO DE BARRAS CON DETECTOR DE INVENTARIO Y CATÁLOGO GLOBAL */}
+
+                  {/* SECCIÓN DE CÓDIGO DE BARRAS */}
                   <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Código de Barras</label>
@@ -1464,20 +1800,20 @@ export default function Productos() {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2.5">
-                      <input 
-                        type="text" 
-                        value={formData.codigo} 
+                      <input
+                        type="text"
+                        value={formData.codigo}
                         onChange={e => {
                           const val = e.target.value;
                           setFormData({ ...formData, codigo: val });
                           procesarCodigoEnFormulario(val.trim(), false);
-                        }} 
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono text-sm font-semibold" 
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono text-sm font-semibold"
                         placeholder="Dejar vacío para generar código automático"
                       />
-                      <button 
-                        type="button" 
-                        onClick={() => setScannerTarget('crear')} 
+                      <button
+                        type="button"
+                        onClick={() => setScannerTarget('crear')}
                         className="w-full sm:w-auto px-4 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl transition-colors font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                       >
                         <FaCamera /> Escanear
@@ -1496,7 +1832,7 @@ export default function Productos() {
                           type="button"
                           onClick={() => {
                             setIsCreateModalOpen(false);
-                            setStockProduct(productoCodigoEnInventario);
+                            abrirModalStock(productoCodigoEnInventario);
                           }}
                           className="text-xs font-extrabold text-emerald-900 bg-verde-pastel hover:bg-[#86e6bb] px-3 py-1.5 rounded-lg shrink-0 transition-colors cursor-pointer"
                         >
@@ -1511,8 +1847,8 @@ export default function Productos() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    
-                    {/* CAMPO DE NOMBRE CON PLANTILLA PARA OTROS TAMAÑOS Y DETECTOR ANTI-DUPLICADOS */}
+
+                    {/* NOMBRE DEL PRODUCTO */}
                     <div className="col-span-1 md:col-span-2 relative">
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -1525,35 +1861,33 @@ export default function Productos() {
                         )}
                       </div>
 
-                      <input 
-                        type="text" 
-                        required 
-                        value={formData.nombre} 
+                      <input
+                        type="text"
+                        required
+                        value={formData.nombre}
                         onFocus={() => setShowSugerenciasNombre(true)}
                         onBlur={() => setTimeout(() => setShowSugerenciasNombre(false), 200)}
                         onChange={e => {
                           setFormData({ ...formData, nombre: e.target.value });
                           setShowSugerenciasNombre(true);
-                        }} 
+                        }}
                         placeholder="Ej: Inka Cola 600 ml, Leche Gloria 180 ml..."
                         className={`w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border rounded-xl outline-none text-slate-900 text-sm transition-all font-medium ${
-                          productoDuplicadoPorNombre 
-                            ? 'border-amber-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-200/50' 
+                          productoDuplicadoPorNombre
+                            ? 'border-amber-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-200/50'
                             : 'border-slate-200 focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30'
                         }`}
                       />
 
-                      {/* Alerta en tiempo real si escribe un nombre equivalente ("gaseosa de 150ml" vs "gaseosa 150ml") */}
                       {productoDuplicadoPorNombre && (
                         <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-900 font-semibold">
                           <span className="flex items-center gap-2">
                             <FaExclamationTriangle className="text-amber-600 shrink-0" size={13} />
-                            Ya tienes registrado este producto como &quot;<strong>{productoDuplicadoPorNombre.nombre}</strong>&quot; (Stock: {productoDuplicadoPorNombre.stock} un.). Si es otra presentación, cámbiale el tamaño o medida.
+                            Ya tienes registrado este producto como "<strong>{productoDuplicadoPorNombre.nombre}</strong>" (Stock: {productoDuplicadoPorNombre.stock} un.). Si es otra presentación, cámbiale el tamaño o medida.
                           </span>
                         </div>
                       )}
 
-                      {/* Lista desplegable para usar un producto existente como plantilla (ej. cambiar solo el tamaño) */}
                       <AnimatePresence>
                         {showSugerenciasNombre && productosSimilaresPlantilla.length > 0 && (
                           <motion.div
@@ -1567,7 +1901,7 @@ export default function Productos() {
                                 Productos que ya están en tu inventario
                               </span>
                               <span className="text-[11px] font-semibold text-emerald-800">
-                                Clic para autocompletar base y cambiar tamaño
+                                Clic para usar plantilla
                               </span>
                             </div>
                             <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
@@ -1577,13 +1911,12 @@ export default function Productos() {
                                   onMouseDown={() => {
                                     setFormData(prev => ({
                                       ...prev,
-                                      // Conservamos intacto prev.codigo por si ya lo escaneó
                                       nombre: prod.nombre,
                                       categoria: prod.categoria || prev.categoria,
                                       proveedorId: prod.proveedorId || prev.proveedorId
                                     }));
                                     setShowSugerenciasNombre(false);
-                                    toast.success('Base autocompletada. Ahora solo ajusta el tamaño o medida en el nombre.');
+                                    toast.success('Base autocompletada. Ajusta el tamaño o medida en el nombre.', { id: 'prod-plantilla' });
                                   }}
                                   className="px-3.5 py-2.5 hover:bg-verde-pastel/20 cursor-pointer flex items-center justify-between transition-colors"
                                 >
@@ -1615,21 +1948,45 @@ export default function Productos() {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Proveedor Asociado</label>
-                      <SelectorProveedor 
-                        proveedores={proveedores} 
-                        valorActual={formData.proveedorId} 
-                        onChange={(id) => setFormData({...formData, proveedorId: id})} 
+                      <SelectorProveedor
+                        proveedores={proveedores}
+                        valorActual={formData.proveedorId}
+                        onChange={(id) => setFormData({ ...formData, proveedorId: id })}
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Stock Inicial</label>
-                      <input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.stock}
+                        onChange={e => setFormData({ ...formData, stock: e.target.value })}
+                        placeholder="0"
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                        <FaCalendarAlt className="text-emerald-600" size={11} /> Vencimiento (Opcional)
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.fechaVencimiento}
+                        onChange={e => setFormData({ ...formData, fechaVencimiento: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                      />
+                      {formData.fechaVencimiento && (!formData.stock || parseInt(formData.stock, 10) <= 0) && (
+                        <p className="text-[11px] font-semibold text-amber-700 mt-1">
+                          Ingresa un stock inicial mayor a 0 para guardar este lote.
+                        </p>
+                      )}
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Costo de Compra Unit. (S/)</label>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Costo Compra (S/)</label>
                         {autoMargenActivo && modoPrecioCrear === 'venta' && formData.precioCompra && (
                           <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-1.5 py-0.5 rounded">
                             Auto (-{porcentajeGanancia}%)
@@ -1647,12 +2004,12 @@ export default function Productos() {
                       />
                     </div>
 
-                    <div className="col-span-1 md:col-span-2">
+                    <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Precio de Venta al Público (S/) *</label>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Precio Venta (S/) *</label>
                         {autoMargenActivo && modoPrecioCrear === 'compra' && formData.precioVenta && (
-                          <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-2 py-0.5 rounded">
-                            Sugerido +{porcentajeGanancia}% (editable)
+                          <span className="text-[10px] font-bold text-emerald-800 bg-verde-pastel/45 px-1.5 py-0.5 rounded">
+                            +{porcentajeGanancia}%
                           </span>
                         )}
                       </div>
@@ -1663,7 +2020,7 @@ export default function Productos() {
                         required
                         value={formData.precioVenta}
                         onChange={e => handleCambioVentaCrear(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-700 font-extrabold text-lg transition-all"
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-emerald-700 font-extrabold text-base transition-all"
                         placeholder="0.00"
                       />
                     </div>
@@ -1671,18 +2028,18 @@ export default function Productos() {
                 </div>
 
                 <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex flex-col sm:flex-row justify-end gap-2.5">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => {
                       setIsCreateModalOpen(false);
                       setOrigenAutocompletado(null);
-                    }} 
+                    }}
                     className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer"
                   >
                     Cancelar
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={Boolean(productoCodigoEnInventario) || isSubmitting}
                     className="w-full sm:w-auto px-6 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold transition-all shadow-2xs text-sm order-first sm:order-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
@@ -1695,13 +2052,13 @@ export default function Productos() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: EDITAR PRODUCTO */}
+      {/* MODAL 2: EDITAR PRODUCTO (CON ACCESO DIRECTO A LOTES Y FECHAS) */}
       <AnimatePresence>
         {editingProduct && !scannerTarget && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} 
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="flex flex-col w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-              
+
               <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
@@ -1714,28 +2071,28 @@ export default function Productos() {
                     <p className="text-xs text-slate-500 font-medium">Actualiza el código de barras, precios, categoría o proveedor del producto.</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors"><FaTimes size={18}/></button>
+                <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors cursor-pointer"><FaTimes size={18}/></button>
               </div>
 
-              <form onSubmit={handleUpdate} className="flex flex-col flex-1 min-h-0">
+              <form onSubmit={handleUpdate} noValidate className="flex flex-col flex-1 min-h-0">
                 <div className="overflow-y-auto p-6 flex-1 bg-white space-y-5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
 
-                  {/* SECCIÓN PARA ESCANEAR O REEMPLAZAR EL CÓDIGO DE BARRAS */}
+                  {/* CÓDIGO DE BARRAS */}
                   <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80">
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
                       Código de Barras
                     </label>
                     <div className="flex flex-col sm:flex-row gap-2.5">
-                      <input 
-                        type="text" 
-                        value={editingProduct.codigo || ''} 
-                        onChange={e => setEditingProduct({...editingProduct, codigo: e.target.value})} 
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono text-sm font-semibold" 
+                      <input
+                        type="text"
+                        value={editingProduct.codigo || ''}
+                        onChange={e => setEditingProduct({ ...editingProduct, codigo: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 font-mono text-sm font-semibold"
                         placeholder="Código del producto"
                       />
-                      <button 
-                        type="button" 
-                        onClick={() => setScannerTarget('editar')} 
+                      <button
+                        type="button"
+                        onClick={() => setScannerTarget('editar')}
                         className="w-full sm:w-auto px-4 py-2.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl transition-colors font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                       >
                         <FaCamera /> Escanear Nuevo
@@ -1756,25 +2113,51 @@ export default function Productos() {
                     )}
                   </div>
 
+                  {/* ACCESO RÁPIDO A LOTES Y VENCIMIENTOS */}
+                  <div className="p-3.5 bg-emerald-50/50 border border-emerald-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FaCalendarAlt className="text-emerald-700 shrink-0" size={15} />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-emerald-950">Fechas de Vencimiento y Lotes</p>
+                        <p className="text-[11px] font-medium text-emerald-800/80 truncate">
+                          {editingProduct.proximoVencimiento
+                            ? `Próximo vencimiento: ${formatearFechaCorta(editingProduct.proximoVencimiento)} (${editingProduct.cantidadProximoVencimiento} un.)`
+                            : 'Sin fecha de vencimiento asignada actualmente.'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prodTarget = productos.find(p => p.id === editingProduct.id) || editingProduct;
+                        setEditingProduct(null);
+                        abrirModalLotes(prodTarget);
+                      }}
+                      className="px-3 py-1.5 bg-white hover:bg-verde-pastel/40 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-extrabold transition-colors shrink-0 cursor-pointer"
+                    >
+                      Gestionar Fechas
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="col-span-1 md:col-span-2">
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nombre del Producto *</label>
-                      <input type="text" required value={editingProduct.nombre} onChange={e => setEditingProduct({...editingProduct, nombre: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
+                      <input type="text" required value={editingProduct.nombre} onChange={e => setEditingProduct({ ...editingProduct, nombre: e.target.value })} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Categoría</label>
                       <SelectorCategoria
                         categorias={listaCategoriasUnificadas}
                         valorActual={editingProduct.categoria || ''}
-                        onChange={(cat) => setEditingProduct({...editingProduct, categoria: cat})}
+                        onChange={(cat) => setEditingProduct({ ...editingProduct, categoria: cat })}
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Proveedor</label>
-                      <SelectorProveedor 
-                        proveedores={proveedores} 
-                        valorActual={editingProduct.proveedorId} 
-                        onChange={(id) => setEditingProduct({...editingProduct, proveedorId: id})} 
+                      <SelectorProveedor
+                        proveedores={proveedores}
+                        valorActual={editingProduct.proveedorId}
+                        onChange={(id) => setEditingProduct({ ...editingProduct, proveedorId: id })}
                       />
                     </div>
                     <div>
@@ -1834,11 +2217,11 @@ export default function Productos() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex flex-col sm:flex-row justify-end gap-2.5">
                   <button type="button" onClick={() => setEditingProduct(null)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm cursor-pointer">Cancelar</button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={
                       isSubmitting ||
                       productos.some(
@@ -1856,13 +2239,13 @@ export default function Productos() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 3: GESTIONAR STOCK */}
+      {/* MODAL 3: GESTIONAR STOCK (CON FECHA PARA NUEVOS LOTES Y SELECTOR OPCIONAL DE LOTE EN MERMA) */}
       <AnimatePresence>
         {stockProduct && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} 
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="flex flex-col w-full max-w-md max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-              
+
               <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center">
@@ -1870,17 +2253,17 @@ export default function Productos() {
                   </div>
                   <h2 className="text-lg font-extrabold text-slate-900">Actualizar Stock</h2>
                 </div>
-                <button type="button" onClick={() => setStockProduct(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors"><FaTimes size={18}/></button>
+                <button type="button" onClick={() => setStockProduct(null)} className="text-slate-400 hover:text-slate-700 p-1 transition-colors cursor-pointer"><FaTimes size={18}/></button>
               </div>
 
-              <form onSubmit={handleManageStock} className="flex flex-col flex-1 min-h-0">
+              <form onSubmit={handleManageStock} noValidate className="flex flex-col flex-1 min-h-0">
                 <div className="overflow-y-auto p-6 flex-1 bg-white space-y-4">
-                  <div className="p-4 bg-verde-pastel/25 rounded-xl border border-emerald-200/80 flex justify-between items-center">
-                    <div>
+                  <div className="p-4 bg-verde-pastel/25 rounded-xl border border-emerald-200/80 flex justify-between items-center gap-3">
+                    <div className="min-w-0">
                       <p className="text-xs font-semibold text-slate-600">Producto seleccionado</p>
-                      <p className="text-sm font-bold text-slate-900 mt-0.5">{stockProduct.nombre}</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5 line-clamp-2">{stockProduct.nombre}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="text-xs font-semibold text-slate-600">Actual</p>
                       <p className="text-lg font-extrabold text-emerald-800">{stockProduct.stock} un.</p>
                     </div>
@@ -1888,7 +2271,12 @@ export default function Productos() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Tipo de Movimiento *</label>
-                    <select required value={stockData.tipo} onChange={e => setStockData({...stockData, tipo: e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-bold">
+                    <select
+                      required
+                      value={stockData.tipo}
+                      onChange={e => setStockData({ ...stockData, tipo: e.target.value, fechaVencimiento: '', loteId: '' })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-bold"
+                    >
                       <option value="ABASTECIMIENTO">Ingreso / Abastecimiento (+)</option>
                       <option value="DEVOLUCION">Devolución de Cliente (+)</option>
                       <option value="AJUSTE_NEGATIVO">Merma / Ajuste Negativo (-)</option>
@@ -1897,12 +2285,65 @@ export default function Productos() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Cantidad de Unidades *</label>
-                    <input type="number" required min="1" value={stockData.cantidad} onChange={e => setStockData({...stockData, cantidad: e.target.value})} placeholder="Ej: 10" className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-bold"/>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={stockData.cantidad}
+                      onChange={e => setStockData({ ...stockData, cantidad: e.target.value })}
+                      placeholder="Ej: 10"
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-bold"
+                    />
                   </div>
+
+                  {(stockData.tipo === 'ABASTECIMIENTO' || stockData.tipo === 'DEVOLUCION') ? (
+                    <div>
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                        <FaCalendarAlt className="text-emerald-600" size={11} /> Fecha de Vencimiento del Lote (Opcional)
+                      </label>
+                      <input
+                        type="date"
+                        value={stockData.fechaVencimiento}
+                        onChange={e => setStockData({ ...stockData, fechaVencimiento: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                      />
+                      <p className="text-[11px] text-slate-500 font-medium mt-1">
+                        Se guardará como un lote independiente sin borrar la fecha de las unidades antiguas.
+                      </p>
+                    </div>
+                  ) : (
+                    stockProduct.lotes && stockProduct.lotes.length > 0 && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                          ¿De qué lote descontar?
+                        </label>
+                        <select
+                          value={stockData.loteId}
+                          onChange={e => setStockData({ ...stockData, loteId: e.target.value })}
+                          className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                        >
+                          <option value="">Automático (más próximo a vencer - FEFO)</option>
+                          {stockProduct.lotes.map(lote => (
+                            <option key={lote.id} value={lote.id}>
+                              {lote.fechaVencimiento
+                                ? `Vence ${formatearFechaCorta(lote.fechaVencimiento)} (${lote.cantidad} un.)`
+                                : `Sin fecha asignada (${lote.cantidad} un.)`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  )}
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Motivo u Observación</label>
-                    <input type="text" value={stockData.motivo} onChange={e => setStockData({...stockData, motivo: e.target.value})} placeholder="Opcional (Ej: Reposición de tienda)" className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"/>
+                    <input
+                      type="text"
+                      value={stockData.motivo}
+                      onChange={e => setStockData({ ...stockData, motivo: e.target.value })}
+                      placeholder="Opcional (Ej: Reposición de tienda)"
+                      className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-3 focus:ring-verde-pastel/30 outline-none text-slate-900 text-sm transition-all font-medium"
+                    />
                   </div>
                 </div>
 
@@ -1926,9 +2367,9 @@ export default function Productos() {
       <AnimatePresence>
         {barcodeView && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs" onClick={() => setBarcodeView(null)}>
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()} 
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()}
               className="flex flex-col w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-              
+
               <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
                   <FaBarcode size={18} />
@@ -1938,7 +2379,7 @@ export default function Productos() {
                   <p className="text-slate-500 font-medium text-xs">Etiqueta lista para impresión</p>
                 </div>
               </div>
-              
+
               <div className="p-6 bg-slate-50/60 flex flex-col items-center">
                 <div id="area-impresion-barcode" className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs w-full flex flex-col items-center justify-center">
                   <Barcode value={barcodeView.codigo} background="#ffffff" lineColor="#0f172a" width={1.8} height={60} displayValue={true} margin={0} fontSize={14} />
@@ -1946,7 +2387,7 @@ export default function Productos() {
                     S/ {barcodeView.precioVenta.toFixed(2)}
                   </span>
                 </div>
-                
+
                 <div className="flex gap-2.5 w-full mt-6">
                   <button type="button" onClick={() => setBarcodeView(null)} className="flex-1 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl font-bold transition-colors text-sm cursor-pointer">
                     Cerrar
@@ -1991,7 +2432,7 @@ export default function Productos() {
                 </button>
               </div>
 
-              <form onSubmit={handleGuardarMargen} className="p-6 space-y-5 bg-white overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">                {/* Explicación clara para cualquier dueño de bodega */}
+              <form onSubmit={handleGuardarMargen} noValidate className="p-6 space-y-5 bg-white overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs text-slate-600 leading-relaxed space-y-1.5">
                   <p className="font-bold text-slate-800">¿Para qué sirve esta herramienta?</p>
                   <p>
@@ -2006,7 +2447,6 @@ export default function Productos() {
                   </p>
                 </div>
 
-                {/* Interruptor Activar / Desactivar */}
                 <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-white">
                   <div>
                     <p className="text-sm font-bold text-slate-900">Activar cálculo automático</p>
@@ -2031,7 +2471,6 @@ export default function Productos() {
                   </button>
                 </div>
 
-                {/* Campo de porcentaje con símbolo % fijo */}
                 <div className={formMargen.activo ? 'opacity-100' : 'opacity-60'}>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     ¿Con qué porcentaje de ganancia trabaja tu bodega? {formMargen.activo ? '*' : ''}
@@ -2060,7 +2499,6 @@ export default function Productos() {
                   )}
                 </div>
 
-                {/* Ejemplo en vivo mientras el dueño escribe su porcentaje */}
                 {formMargen.activo && parseFloat(formMargen.porcentaje) > 0 && (() => {
                   const pctEjemplo = parseFloat(formMargen.porcentaje);
                   const factorEjemplo = 1 + pctEjemplo / 100;
@@ -2071,12 +2509,8 @@ export default function Productos() {
                       <p className="font-extrabold text-emerald-900">
                         Ejemplo en vivo con {pctEjemplo}% de ganancia:
                       </p>
-                      <p>
-                        • Si compras a <strong>S/ 2.50</strong> → sugerirá vender a <strong>S/ {ventaEjemplo}</strong>.
-                      </p>
-                      <p>
-                        • Si vendes a <strong>S/ {ventaEjemplo}</strong> → calculará tu compra en <strong>S/ {compraInversa}</strong>.
-                      </p>
+                      <p>- Si compras a <strong>S/ 2.50</strong> → sugerirá vender a <strong>S/ {ventaEjemplo}</strong>.</p>
+                      <p>- Si vendes a <strong>S/ {ventaEjemplo}</strong> → calculará tu compra en <strong>S/ {compraInversa}</strong>.</p>
                     </div>
                   );
                 })()}
@@ -2106,7 +2540,289 @@ export default function Productos() {
           </div>
         )}
       </AnimatePresence>
-      
+
+      {/* MODAL 6: LOTES Y FECHAS DE VENCIMIENTO (CONTROL FEFO) */}
+      <AnimatePresence>
+        {lotesProduct && (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="flex flex-col w-full max-w-lg max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            >
+              <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-verde-pastel/40 text-emerald-800 flex items-center justify-center shrink-0">
+                    <FaCalendarAlt size={17} />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-base sm:text-lg font-extrabold text-slate-900 truncate">
+                      Lotes y Vencimientos
+                    </h2>
+                    <p className="text-xs text-slate-500 font-medium truncate">
+                      {lotesProduct.nombre} • Stock total: <strong>{lotesProduct.stock} un.</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setLotesProduct(null)}
+                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                >
+                  <FaTimes size={18} />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-5 sm:p-6 space-y-5 flex-1 bg-slate-50/50 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                {/* Explicación FEFO */}
+                <div className="p-3 bg-verde-pastel/20 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 font-medium leading-relaxed">
+                  Al realizar una venta, el sistema descuenta automáticamente <strong>primero las unidades más próximas a vencer</strong> antes de pasar a los lotes nuevos.
+                </div>
+
+                {lotesProduct.stock <= 0 ? (
+                  <div className="p-6 text-center bg-white rounded-xl border border-slate-200 text-sm text-slate-500 font-medium">
+                    Este producto no tiene stock disponible actualmente. Cuando ingreses mercadería podrás registrar su fecha de vencimiento.
+                  </div>
+                ) : (
+                  <>
+                    {/* SECCIÓN A: LOTES CON FECHA REGISTRADA */}
+                    {(() => {
+                      const lotesConFecha = (lotesProduct.lotes || []).filter(l => l.fechaVencimiento !== null);
+                      return (
+                        <div className="space-y-2.5">
+                          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Lotes con fecha registrada ({lotesConFecha.length})
+                          </h3>
+
+                          {lotesConFecha.length === 0 ? (
+                            <p className="text-xs text-slate-500 bg-white p-3.5 rounded-xl border border-slate-200/80 font-medium">
+                              Aún no has registrado fechas de vencimiento para las existencias actuales.
+                            </p>
+                          ) : (
+                            <div className="space-y-2.5">
+                              {lotesConFecha.map((lote, idx) => {
+                                const dias = obtenerDiasParaVencer(lote.fechaVencimiento);
+                                const esVencido = dias !== null && dias <= 0;
+                                const esPorVencer = dias !== null && dias > 0 && dias <= 15;
+                                const estaEditando = editandoLoteId === lote.id;
+                                const confirmandoMerma = confirmMermaLoteId === lote.id;
+
+                                return (
+                                  <div
+                                    key={lote.id}
+                                    className={`p-3.5 rounded-xl border shadow-2xs space-y-2.5 ${
+                                      esVencido
+                                        ? 'bg-red-50/50 border-red-200'
+                                        : esPorVencer
+                                        ? 'bg-amber-50/40 border-amber-200'
+                                        : 'bg-white border-slate-200/90'
+                                    }`}
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 text-white font-mono text-xs font-extrabold shrink-0">
+                                          {lote.cantidad} un.
+                                        </span>
+                                        <div>
+                                          <p className="text-sm font-extrabold text-slate-900 font-mono leading-tight">
+                                            {formatearFechaCorta(lote.fechaVencimiento)}
+                                          </p>
+                                          <p className={`text-[11px] font-bold ${
+                                            esVencido ? 'text-red-700' : esPorVencer ? 'text-amber-800' : 'text-emerald-700'
+                                          }`}>
+                                            {idx === 0 ? 'Sale primero (FEFO) • ' : ''}
+                                            {textoEstadoDias(dias)}
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      {isAdmin && !estaEditando && !confirmandoMerma && (
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting}
+                                            onClick={() => {
+                                              setEditandoLoteId(lote.id);
+                                              setFechaEdicionLote(isoAInputDate(lote.fechaVencimiento));
+                                              setConfirmMermaLoteId(null);
+                                            }}
+                                            className="px-2.5 py-1.5 bg-white hover:bg-amber-50 text-amber-700 border border-slate-200 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                                            title="Corregir fecha de este lote"
+                                          >
+                                            <FaEdit size={11} /> Editar
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting}
+                                            onClick={() => {
+                                              setConfirmMermaLoteId(lote.id);
+                                              setEditandoLoteId(null);
+                                            }}
+                                            className={`px-2.5 py-1.5 border rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer ${
+                                              esVencido
+                                                ? 'bg-red-600 hover:bg-red-700 text-white border-red-600'
+                                                : 'bg-white hover:bg-red-50 text-red-600 border-slate-200'
+                                            }`}
+                                            title="Dar de baja este lote por merma o vencimiento"
+                                          >
+                                            <FaTrash size={10} /> Merma
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Editor inline de fecha */}
+                                    {estaEditando && (
+                                      <div className="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                        <input
+                                          type="date"
+                                          value={fechaEdicionLote}
+                                          onChange={(e) => setFechaEdicionLote(e.target.value)}
+                                          className="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:border-emerald-500"
+                                        />
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting || !fechaEdicionLote}
+                                            onClick={() => handleGuardarEdicionLote(lote.id, fechaEdicionLote)}
+                                            className="flex-1 sm:flex-none px-3 py-1.5 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-lg text-xs font-extrabold cursor-pointer disabled:opacity-50"
+                                          >
+                                            Guardar
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting}
+                                            onClick={() => handleGuardarEdicionLote(lote.id, null)}
+                                            className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer"
+                                            title="Dejar estas unidades sin fecha"
+                                          >
+                                            Quitar fecha
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting}
+                                            onClick={() => setEditandoLoteId(null)}
+                                            className="p-1.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+                                          >
+                                            <FaTimes size={13} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Confirmación inline de baja por merma (sin alertas nativas) */}
+                                    {confirmandoMerma && (
+                                      <div className="pt-2 border-t border-red-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-red-50/70 -mx-3.5 -mb-3.5 px-3.5 py-2.5 rounded-b-xl">
+                                        <p className="text-xs font-bold text-red-900">
+                                          ¿Retirar {lote.cantidad} un. del inventario por merma?
+                                        </p>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting}
+                                            onClick={() => setConfirmMermaLoteId(null)}
+                                            className="px-2.5 py-1 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
+                                          >
+                                            No
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting}
+                                            onClick={() => handleDarDeBajaLote(lote)}
+                                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-extrabold cursor-pointer disabled:opacity-50"
+                                          >
+                                            {isSubmitting ? 'Procesando...' : 'Sí, dar de baja'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* SECCIÓN B: STOCK SIN FECHA ASIGNADA */}
+                    {(lotesProduct.stockSinFecha || 0) > 0 && (
+                      <div className="bg-white p-4 rounded-xl border border-slate-200/90 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                            Stock sin fecha asignada
+                          </h3>
+                          <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono text-xs font-extrabold">
+                            {lotesProduct.stockSinFecha} un.
+                          </span>
+                        </div>
+
+                        {isAdmin ? (
+                          <form onSubmit={handleAsignarFechaLote} noValidate className="space-y-3">
+                            <p className="text-xs text-slate-500 font-medium">
+                              Asigna una fecha a todo este stock o solo a una parte si tienes empaques con distintas fechas.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                              <div className="sm:col-span-6">
+                                <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase">Fecha de vencimiento *</label>
+                                <input
+                                  type="date"
+                                  value={nuevoLoteForm.fechaVencimiento}
+                                  onChange={e => setNuevoLoteForm(prev => ({ ...prev, fechaVencimiento: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="sm:col-span-3">
+                                <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase">Cantidad</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={lotesProduct.stockSinFecha}
+                                  value={nuevoLoteForm.cantidad}
+                                  onChange={e => setNuevoLoteForm(prev => ({ ...prev, cantidad: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 font-mono"
+                                />
+                              </div>
+                              <div className="sm:col-span-3 flex items-end">
+                                <button
+                                  type="submit"
+                                  disabled={isSubmitting}
+                                  className="w-full py-2 px-3 bg-verde-pastel hover:bg-[#86e6bb] text-emerald-950 rounded-xl font-extrabold text-xs sm:text-sm transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                                >
+                                  {isSubmitting ? '...' : 'Asignar'}
+                                </button>
+                              </div>
+                            </div>
+                          </form>
+                        ) : (
+                          <p className="text-xs text-slate-500 font-medium">
+                            Solo el administrador puede asignar o modificar fechas de vencimiento.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="px-6 py-3.5 border-t border-slate-100 bg-white shrink-0 flex justify-end">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setLotesProduct(null)}
+                  className="px-5 py-2 bg-slate-100 hover:bg-slate-200/80 text-slate-800 rounded-xl font-bold text-sm transition-colors cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
